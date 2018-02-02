@@ -18,6 +18,7 @@ from .TFInstance import *
 from ..Containers.TensorMolData import *
 from .TFMolInstance import *
 from ..ForceModels.ElectrostaticsTF import *
+from ..Math.TFMath import *
 from ..ForceModifiers.Neighbors import *
 from ..TFDescriptors.RawSymFunc import *
 from tensorflow.python.client import timeline

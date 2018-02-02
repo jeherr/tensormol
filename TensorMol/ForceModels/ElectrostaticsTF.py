@@ -10,101 +10,11 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import math, time, os, sys, os.path
+from ..Math.TFMath import *
 from TensorMol.Util import *
 
 if (HAS_TF):
 	import tensorflow as tf
-
-def TFMatrixPower(mat_,exp_):
-	"""
-	General Matrix Power in Tensorflow.
-	This is NOT differentiable as of 1.2.
-	tf.matrix_inverse and tf.matrix_determinant are though.
-	"""
-	s,u,v = tf.svd(mat_,full_matrices=True,compute_uv=True)
-	return tf.transpose(tf.matmul(u,tf.matmul(tf.diag(tf.pow(s,exp_)),tf.transpose(v))))
-
-def TFMatrixSqrt(mat_):
-	"""
-	Use Denman-Beavers iteration to compute a
-	Matrix Square root differentiably.
-	"""
-	cond = lambda i,y,z: i<10
-	body = lambda i,y,z: [i+1,0.5*(y+tf.matrix_inverse(z)),0.5*(z+tf.matrix_inverse(y))]
-	initial = (0,a,tf.eye(tf.shape(a)[0]))
-	I,Y,Z = tf.while_loop(cond,body,initial)
-	return Y,Z
-
-def TFDistance(A):
-	"""
-	Compute a distance matrix of A, a coordinate matrix
-	Using the factorization:
-	Dij = <i|i> - 2<i|j> + <j,j>
-	Args:
-		A: a Nx3 matrix
-	Returns:
-		D: a NxN matrix
-	"""
-	r = tf.reduce_sum(A*A, 1)
-	r = tf.reshape(r, [-1, 1]) # For the later broadcast.
-	# Tensorflow can only reverse mode grad the sqrt if all these elements
-	# are nonzero
-	D = r - 2*tf.matmul(A, tf.transpose(A)) + tf.transpose(r) + tf.cast(1e-26,tf.float64)
-	return tf.sqrt(D)
-
-def TFDistances(r_):
-	"""
-	Returns distance matrices batched over mols
-	Args:
-		r_: Nmol X MaxNAtom X 3 coordinate tensor
-	Returns
-		D: Nmol X MaxNAtom X MaxNAtom Distance tensor.
-	"""
-	rm = tf.einsum('ijk,ijk->ij',r_,r_) # Mols , Rsq.
-	rshp = tf.shape(rm)
-	rmt = tf.tile(rm, [1,rshp[1]])
-	rmt = tf.reshape(rmt,[rshp[0],rshp[1],rshp[1]])
-	rmtt = tf.transpose(rmt,perm=[0,2,1])
-	# Tensorflow can only reverse mode grad of sqrt if all these elements
-	# are nonzero
-	D = rmt - 2*tf.einsum('ijk,ilk->ijl',r_,r_) + rmtt + tf.cast(1e-28,tf.float64)
-	return tf.sqrt(D)
-
-def TFDistanceLinear(B,NZP):
-	"""
-	Compute a distance vector of B, a coordinate matrix
-	Args:
-		B: a Nx3 matrix
-		NZP: a (nonzero pairs X 2) index matrix.
-	Returns:
-		D: a NZP X 1 tensor of distances.
-	"""
-	Ii = tf.slice(NZP,[0,0],[-1,1])
-	Ij = tf.slice(NZP,[0,1],[-1,1])
-	Ri = tf.gather_nd(B,Ii)
-	Rj = tf.gather_nd(B,Ij)
-	A = Ri - Rj + 1e-26
-	return tf.sqrt(tf.reduce_sum(A*A, 1))
-
-def TFDistancesLinear(B,NZP):
-	"""
-	Returns distance vector batched over mols
-	With these sparse versions I think the mol dimension should be eliminated.
-
-	Args:
-		r_: Nmol X MaxNAtom X 3 coordinate tensor
-		NZP: a ( nonzero pairs X 3) index matrix. (mol, i, j)
-	Returns
-		D: nonzero pairs  Distance vector. (Dij)
-		The calling routine has to scatter back into mol dimension using NZP if desired.
-	"""
-	Ii = tf.slice(NZP,[0,0],[-1,2])
-	Ij = tf.concat([tf.slice(NZP,[0,0],[-1,1]),tf.slice(NZP,[0,2],[-1,1])],1)
-	Ri = tf.gather_nd(B,Ii)
-	Rj = tf.gather_nd(B,Ij)
-	A = Ri - Rj + 1e-26
-	D = tf.sqrt(tf.reduce_sum(A*A, 1))
-	return D
 
 def BumpEnergy(h,w,xyz,x,nbump):
 	"""

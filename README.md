@@ -9,8 +9,8 @@
 
 
 ## Authors:
- Kun Yao (kyao@nd.edu), John Herr (jherr1@nd.edu),
- David Toth (dtoth1@nd.edu), Ryker McIntyre(rmcinty3@nd.edu), Nicolas Casetti,
+ Kun Yao (kyao@nd.edu), John Herr (jherr1@nd.edu), David Toth (dtoth1@nd.edu),
+ Ryker McIntyre(rmcinty3@nd.edu), Nicolas Casetti, Jordan Garside (jordan.garside@gmail.com)
  [John Parkhill](http://blogs.nd.edu/parkhillgroup) (john.parkhill@gmail.com)
 
 ## Model Chemistries:
@@ -25,7 +25,8 @@
  - Molecular Dynamics (NVE,NVT Nose-Hoover)
  - Monte Carlo
  - Open/Periodic Boundary Conditions
- - Meta-Dynamics
+ - Meta-Dynamics and Meta-Optimizations
+ - Local Reaction Search (Simulations/Web.py)
  - Infrared spectra by propagation
  - Infrared spectra by Harmonic Approximation.
  - Nudged Elastic Band
