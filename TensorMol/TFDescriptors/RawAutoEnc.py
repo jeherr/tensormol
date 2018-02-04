@@ -30,6 +30,14 @@ from tensorflow.python.client import timeline
 if (HAS_TF):
 	import tensorflow as tf
 
+class ChemCoder:
+	"""
+	This is useful if you want to ensure that your autoencoder is invertible
+	to some pieces of chemical information you may decide are critical
+	to nearby energy.
+	"""
+	
+
 class GeometryCoder:
 	"""
 	This is an abstract base class for a "Geometry coder"
@@ -66,16 +74,15 @@ class AtomCoder:
 	of an atom by assigning a short vector which 'encodes' the atomic number and hybridization
 	of this atom and nearby atoms within RCUT smoothly.
 	"""
-	def __init__(self,batch_size_=2000,NInChan_=1, NOutChan_=4,RCUT = 2.0):
-		GeometryCoder.__init__(self,batch_size_=2000,NInChan_=1, NOutChan_=4,RCUT = 2.0)
+	def __init__(self,batch_size_=2000, NInChan_=1, NOutChan_=4, RCUT = 2.0):
+		GeometryCoder.__init__(self, batch_size_=2000, NInChan_=1, NOutChan_=4, RCUT = 2.0)
 		return
-		return
-	def decode(self):
+	def decode(self,in_):
 		"""
 		(VEC=>ZXYZ)
 		"""
 		return
-	def encode(self):
+	def encode(self,in_):
 		"""
 		This is the key operation provided
 		"""
@@ -85,6 +92,7 @@ class AtomCoder:
 		The goal is to learn Z of this atom, hybridization of this atom
 		 Z of nearby atoms, and hybridization of nearby atoms.
 		"""
+
 		return
 
 class ClusterCoder:
@@ -93,4 +101,4 @@ class ClusterCoder:
 	Separate encodings can be learned for substructure types?
 	"""
 	def __init__(self,RCUT = 2.0):
-		return 
+		return
