@@ -49,6 +49,8 @@ class BehlerParinelloNetwork(object):
 		self.train_dipole = PARAMS["train_dipole"]
 		self.train_quadrupole = PARAMS["train_quadrupole"]
 		self.train_rotation = PARAMS["train_rotation"]
+		self.train_sparse = PARAMS["train_sparse"]
+		self.sparse_cutoff = PARAMS["sparse_cutoff"]
 		self.profiling = PARAMS["Profiling"]
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.randomize_data = PARAMS["RandomizeData"]
@@ -73,6 +75,10 @@ class BehlerParinelloNetwork(object):
 		self.elements = self.mol_set.AtomTypes()
 		self.max_num_atoms = self.mol_set.MaxNAtoms()
 		self.num_molecules = len(self.mol_set.mols)
+		if self.train_sparse:
+			for mol in self.mol_set.mols:
+				mol.make_neighbors(self.sparse_cutoff)
+			self.max_num_pairs = self.mol_set.max_neighbors()
 
 		LOGGER.info("learning rate: %f", self.learning_rate)
 		LOGGER.info("batch size:    %d", self.batch_size)
@@ -212,11 +218,13 @@ class BehlerParinelloNetwork(object):
 		# self.mulliken_charges_data = np.zeros((self.num_molecules, self.max_num_atoms), dtype = np.float64)
 		self.num_atoms_data = np.zeros((self.num_molecules), dtype = np.int32)
 		self.energy_data = np.zeros((self.num_molecules), dtype = np.float64)
+		self.gradient_data = np.zeros((self.num_molecules, self.max_num_atoms, 3), dtype=np.float64)
 		if self.train_dipole:
 			self.dipole_data = np.zeros((self.num_molecules, 3), dtype = np.float64)
 		if self.train_quadrupole:
 			self.quadrupole_data = np.zeros((self.num_molecules, 2, 3), dtype = np.float64)
-		self.gradient_data = np.zeros((self.num_molecules, self.max_num_atoms, 3), dtype=np.float64)
+		if self.train_sparse:
+			self.pairs_data = np.zeros((self.num_molecules, self.max_num_atoms, self.max_num_pairs), dtype=np.uint16)
 		for i, mol in enumerate(self.mol_set.mols):
 			self.xyz_data[i][:mol.NAtoms()] = mol.coords
 			self.Z_data[i][:mol.NAtoms()] = mol.atoms
@@ -226,8 +234,12 @@ class BehlerParinelloNetwork(object):
 				self.dipole_data[i] = mol.properties["dipole"]
 			if self.train_quadrupole:
 				self.quadrupole_data[i] = mol.properties["quadrupole"]
+			if self.train_sparse:
+				for j, atom_pairs in enumerate(mol.neighbor_list):
+					self.pairs_data[i,j,:len(atom_pairs)] = atom_pairs
 			self.num_atoms_data[i] = mol.NAtoms()
 			self.gradient_data[i][:mol.NAtoms()] = mol.properties["gradients"]
+		print(self.pairs_data[0])
 		return
 
 	def load_data_to_scratch(self):
@@ -251,7 +263,7 @@ class BehlerParinelloNetwork(object):
 		np.random.shuffle(case_idxs)
 		self.train_idxs = case_idxs[:int(self.num_molecules - self.num_test_cases)]
 		self.test_idxs = case_idxs[int(self.num_molecules - self.num_test_cases):]
-		self.train_scratch_pointer, self.test_scratch_pointer = 0, 0
+		self.train_pointer, self.test_pointer = 0, 0
 		if self.batch_size > self.num_train_cases:
 			raise Exception("Insufficent training data to fill a training batch.\n"\
 					+str(self.num_train_cases)+" cases in dataset with a batch size of "+str(self.batch_size))
@@ -263,69 +275,69 @@ class BehlerParinelloNetwork(object):
 		return
 
 	def get_dipole_train_batch(self, batch_size):
-		if self.train_scratch_pointer + batch_size >= self.num_train_cases:
+		if self.train_pointer + batch_size >= self.num_train_cases:
 			np.random.shuffle(self.train_idxs)
-			self.train_scratch_pointer = 0
-		self.train_scratch_pointer += batch_size
-		xyzs = self.xyz_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		Zs = self.Z_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		energies = self.energy_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		dipoles = self.dipole_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		quadrupoles = self.quadrupole_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		gradients = self.gradient_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		num_atoms = self.num_atoms_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
+			self.train_pointer = 0
+		self.train_pointer += batch_size
+		xyzs = self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		Zs = self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		energies = self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		gradients = self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		num_atoms = self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		if self.train_dipoles:
+			dipoles = self.dipole_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		if self.train_quadrupoles:
+			quadrupoles = self.quadrupole_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		if self.train_sparse:
+			pairs = self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
 		return [xyzs, Zs, dipoles, quadrupoles, gradients, num_atoms]
 
 	def get_energy_train_batch(self, batch_size):
-		if self.train_scratch_pointer + batch_size >= self.num_train_cases:
+		if self.train_pointer + batch_size >= self.num_train_cases:
 			np.random.shuffle(self.train_idxs)
-			self.train_scratch_pointer = 0
-		self.train_scratch_pointer += batch_size
-		xyzs = self.xyz_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		Zs = self.Z_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		energies = self.energy_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		# dipoles = self.dipole_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		num_atoms = self.num_atoms_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-		gradients = self.gradient_data[self.train_idxs[self.train_scratch_pointer - batch_size:self.train_scratch_pointer]]
-
+			self.train_pointer = 0
+		self.train_pointer += batch_size
+		batch_data = []
+		batch_data.append(self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		if self.train_sparse:
+			batch_data.append(self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		# NLEE = NeighborListSet(xyzs, num_atoms, False, False, None)
 		# rad_eep = NLEE.buildPairs(self.coulomb_cutoff)
-		return [xyzs, Zs, energies, gradients, num_atoms]
+		return batch_data
 
 	def get_dipole_test_batch(self, batch_size):
-		if self.test_scratch_pointer + batch_size >= self.num_test_cases:
-			self.test_scratch_pointer = 0
-		self.test_scratch_pointer += batch_size
-		xyzs = self.xyz_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		Zs = self.Z_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		energies = self.energy_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		dipoles = self.dipole_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		quadrupoles = self.quadrupole_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		gradients = self.gradient_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		num_atoms = self.num_atoms_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		mulliken_charges = self.mulliken_charges_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
+		if self.test_pointer + batch_size >= self.num_test_cases:
+			self.test_pointer = 0
+		self.test_pointer += batch_size
+		xyzs = self.xyz_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
+		Zs = self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
+		energies = self.energy_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
+		dipoles = self.dipole_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
+		quadrupoles = self.quadrupole_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
+		gradients = self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
+		num_atoms = self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
+		mulliken_charges = self.mulliken_charges_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
 		return [xyzs, Zs, dipoles, quadrupoles, gradients, num_atoms, mulliken_charges]
 
 	def get_energy_test_batch(self, batch_size):
-		if self.test_scratch_pointer + batch_size >= self.num_test_cases:
-			self.test_scratch_pointer = 0
-		self.test_scratch_pointer += batch_size
-		xyzs = self.xyz_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		Zs = self.Z_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		energies = self.energy_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		# dipoles = self.dipole_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		gradients = self.gradient_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-		num_atoms = self.num_atoms_data[self.test_idxs[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]]
-
-		# xyzs = self.xyz_data[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]
-		# Zs = self.Z_data[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]
-		# energies = self.energy_data[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]
-		# dipoles = self.dipole_data[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]
-		# num_atoms = self.num_atoms_data[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]
-		# gradients = self.gradient_data[self.test_scratch_pointer - batch_size:self.test_scratch_pointer]
+		if self.test_pointer + batch_size >= self.num_test_cases:
+			self.test_pointer = 0
+		self.test_pointer += batch_size
+		batch_data = []
+		batch_data.append(self.xyz_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		batch_data.append(self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		batch_data.append(self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		batch_data.append(self.energy_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		batch_data.append(self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		if self.train_sparse:
+			batch_data.append(self.pairs_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		# NLEE = NeighborListSet(xyzs, num_atoms, False, False, None)
 		# rad_eep = NLEE.buildPairs(self.coulomb_cutoff)
-		return [xyzs, Zs, energies, gradients, num_atoms]#, rad_eep]
+		return batch_data
 
 	def variable_summaries(self, var):
 		"""
@@ -391,7 +403,10 @@ class BehlerParinelloNetwork(object):
 		Returns:
 			Filled feed dictionary.
 		"""
-		feed_dict={i: d for i, d in zip([self.xyzs_pl, self.Zs_pl, self.energy_pl, self.gradients_pl, self.num_atoms_pl], batch_data)}
+		pl_list = [self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.energy_pl, self.gradients_pl]
+		if self.train_sparse:
+			pl_list.append(self.pairs_pl)
+		feed_dict={i: d for i, d in zip(pl_list, batch_data)}
 		return feed_dict
 
 	def energy_inference(self, inp, indexs):
@@ -795,7 +810,7 @@ class BehlerParinelloSymFunc(BehlerParinelloNetwork):
 		labels = np.concatenate(labels_list)
 		self.labels_mean = np.mean(labels)
 		self.labels_stddev = np.std(labels)
-		self.train_scratch_pointer = 0
+		self.train_pointer = 0
 
 		#Set the embedding and label shape
 		self.embedding_shape = embedding[0].shape[1]
@@ -1081,7 +1096,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		labels = np.concatenate(labels_list)
 		self.labels_mean = np.mean(labels)
 		self.labels_stddev = np.std(labels)
-		self.train_scratch_pointer = 0
+		self.train_pointer = 0
 
 		#Set the embedding and label shape
 		self.embedding_shape = embedding[0].shape[1]
@@ -1104,7 +1119,8 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			self.quadrupole_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, 3])
 			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
-			self.Reep_pl = tf.placeholder(tf.int32, shape=[None, 3])
+			self.pairs_pl = tf.placeholder(tf.int32, shape=self.batch_size, self.max_num_atoms, self.max_num_pairs])
+			# self.Reep_pl = tf.placeholder(tf.int32, shape=[None, 3])
 
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)

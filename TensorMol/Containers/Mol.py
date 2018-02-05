@@ -101,6 +101,7 @@ class Mol:
 				atom2 = self.atoms[j]
 				self.properties["vdw"] += -s6*c*((C6_coff[atom1]*C6_coff[atom2])**0.5)/(self.DistMatrix[i][j])**6 * (1.0/(1.0+6.0*(self.DistMatrix[i][j]/(atomic_vdw_radius[atom1]+atomic_vdw_radius[atom2]))**-12))
 		return
+
 	def Rotate(self, axis, ang, origin=np.array([0.0, 0.0, 0.0])):
 		"""
 		Rotate atomic coordinates and forces if present.
@@ -124,6 +125,7 @@ class Mol:
 				new_forces[i] = new_endpoint - self.coords[i]
 			self.properties["forces"] = new_forces
 		self.coords += origin
+
 	def RotateRandomUniform(self, randnums=None, origin=np.array([0.0, 0.0, 0.0])):
 		"""
 		Rotate atomic coordinates and forces if present.
@@ -149,14 +151,17 @@ class Mol:
 			new_forces = new_endpoint - self.coords
 			self.properties["mmff94forces"] = new_forces
 		self.coords += origin
+
 	def Transform(self,ltransf,center=np.array([0.0,0.0,0.0])):
 		crds=np.copy(self.coords)
 		for i in range(len(self.coords)):
 			self.coords[i] = np.dot(ltransf,crds[i]-center) + center
+
 	def AtomsWithin(self,rad, pt):
 		# Returns indices of atoms within radius of point.
 		dists = map(lambda x: np.linalg.norm(x-pt),self.coords)
 		return [i for i in range(self.NAtoms()) if dists[i]<rad]
+
 	def Distort(self,disp=0.38,movechance=.20):
 		''' Randomly distort my coords, but save eq. coords first '''
 		self.BuildDistanceMatrix()
@@ -263,8 +268,10 @@ class Mol:
 		if (("energy" in self.properties) or ("roomT_H" in self.properties)):
 			self.CalculateAtomization()
 		return
+
 	def Clean(self):
 		self.DistMatrix = None
+
 	def ParseProperties(self,s_):
 		"""
 		The format of a property string is
@@ -283,6 +290,7 @@ class Mol:
 			elif (s[0]=='Lattice'):
 				tore["Lattice"] = np.fromstring(s[1]).reshape((3,3))
 		return tore
+
 	def PropertyString(self):
 		tore = ""
 		for prop in self.properties.keys():
@@ -297,6 +305,7 @@ class Mol:
 				# print "Problem with energy", string
 				pass
 		return tore
+
 	def FromXYZString(self,string):
 		lines = string.split("\n")
 		natoms=int(lines[0])
@@ -758,77 +767,6 @@ class Mol:
 		Ps /= Z
 		return Ps
 
-	def ForceFromXYZ(self, path):
-		"""
-		Reads the forces from the comment line in the md_dataset,
-		and if no forces exist sets them to zero. Switched on by
-		has_force=True in the ReadGDB9Unpacked routine
-		"""
-		try:
-			f = open(path, 'r')
-			lines = f.readlines()
-			natoms = int(lines[0])
-			forces=np.zeros((natoms,3))
-			read_forces = ((lines[1].strip().split(';'))[1]).replace("],[", ",").replace("[","").replace("]","").split(",")
-			for j in range(natoms):
-				for k in range(3):
-					forces[j,k] = float(read_forces[j*3+k])
-			self.properties['forces'] = forces
-		except Exception as Ex:
-			print("Reading Force Failed.", Ex)
-
-	def MMFF94FromXYZ(self, path):
-		"""
-		Reads the forces from the comment line in the md_dataset,
-		and if no forces exist sets them to zero. Switched on by
-		has_force=True in the ReadGDB9Unpacked routine
-		TODO: Move this out of Mol please to AbInitio (JAP)
-		"""
-		try:
-			f = open(path, 'r')
-			lines = f.readlines()
-			natoms = int(lines[0])
-			forces=np.zeros((natoms,3))
-			read_forces = ((lines[1].strip().split(';'))[3]).replace("],[", ",").replace("[","").replace("]","").split(",")
-			for j in range(natoms):
-				for k in range(3):
-					forces[j,k] = float(read_forces[j*3+k])
-			self.properties['mmff94forces'] = forces
-		except Exception as Ex:
-			print("Reading MMFF94 Force Failed.", Ex)
-
-	def ChargeFromXYZ(self, path):
-		"""
-		Reads the forces from the comment line in the md_dataset,
-		and if no forces exist sets them to zero. Switched on by
-		has_force=True in the ReadGDB9Unpacked routine
-		"""
-		try:
-			f = open(path, 'r')
-			lines = f.readlines()
-			natoms = int(lines[0])
-			charges=np.zeros((natoms))
-			read_charges = ((lines[1].strip().split(';'))[2]).replace("[","").replace("]","").split(",")
-			for j in range(natoms):
-				charges[j] = float(read_charges[j])
-			self.properties['mulliken'] = charges
-		except Exception as Ex:
-			print("Reading Charges Failed.", Ex)
-
-
-	def EnergyFromXYZ(self, path):
-		"""
-		Reads the energy from the comment line in the md_dataset.
-		Switched on by has_energy=True in the ReadGDB9Unpacked routine
-		"""
-		try:
-			f = open(path, 'r')
-			lines = f.readlines()
-			energy = float((lines[1].strip().split(';'))[0])
-			self.properties['energy'] = energy
-		except Exception as Ex:
-			print("Reading Energy Failed.", Ex)
-
 	def MakeBonds(self):
 		self.BuildDistanceMatrix()
 		maxnb = 0
@@ -846,6 +784,12 @@ class Mol:
 
 	def BondTypes(self):
 		return np.unique(self.bonds[:,0]).astype(int)
+
+	def make_neighbors(self, r_cutoff):
+		self.neighbor_list = MolEmb.Make_NListNaive(self.coords, r_cutoff, self.NAtoms(), True)
+
+	def max_neighbors(self):
+		return max([len(atom_neighbors) for atom_neighbors in self.neighbor_list])
 
 	def AtomName(self, i):
 		return atoi.keys()[atoi.values().index(self.atoms[i])]

@@ -80,6 +80,8 @@ class TMParams(dict):
 		self["EnergyScalar"] = 1.0
 		self["GradScalar"] = 1.0/20.0
 		self["DipoleScaler"]=1.0
+		self["train_sparse"] = False
+		self["sparse_cutoff"] = 5.0
 		# DATA usage parameters
 		self["InNormRoutine"] = None
 		self["OutNormRoutine"] = None
