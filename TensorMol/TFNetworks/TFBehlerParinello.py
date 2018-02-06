@@ -1119,7 +1119,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			self.quadrupole_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, 3])
 			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
-			self.pairs_pl = tf.placeholder(tf.int32, shape=self.batch_size, self.max_num_atoms, self.max_num_pairs])
+			self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs])
 			# self.Reep_pl = tf.placeholder(tf.int32, shape=[None, 3])
 
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
@@ -1137,7 +1137,11 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 					tf.random_uniform([self.batch_size], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
 			rotated_xyzs, rotated_gradients = tf_random_rotate(self.xyzs_pl, rotation_params, self.gradients_pl)
 			self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
-			embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, self.Zs_pl,
+			if self.train_sparse:
+				embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, self.Zs_pl,
+											elements, self.gaussian_params, self.l_max)
+			else:
+				embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, self.Zs_pl,
 											elements, self.gaussian_params, self.l_max)
 			for element in range(len(self.elements)):
 				embeddings[element] -= embeddings_mean[element]
