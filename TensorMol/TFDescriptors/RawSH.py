@@ -547,21 +547,24 @@ def tf_gauss_harmonics_echannel(xyzs, Zs, elements, gauss_params, l_max):
 	dxyzs = tf.gather_nd(dxyzs, atom_idx)
 	dist_tensor = tf.norm(dxyzs+1.e-16,axis=2)
 	gauss = tf_gauss(dist_tensor, gauss_params)
+	return gauss
 	harmonics = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)
 	channel_scatter_bool = tf.gather(tf.equal(tf.expand_dims(Zs, axis=1),
 						tf.reshape(elements, [1, num_elements, 1])), atom_idx[:,0])
 	channel_scatter = tf.where(channel_scatter_bool, tf.ones_like(channel_scatter_bool, dtype=eval(PARAMS["tf_prec"])),
 					tf.zeros_like(channel_scatter_bool, dtype=eval(PARAMS["tf_prec"])))
 	channel_gauss = tf.expand_dims(gauss, axis=1) * tf.expand_dims(channel_scatter, axis=-1)
+	return channel_gauss
 	channel_harmonics = tf.expand_dims(harmonics, axis=1) * tf.expand_dims(channel_scatter, axis=-1)
 	embeds = tf.reshape(tf.einsum('ijkg,ijkl->ijgl', channel_gauss, channel_harmonics),
-	[tf.shape(atom_idx)[0], -1])
+			[tf.shape(atom_idx)[0], -1])
+	return embeds
 
 	partition_idx = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, atom_idx), axis=-1),
 						tf.expand_dims(elements, axis=0)))[:,1], tf.int32)
 	embeds = tf.dynamic_partition(embeds, partition_idx, num_elements)
 	mol_idx = tf.dynamic_partition(atom_idx, partition_idx, num_elements)
-	return embeds, mol_idx
+	return embeds#, mol_idx
 
 def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, pairs, elements, gauss_params, l_max):
 	"""
@@ -583,29 +586,38 @@ def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, pairs, elements, gauss_params, 
 	"""
 	num_elements = elements.get_shape().as_list()[0]
 	num_mols = Zs.get_shape().as_list()[0]
-	max_atoms = tf.reduce_max(num_atoms)
+	max_atoms = Zs.get_shape().as_list()[1]
 	max_pairs = pairs.get_shape().as_list()[2]
+	padding_mask = tf.where(tf.not_equal(Zs, 0))
 
+	pairs = tf.gather_nd(pairs, padding_mask)
 	pair_dxyz = tf.gather_nd(xyzs, pairs[...,:2]) - tf.gather_nd(xyzs, pairs[...,:3:2])
 	pair_dist = tf.norm(pair_dxyz+1.e-16, axis=-1)
 	gauss = tf_sparse_gauss(pair_dist, gauss_params)
+	return gauss
 	harmonics = tf_spherical_harmonics(pair_dxyz, pair_dist, l_max)
-	pair_embed = tf.reshape(tf.einsum('mnij,mnik->mnijk', gauss, harmonics),
-				[num_mols, max_atoms, max_pairs, tf.shape(gauss_params)[0] * tf.square(l_max + 1)])
 	channel_scatter = tf.equal(tf.expand_dims(pairs[...,-2], axis=-1), elements)
 	channel_scatter = tf.where(channel_scatter, tf.ones_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])),
 					tf.zeros_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])))
-	pair_embed = tf.reduce_sum(tf.expand_dims(pair_embed, axis=-2) * tf.expand_dims(channel_scatter, axis=-1), axis=2)
-	pair_embed = tf.reshape(pair_embed, [num_mols, max_atoms, -1])
+	channel_gauss = tf.expand_dims(gauss, axis=2) * tf.expand_dims(channel_scatter, axis=-1)
+	return channel_gauss
+	channel_harmonics = tf.expand_dims(harmonics, axis=2) * tf.expand_dims(channel_scatter, axis=-1)
 
-	padding_mask = tf.where(tf.not_equal(Zs, 0))
-	embed = tf.gather_nd(pair_embed, padding_mask)
-	mol_idx = tf.gather_nd(pairs[...,1], padding_mask)
+	embeds = tf.reshape(tf.einsum('ijkg,ijkl->ikgl', channel_gauss, channel_harmonics),
+			[tf.shape(padding_mask)[0], -1])
+	return embeds
+
+	pair_embed = tf.reshape(tf.einsum('nij,nik->nijk', gauss, harmonics),
+				[tf.shape(padding_mask)[0], max_pairs, tf.shape(gauss_params)[0] * tf.square(l_max + 1)])
+	embed = tf.reduce_sum(tf.expand_dims(pair_embed, axis=-2) * tf.expand_dims(channel_scatter, axis=-1), axis=1)
+	embed = tf.reshape(embed, [tf.shape(padding_mask)[0], -1])
+	mol_idx = tf.gather_nd(pairs[...,0,:2], padding_mask)
 	element_partition = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=-1),
 					elements))[:,-1], tf.int32)
 	embed = tf.dynamic_partition(embed, element_partition, num_elements)
 	mol_idx = tf.dynamic_partition(mol_idx, element_partition, num_elements)
-	return embed, mol_idx
+	grads = tf.gradients(embed, xyzs)
+	return embed#, mol_idx
 
 def tf_random_rotate(xyzs, rot_params, labels = None, return_matrix = False):
 	"""

@@ -88,7 +88,7 @@ class BehlerParinelloNetwork(object):
 	def __getstate__(self):
 		state = self.__dict__.copy()
 		remove_vars = ["mol_set", "activation_function", "xyz_data", "Z_data", "energy_data", "dipole_data",
-						"num_atoms_data", "gradient_data"]
+						"num_atoms_data", "gradient_data", "pairs_data"]
 		for var in remove_vars:
 			try:
 				del state[var]
@@ -216,7 +216,7 @@ class BehlerParinelloNetwork(object):
 		self.xyz_data = np.zeros((self.num_molecules, self.max_num_atoms, 3), dtype = np.float64)
 		self.Z_data = np.zeros((self.num_molecules, self.max_num_atoms), dtype = np.int32)
 		# self.mulliken_charges_data = np.zeros((self.num_molecules, self.max_num_atoms), dtype = np.float64)
-		self.num_atoms_data = np.zeros((self.num_molecules), dtype = np.int32)
+		# self.num_atoms_data = np.zeros((self.num_molecules), dtype = np.int32)
 		self.energy_data = np.zeros((self.num_molecules), dtype = np.float64)
 		self.gradient_data = np.zeros((self.num_molecules, self.max_num_atoms, 3), dtype=np.float64)
 		if self.train_dipole:
@@ -230,6 +230,7 @@ class BehlerParinelloNetwork(object):
 			self.Z_data[i][:mol.NAtoms()] = mol.atoms
 			# self.mulliken_charges_data[i][:mol.NAtoms()] = mol.properties["mulliken_charges"]
 			self.energy_data[i] = mol.properties["atomization"]
+			self.gradient_data[i][:mol.NAtoms()] = mol.properties["gradients"]
 			if self.train_dipole:
 				self.dipole_data[i] = mol.properties["dipole"]
 			if self.train_quadrupole:
@@ -238,9 +239,7 @@ class BehlerParinelloNetwork(object):
 				for j, atom_pairs in enumerate(mol.neighbor_list):
 					self.pairs_data[i,j,:len(atom_pairs)] = np.stack([np.array([i for _ in range(len(atom_pairs))]),
 						np.array([j for _ in range(len(atom_pairs))]), np.array(atom_pairs), mol.atoms[atom_pairs]]).T
-			self.num_atoms_data[i] = mol.NAtoms()
-			self.gradient_data[i][:mol.NAtoms()] = mol.properties["gradients"]
-		print(self.pairs_data[0])
+			# self.num_atoms_data[i] = mol.NAtoms()
 		return
 
 	def load_data_to_scratch(self):
@@ -301,7 +300,7 @@ class BehlerParinelloNetwork(object):
 		batch_data = []
 		batch_data.append(self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
-		batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		# batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		if self.train_sparse:
@@ -331,7 +330,7 @@ class BehlerParinelloNetwork(object):
 		batch_data = []
 		batch_data.append(self.xyz_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
-		batch_data.append(self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		# batch_data.append(self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.energy_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		if self.train_sparse:
@@ -404,7 +403,7 @@ class BehlerParinelloNetwork(object):
 		Returns:
 			Filled feed dictionary.
 		"""
-		pl_list = [self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.energy_pl, self.gradients_pl]
+		pl_list = [self.xyzs_pl, self.Zs_pl, self.energy_pl, self.gradients_pl]
 		if self.train_sparse:
 			pl_list.append(self.pairs_pl)
 		feed_dict={i: d for i, d in zip(pl_list, batch_data)}
@@ -1062,7 +1061,8 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 	def compute_normalization(self):
 		xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
 		Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
-		pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
+		if self.train_sparse:
+			pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
 		gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
 		elements = tf.constant(self.elements, dtype = tf.int32)
 
@@ -1084,11 +1084,15 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 
 		sess = tf.Session()
 		sess.run(tf.global_variables_initializer())
-		for ministep in range (0, max(2, int(0.1 * self.num_train_cases/self.batch_size))):
+		for ministep in range (max(2, int(0.02 * self.num_train_cases/self.batch_size))):
 			batch_data = self.get_energy_train_batch(self.batch_size)
 			labels_list.append(batch_data[2])
-			embedding, molecule_index = sess.run([embeddings, molecule_indices],
-									feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1], num_atoms_pl:batch_data[4]})
+			if self.train_sparse:
+				embedding, molecule_index = sess.run([embeddings, molecule_indices],
+										feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1], pairs_pl:batch_data[4]})
+			else:
+				embedding, molecule_index = sess.run([embeddings, molecule_indices],
+										feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
 			for element in range(len(self.elements)):
 				embeddings_list[element].append(embedding[element])
 		sess.close()
@@ -1123,7 +1127,8 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			self.quadrupole_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, 3])
 			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
-			self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
+			if self.train_sparse:
+				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
 			# self.Reep_pl = tf.placeholder(tf.int32, shape=[None, 3])
 
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
@@ -1142,7 +1147,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			rotated_xyzs, rotated_gradients = tf_random_rotate(self.xyzs_pl, rotation_params, self.gradients_pl)
 			self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
 			if self.train_sparse:
-				embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, self.Zs_pl,
+				embeddings, molecule_indices = tf_sparse_gauss_harmonics_echannel(rotated_xyzs, self.Zs_pl,
 											self.pairs_pl, elements, self.gaussian_params, self.l_max)
 			else:
 				embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, self.Zs_pl,

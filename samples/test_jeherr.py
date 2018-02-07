@@ -271,7 +271,7 @@ def train_energy_symm_func(mset):
 def train_energy_GauSH(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_NRAD"] = 16
-	PARAMS["SH_LMAX"] = 5
+	PARAMS["SH_LMAX"] = 3
 	PARAMS["SH_rot_invar"] = False
 	PARAMS["EECutoffOn"] = 0.0
 	PARAMS["Elu_Width"] = 6.0
@@ -286,9 +286,9 @@ def train_energy_GauSH(mset):
 	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
-	PARAMS["Profiling"] = False
-	PARAMS["train_sparse"] = True
-	PARAMS["sparse_cutoff"] = 7.0
+	PARAMS["Profiling"] = True
+	PARAMS["train_sparse"] = False
+	PARAMS["sparse_cutoff"] = 6.5
 	manager = TFMolManageDirect(mset, network_type = "BPGauSH")
 
 def test_h2o():
@@ -910,7 +910,7 @@ def water_web():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("SmallMols", 10000)
+# RandomSmallSet("water_wb97xd_6311gss", 10000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -963,8 +963,8 @@ def water_web():
 # a.Save()
 
 PARAMS["tf_prec"] = "tf.float32"
-PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.35, 16)), axis=1)
-PARAMS["SH_NRAD"] = 16
+PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 4), np.repeat(0.35, 4)), axis=1)
+PARAMS["SH_NRAD"] = 12
 a = MSet("SmallMols_rand")
 a.Load()
 # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
@@ -1015,13 +1015,13 @@ xyzstack = tf.stack(xyzlist)
 zstack = tf.stack(zlist)
 pairstack = tf.stack(pairlist)
 natomsstack = tf.stack(n_atoms_list)
-r_cutoff = 7.0
+r_cutoff = 6.5
 gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
 # atomic_embed_factors = tf.Variable(PARAMS["ANES"], trainable=True, dtype=tf.float32)
 elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
 # tmp = tf_neighbor_list_sort(xyzstack, zstack, natomsstack, elements, r_cutoff)
-tmp = tf_sparse_gauss_harmonics_echannel(xyzstack, zstack, natomsstack, pairstack, elements, gaussian_params, 4)
-# tmp2 = tf_gauss_harmonics_echannel(xyzstack, zstack, elements, gaussian_params, 8)
+tmp = tf_sparse_gauss_harmonics_echannel(xyzstack, zstack, pairstack, elements, gaussian_params, 1)
+tmp2 = tf_gauss_harmonics_echannel(xyzstack, zstack, elements, gaussian_params, 1)
 sess = tf.Session()
 sess.run(tf.global_variables_initializer())
 options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -1030,13 +1030,16 @@ run_metadata = tf.RunMetadata()
 # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
 @TMTiming("test")
 def get_pairs():
-	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
-	return tmp3
-tmp5 = get_pairs()
-# print tmp5
-# print tmp5[0].shape
+	tmp3, tmp4 = sess.run([tmp, tmp2], options=options, run_metadata=run_metadata)
+	return tmp3, tmp4
+tmp5, tmp6 = get_pairs()
+print tmp5.shape
+print tmp6.shape
+# print tmp6.shape
 # print len(tmp5)
-# print np.isclose(tmp5[0][0], tmp6[0][0], 1e-01)
+print tmp5[0]
+print tmp6[1]
+# print np.isclose(tmp5[0], tmp6[0], 1e-01)
 fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 chrome_trace = fetched_timeline.generate_chrome_trace_format()
 with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
