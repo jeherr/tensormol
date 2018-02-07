@@ -563,7 +563,7 @@ def tf_gauss_harmonics_echannel(xyzs, Zs, elements, gauss_params, l_max):
 	mol_idx = tf.dynamic_partition(atom_idx, partition_idx, num_elements)
 	return embeds, mol_idx
 
-def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, num_atoms, pairs, elements, gauss_params, l_max):
+def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, pairs, elements, gauss_params, l_max):
 	"""
 	Encodes atoms into a gaussians * spherical harmonics embedding
 	Works on a batch of molecules. This is the embedding routine used

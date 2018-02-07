@@ -288,7 +288,7 @@ def train_energy_GauSH(mset):
 	PARAMS["tf_prec"] = "tf.float64"
 	PARAMS["Profiling"] = False
 	PARAMS["train_sparse"] = True
-	PARAMS["sparse_cutoff"] = 6.5
+	PARAMS["sparse_cutoff"] = 7.0
 	manager = TFMolManageDirect(mset, network_type = "BPGauSH")
 
 def test_h2o():
