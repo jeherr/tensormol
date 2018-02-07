@@ -1062,7 +1062,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 	def compute_normalization(self):
 		xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
 		Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
-		num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
+		pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
 		gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
 		elements = tf.constant(self.elements, dtype = tf.int32)
 
@@ -1070,7 +1070,10 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 				np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
 				tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision)], axis=-1, name="rotation_params")
 		rotated_xyzs = tf_random_rotate(xyzs_pl, rotation_params)
-		embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, Zs_pl, elements, gaussian_params, self.l_max)
+		if self.train_sparse:
+			embeddings, molecule_indices = tf_sparse_gauss_harmonics_echannel(rotated_xyzs, Zs_pl, pairs_pl, elements, gaussian_params, self.l_max)
+		else:
+			embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, Zs_pl, elements, gaussian_params, self.l_max)
 
 		embeddings_list = []
 		for element in range(len(self.elements)):

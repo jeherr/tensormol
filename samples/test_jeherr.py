@@ -275,9 +275,9 @@ def train_energy_GauSH(mset):
 	PARAMS["SH_rot_invar"] = False
 	PARAMS["EECutoffOn"] = 0.0
 	PARAMS["Elu_Width"] = 6.0
-	PARAMS["train_gradients"] = True
+	PARAMS["train_gradients"] = False
 	PARAMS["train_dipole"] = False
-	PARAMS["train_rotation"] = True
+	PARAMS["train_rotation"] = False
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.00005
@@ -285,7 +285,7 @@ def train_energy_GauSH(mset):
 	PARAMS["test_freq"] = 5
 	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
-	PARAMS["tf_prec"] = "tf.float64"
+	PARAMS["tf_prec"] = "tf.float32"
 	PARAMS["Profiling"] = False
 	PARAMS["train_sparse"] = True
 	PARAMS["sparse_cutoff"] = 7.0
