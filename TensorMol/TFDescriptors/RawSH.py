@@ -600,12 +600,12 @@ def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, num_atoms, pairs, elements, gau
 
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 	embed = tf.gather_nd(pair_embed, padding_mask)
+	mol_idx = tf.gather_nd(pairs[...,1], padding_mask)
 	element_partition = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=-1),
 					elements))[:,-1], tf.int32)
 	embed = tf.dynamic_partition(embed, element_partition, num_elements)
-	return embed
-	# mol_idx = tf.dynamic_partition(atom_idxs, element_part_idx, num_elements)
-	# return embeds, mol_idx
+	mol_idx = tf.dynamic_partition(mol_idx, element_partition, num_elements)
+	return embed, mol_idx
 
 def tf_random_rotate(xyzs, rot_params, labels = None, return_matrix = False):
 	"""
