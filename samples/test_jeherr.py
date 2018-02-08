@@ -963,8 +963,8 @@ def water_web():
 # a.Save()
 
 PARAMS["tf_prec"] = "tf.float32"
-PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 4), np.repeat(0.35, 4)), axis=1)
-PARAMS["SH_NRAD"] = 12
+PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 5), np.repeat(0.35, 5)), axis=1)
+PARAMS["SH_NRAD"] = 5
 a = MSet("SmallMols_rand")
 a.Load()
 # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
@@ -979,9 +979,9 @@ a.Load()
 b=MSet()
 for i in range(100):
 	b.mols.append(a.mols[i])
-	new_mol = copy.deepcopy(a.mols[i])
-	new_mol.RotateRandomUniform()
-	b.mols.append(new_mol)
+	# new_mol = copy.deepcopy(a.mols[i])
+	# new_mol.RotateRandomUniform()
+	# b.mols.append(new_mol)
 # # a=MSet("SmallMols_rand")
 # # a.Load()
 maxnatoms = b.MaxNAtoms()
@@ -1010,7 +1010,6 @@ for i, mol in enumerate(b.mols):
 	n_atoms_list.append(mol.NAtoms())
 	if i == 99:
 		break
-print len(xyzlist)
 xyzstack = tf.stack(xyzlist)
 zstack = tf.stack(zlist)
 pairstack = tf.stack(pairlist)
@@ -1033,13 +1032,23 @@ def get_pairs():
 	tmp3, tmp4 = sess.run([tmp, tmp2], options=options, run_metadata=run_metadata)
 	return tmp3, tmp4
 tmp5, tmp6 = get_pairs()
-print tmp5.shape
-print tmp6.shape
+# print tmp5[14]
+# print tmp6[14]
+print tmp5[0][0].shape
+print tmp6[0][0].shape
+# print tmp5[0]
+# print tmp6[0]
 # print tmp6.shape
 # print len(tmp5)
-print tmp5[0]
-print tmp6[1]
-# print np.isclose(tmp5[0], tmp6[0], 1e-01)
+# print np.sum(tmp5[4,:12], axis=0)
+# print np.sum(tmp6[4,:13], axis=0)
+# print tmp5[13]
+# print tmp6[13]
+print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
+# print np.allclose(tmp5, tmp6, 1e-01)
+# print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
+# print tmp5[0][10,0]
+# print tmp6[0][10,0]
 fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 chrome_trace = fetched_timeline.generate_chrome_trace_format()
 with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:

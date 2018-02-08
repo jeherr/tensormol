@@ -139,12 +139,13 @@ def tf_gauss(dist_tensor, gauss_params):
 	exponent = (tf.square(tf.expand_dims(dist_tensor, axis=-1) - tf.expand_dims(tf.expand_dims(gauss_params[:,0], axis=0), axis=1))) \
 				/ (-2.0 * (gauss_params[:,1] ** 2))
 	gaussian_embed = tf.where(tf.greater(exponent, -25.0), tf.exp(exponent), tf.zeros_like(exponent))
-	identity_mask = tf.matrix_set_diag(tf.ones_like(gaussian_embed[:,:,0]), tf.zeros_like(gaussian_embed[0,:,0]))
+	gaussian_embed *= tf.expand_dims(tf.where(tf.less(dist_tensor, 1.e-15), tf.zeros_like(dist_tensor),
+					tf.ones_like(dist_tensor)), axis=-1)
 	xi = (dist_tensor - 6.0) / (7.0 - 6.0)
 	cutoff_factor = 1 - 3 * tf.square(xi) + 2 * tf.pow(xi, 3.0)
 	cutoff_factor = tf.where(tf.greater(dist_tensor, 7.0), tf.zeros_like(cutoff_factor), cutoff_factor)
 	cutoff_factor = tf.where(tf.less(dist_tensor, 6.0), tf.ones_like(cutoff_factor), cutoff_factor)
-	return gaussian_embed * tf.expand_dims(identity_mask, axis=-1) * tf.expand_dims(cutoff_factor, axis=-1)
+	return gaussian_embed * tf.expand_dims(cutoff_factor, axis=-1)
 
 def tf_spherical_harmonics_0(inv_dist_tensor):
 	return tf.fill(tf.shape(inv_dist_tensor), tf.constant(0.28209479177387814, dtype=eval(PARAMS["tf_prec"])))
@@ -547,24 +548,19 @@ def tf_gauss_harmonics_echannel(xyzs, Zs, elements, gauss_params, l_max):
 	dxyzs = tf.gather_nd(dxyzs, atom_idx)
 	dist_tensor = tf.norm(dxyzs+1.e-16,axis=2)
 	gauss = tf_gauss(dist_tensor, gauss_params)
-	return gauss
 	harmonics = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)
-	channel_scatter_bool = tf.gather(tf.equal(tf.expand_dims(Zs, axis=1),
-						tf.reshape(elements, [1, num_elements, 1])), atom_idx[:,0])
-	channel_scatter = tf.where(channel_scatter_bool, tf.ones_like(channel_scatter_bool, dtype=eval(PARAMS["tf_prec"])),
-					tf.zeros_like(channel_scatter_bool, dtype=eval(PARAMS["tf_prec"])))
-	channel_gauss = tf.expand_dims(gauss, axis=1) * tf.expand_dims(channel_scatter, axis=-1)
-	return channel_gauss
-	channel_harmonics = tf.expand_dims(harmonics, axis=1) * tf.expand_dims(channel_scatter, axis=-1)
-	embeds = tf.reshape(tf.einsum('ijkg,ijkl->ijgl', channel_gauss, channel_harmonics),
+	channel_scatter = tf.gather(tf.equal(tf.expand_dims(Zs, axis=-1), elements), atom_idx[:,0])
+	channel_scatter = tf.where(channel_scatter, tf.ones_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])),
+					tf.zeros_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])))
+	channel_gauss = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(channel_scatter, axis=-1)
+	channel_harmonics = tf.expand_dims(harmonics, axis=-2) * tf.expand_dims(channel_scatter, axis=-1)
+	embeds = tf.reshape(tf.einsum('ijkg,ijkl->ikgl', channel_gauss, channel_harmonics),
 			[tf.shape(atom_idx)[0], -1])
-	return embeds
-
 	partition_idx = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, atom_idx), axis=-1),
 						tf.expand_dims(elements, axis=0)))[:,1], tf.int32)
 	embeds = tf.dynamic_partition(embeds, partition_idx, num_elements)
 	mol_idx = tf.dynamic_partition(atom_idx, partition_idx, num_elements)
-	return embeds#, mol_idx
+	return embeds, mol_idx
 
 def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, pairs, elements, gauss_params, l_max):
 	"""
@@ -594,30 +590,20 @@ def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, pairs, elements, gauss_params, 
 	pair_dxyz = tf.gather_nd(xyzs, pairs[...,:2]) - tf.gather_nd(xyzs, pairs[...,:3:2])
 	pair_dist = tf.norm(pair_dxyz+1.e-16, axis=-1)
 	gauss = tf_sparse_gauss(pair_dist, gauss_params)
-	return gauss
 	harmonics = tf_spherical_harmonics(pair_dxyz, pair_dist, l_max)
-	channel_scatter = tf.equal(tf.expand_dims(pairs[...,-2], axis=-1), elements)
+	channel_scatter = tf.equal(tf.expand_dims(pairs[...,-1], axis=-1), elements)
 	channel_scatter = tf.where(channel_scatter, tf.ones_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])),
 					tf.zeros_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])))
 	channel_gauss = tf.expand_dims(gauss, axis=2) * tf.expand_dims(channel_scatter, axis=-1)
-	return channel_gauss
 	channel_harmonics = tf.expand_dims(harmonics, axis=2) * tf.expand_dims(channel_scatter, axis=-1)
-
 	embeds = tf.reshape(tf.einsum('ijkg,ijkl->ikgl', channel_gauss, channel_harmonics),
 			[tf.shape(padding_mask)[0], -1])
-	return embeds
-
-	pair_embed = tf.reshape(tf.einsum('nij,nik->nijk', gauss, harmonics),
-				[tf.shape(padding_mask)[0], max_pairs, tf.shape(gauss_params)[0] * tf.square(l_max + 1)])
-	embed = tf.reduce_sum(tf.expand_dims(pair_embed, axis=-2) * tf.expand_dims(channel_scatter, axis=-1), axis=1)
-	embed = tf.reshape(embed, [tf.shape(padding_mask)[0], -1])
-	mol_idx = tf.gather_nd(pairs[...,0,:2], padding_mask)
 	element_partition = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=-1),
 					elements))[:,-1], tf.int32)
-	embed = tf.dynamic_partition(embed, element_partition, num_elements)
-	mol_idx = tf.dynamic_partition(mol_idx, element_partition, num_elements)
-	grads = tf.gradients(embed, xyzs)
-	return embed#, mol_idx
+	embeds = tf.dynamic_partition(embeds, element_partition, num_elements)
+	mol_idx = tf.dynamic_partition(pairs[...,0,:2], element_partition, num_elements)
+	grads = tf.gradients(embeds, xyzs)
+	return embeds, mol_idx
 
 def tf_random_rotate(xyzs, rot_params, labels = None, return_matrix = False):
 	"""

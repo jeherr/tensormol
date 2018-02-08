@@ -786,7 +786,8 @@ class Mol:
 		return np.unique(self.bonds[:,0]).astype(int)
 
 	def make_neighbors(self, r_cutoff):
-		self.neighbor_list = sorted(MolEmb.Make_NListNaive(self.coords, r_cutoff, self.NAtoms(), True))
+		self.neighbor_list = MolEmb.Make_NListNaive(self.coords, r_cutoff, self.NAtoms(), True)
+		self.neighbor_list = [sorted(neighbors) for neighbors in self.neighbor_list]
 
 	def max_neighbors(self):
 		return max([len(atom_neighbors) for atom_neighbors in self.neighbor_list])
