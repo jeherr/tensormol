@@ -12,7 +12,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import random
-import cPickle as pickle
+import sys
+if sys.version_info[0] < 3:
+	import cPickle as pickle
+else:
+	import _pickle as pickle
 #
 # A Variation on BP which uses a classification channel.
 #
