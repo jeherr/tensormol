@@ -216,7 +216,7 @@ class BehlerParinelloNetwork(object):
 		self.xyz_data = np.zeros((self.num_molecules, self.max_num_atoms, 3), dtype = np.float64)
 		self.Z_data = np.zeros((self.num_molecules, self.max_num_atoms), dtype = np.int32)
 		# self.mulliken_charges_data = np.zeros((self.num_molecules, self.max_num_atoms), dtype = np.float64)
-		# self.num_atoms_data = np.zeros((self.num_molecules), dtype = np.int32)
+		self.num_atoms_data = np.zeros((self.num_molecules), dtype = np.int32)
 		self.energy_data = np.zeros((self.num_molecules), dtype = np.float64)
 		self.gradient_data = np.zeros((self.num_molecules, self.max_num_atoms, 3), dtype=np.float64)
 		if self.train_dipole:
@@ -239,7 +239,7 @@ class BehlerParinelloNetwork(object):
 				for j, atom_pairs in enumerate(mol.neighbor_list):
 					self.pairs_data[i,j,:len(atom_pairs)] = np.stack([np.array([i for _ in range(len(atom_pairs))]),
 						np.array([j for _ in range(len(atom_pairs))]), np.array(atom_pairs), mol.atoms[atom_pairs]]).T
-			# self.num_atoms_data[i] = mol.NAtoms()
+			self.num_atoms_data[i] = mol.NAtoms()
 		return
 
 	def load_data_to_scratch(self):
@@ -300,7 +300,7 @@ class BehlerParinelloNetwork(object):
 		batch_data = []
 		batch_data.append(self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
-		# batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		if self.train_sparse:
@@ -330,7 +330,7 @@ class BehlerParinelloNetwork(object):
 		batch_data = []
 		batch_data.append(self.xyz_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
-		# batch_data.append(self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		batch_data.append(self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.energy_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		if self.train_sparse:
@@ -403,7 +403,7 @@ class BehlerParinelloNetwork(object):
 		Returns:
 			Filled feed dictionary.
 		"""
-		pl_list = [self.xyzs_pl, self.Zs_pl, self.energy_pl, self.gradients_pl]
+		pl_list = [self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.energy_pl, self.gradients_pl]
 		if self.train_sparse:
 			pl_list.append(self.pairs_pl)
 		feed_dict={i: d for i, d in zip(pl_list, batch_data)}
@@ -800,7 +800,7 @@ class BehlerParinelloSymFunc(BehlerParinelloNetwork):
 		sess.run(tf.global_variables_initializer())
 		for ministep in range (0, max(2, int(0.1 * self.num_train_cases/self.batch_size))):
 			batch_data = self.get_energy_train_batch(self.batch_size)
-			labels_list.append(batch_data[2])
+			labels_list.append(batch_data[3])
 			embedding, molecule_index = sess.run([embeddings, molecule_indices], feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
 			for element in range(len(self.elements)):
 				embeddings_list[element].append(embedding[element])
@@ -1084,12 +1084,12 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 
 		sess = tf.Session()
 		sess.run(tf.global_variables_initializer())
-		for ministep in range (max(2, int(0.02 * self.num_train_cases/self.batch_size))):
+		for ministep in range (max(2, int(0.1 * self.num_train_cases/self.batch_size))):
 			batch_data = self.get_energy_train_batch(self.batch_size)
-			labels_list.append(batch_data[2])
+			labels_list.append(batch_data[3])
 			if self.train_sparse:
 				embedding, molecule_index = sess.run([embeddings, molecule_indices],
-										feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1], pairs_pl:batch_data[4]})
+										feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1], pairs_pl:batch_data[5]})
 			else:
 				embedding, molecule_index = sess.run([embeddings, molecule_indices],
 										feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})

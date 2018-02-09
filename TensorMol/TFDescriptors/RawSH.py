@@ -602,7 +602,6 @@ def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, pairs, elements, gauss_params, 
 					elements))[:,-1], tf.int32)
 	embeds = tf.dynamic_partition(embeds, element_partition, num_elements)
 	mol_idx = tf.dynamic_partition(pairs[...,0,:2], element_partition, num_elements)
-	grads = tf.gradients(embeds, xyzs)
 	return embeds, mol_idx
 
 def tf_random_rotate(xyzs, rot_params, labels = None, return_matrix = False):
