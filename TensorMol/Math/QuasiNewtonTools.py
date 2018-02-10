@@ -245,7 +245,7 @@ def HarmonicSpectra(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM_=False, Mu_ =
 	LOGGER.info("Harmonic Analysis")
 	n = x_.shape[0]
 	n3 = 3*n
-	m_ = np.array(map(lambda x: ATOMICMASSESAMU[x-1]*ELECTRONPERPROTONMASS, at_.tolist()))
+	m_ = np.array(list(map(lambda x: ATOMICMASSESAMU[x-1]*ELECTRONPERPROTONMASS, at_.tolist())))
 	print ("m_:", m_)
 	Crds = InternalCoordinates(x_,m_) #invbasis X cart
 	#Crds=np.eye(n3).reshape((n3,n,3))
@@ -418,7 +418,7 @@ class ConjGradient:
 				if (self.alpha > 0.00001):
 					self.alpha /= 1.8001
 				elif self.alpha < 0.0001:
-					print("ARE YOU SURE FORCE MATCHES ENERGY??? ")					
+					print("ARE YOU SURE FORCE MATCHES ENERGY??? ")
 				else:
 					print("Keeping step")
 					return a
