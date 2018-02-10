@@ -20,25 +20,25 @@ a=TM.MSet()
 a.mols.append(starting_molecule)
 
 def GetChemSpiderNetwork():
-    TreatedAtoms = np.array([1,6,7,8], dtype=np.uint8)
-    # TM.PARAMS["networks_directory"] = "/home/animal/Packages/TensorMol/networks/"
-    TM.PARAMS["tf_prec"] = "tf.float64"
-    TM.PARAMS["NeuronType"] = "sigmoid_with_param"
-    TM.PARAMS["sigmoid_alpha"] = 100.0
-    TM.PARAMS["HiddenLayers"] = [2000, 2000, 2000]
-    TM.PARAMS["EECutoff"] = 15.0
-    TM.PARAMS["EECutoffOn"] = 0
-    TM.PARAMS["Elu_Width"] = 4.6  # when elu is used EECutoffOn should always equal to 0
-    TM.PARAMS["EECutoffOff"] = 15.0
-    TM.PARAMS["AddEcc"] = True
-    TM.PARAMS["KeepProb"] = [1.0, 1.0, 1.0, 0.7]
+	TreatedAtoms = np.array([1,6,7,8], dtype=np.uint8)
+	# TM.PARAMS["networks_directory"] = "/home/animal/Packages/TensorMol/networks/"
+	TM.PARAMS["tf_prec"] = "tf.float64"
+	TM.PARAMS["NeuronType"] = "sigmoid_with_param"
+	TM.PARAMS["sigmoid_alpha"] = 100.0
+	TM.PARAMS["HiddenLayers"] = [2000, 2000, 2000]
+	TM.PARAMS["EECutoff"] = 15.0
+	TM.PARAMS["EECutoffOn"] = 0
+	TM.PARAMS["Elu_Width"] = 4.6  # when elu is used EECutoffOn should always equal to 0
+	TM.PARAMS["EECutoffOff"] = 15.0
+	TM.PARAMS["AddEcc"] = True
+	TM.PARAMS["KeepProb"] = [1.0, 1.0, 1.0, 0.7]
 
-    d = TM.MolDigester(TreatedAtoms, name_="ANI1_Sym_Direct", OType_="EnergyAndDipole")  # Initialize a digester that apply descriptor for the fragme
-    tset = TM.TensorMolData_BP_Direct_EE_WithEle(a, d, order_=1, num_indis_=1, type_="mol",  WithGrad_ = True)
-    TM.PARAMS["DSFAlpha"] = 0.18*TM.BOHRPERA
+	d = TM.MolDigester(TreatedAtoms, name_="ANI1_Sym_Direct", OType_="EnergyAndDipole")  # Initialize a digester that apply descriptor for the fragme
+	tset = TM.TensorMolData_BP_Direct_EE_WithEle(a, d, order_=1, num_indis_=1, type_="mol",  WithGrad_ = True)
+	TM.PARAMS["DSFAlpha"] = 0.18*TM.BOHRPERA
 
-    manager=TM.TFMolManage("chemspider12_solvation", tset,False,"fc_sqdiff_BP_Direct_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout",False,False)
-    return manager
+	manager=TM.TFMolManage("chemspider12_solvation", tset,False,"fc_sqdiff_BP_Direct_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout",False,False)
+	return manager
 
 manager = GetChemSpiderNetwork()
 print("~~~~~ QM-ML Energy: {} ~~~~~".format(TM.QMMLEnergy(manager, starting_molecule, 3)))
