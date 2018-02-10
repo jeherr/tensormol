@@ -7,7 +7,7 @@ import numpy as np
 from ..Util import *
 import random, math, subprocess
 
-def PyscfDft(m_,basis_ = '6-31g*',xc_='b3lyp'):
+def PyscfDft(m_,basis_='6-31g*',xc_='b3lyp'):
 	# Global not defined in this context
 	# if (not HAS_PYSCF):
 	# 	print("Missing PYSCF")
