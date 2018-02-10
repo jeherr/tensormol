@@ -155,7 +155,7 @@ class TMParams(dict):
 		self["Erf_Width"] = 0.2
 		self["DSFAlpha"] = 0.18
 		#paths -- Allows for different placement of fast reads/writes.
-		self["tm_root"] = "."
+		self["tm_root"] = os.environ['TENSORMOL_PATH'] if os.environ['TENSORMOL_PATH'] else "."
 		self["sets_dir"] = self["tm_root"]+"/datasets/"
 		self["networks_directory"] = self["tm_root"]+"/networks/"
 		self["output_root"] = "."
