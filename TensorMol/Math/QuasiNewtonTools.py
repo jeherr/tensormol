@@ -276,6 +276,7 @@ def HarmonicSpectra(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM_=False, Mu_ =
 	wave = np.sign(w)*np.sqrt(abs(w))*WAVENUMBERPERHARTREE
 	print("N3, shape v",n3,v.shape)
 	if (WriteNM_):
+		intensities = np.zeros(shape=(3*n))
 		for i in range(3*n):
 			nm = np.zeros(3*n)
 			for j,mi in enumerate(m_):
@@ -286,10 +287,12 @@ def HarmonicSpectra(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM_=False, Mu_ =
 			step = 0.01
 			dmudq = (Mu_(x_+step*nm)-Mu_(x_))/step
 			print("|f| (UNITS????) ",np.dot(dmudq,dmudq.T))
-			for alpha in np.append(np.linspace(0.1,-0.1,30),np.linspace(0.1,-0.1,30)):
-				mdisp = Mol(at_, x_+alpha*nm)
-				#print("Mu",Mu_(x_+alpha*nm))
-				mdisp.WriteXYZfile("./results/","NormalMode_"+str(i))
+			intensities[i] = np.dot(dmudq,dmudq.T)
+			# for alpha in np.append(np.linspace(0.1,-0.1,30),np.linspace(0.1,-0.1,30)):
+			# 	mdisp = Mol(at_, x_+alpha*nm)
+			# 	#print("Mu",Mu_(x_+alpha*nm))
+			# 	mdisp.WriteXYZfile("./results/","NormalMode_"+str(i))
+		return wave, v, intensities
 	return wave, v
 
 def HarmonicSpectraWithProjection(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM_=False, Mu_ = None):
@@ -307,7 +310,7 @@ def HarmonicSpectraWithProjection(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM
 		Mu_: A dipole field routine for intensities.
 
 	Returns:
-		Frequencies in wavenumbers and Normal modes (cart)
+		Frequencies in wavenumbers, Normal modes (cart), and Intensities
 	"""
 	LOGGER.info("Harmonic Analysis")
 	n = x_.shape[0]
