@@ -4,19 +4,23 @@ Routines for running external Ab-Initio packages to get shit out of mol.py
 from __future__ import absolute_import
 from __future__ import print_function
 import numpy as np
+from ..Util import *
 import random, math, subprocess
 
 def PyscfDft(m_,basis_ = '6-31g*',xc_='b3lyp'):
-	if (not HAS_PYSCF):
-		print("Missing PYSCF")
-		return 0.0
+	# Global not defined in this context
+	# if (not HAS_PYSCF):
+	# 	print("Missing PYSCF")
+	# 	return 0.0
 	mol = gto.Mole()
-	pyscfatomstring=""
-	crds = m_.coords.copy()
-	crds[abs(crds)<0.0001] *=0.0
-	for j in range(len(m_.atoms)):
-		pyscfatomstring=pyscfatomstring+str(m_.atoms[j])+" "+str(crds[j,0])+" "+str(crds[j,1])+" "+str(crds[j,2])+(";" if j!= len(m_.atoms)-1 else "")
-	mol.atom = pyscfatomstring
+	pyscf_atomic_coords = []
+	atoms               = m_.atoms
+	atom_coords         = m_.coords
+	i = 0
+	while i < len(atoms):
+		pyscf_atomic_coords.append(["{}".format(atoms[i]), (atom_coords[i, 0], atom_coords[i, 1], atom_coords[i, 2])])
+		i = i + 1
+	mol.atom = pyscf_atomic_coords
 	mol.unit = "Angstrom"
 	mol.charge = 0
 	mol.spin = 0
@@ -27,6 +31,53 @@ def PyscfDft(m_,basis_ = '6-31g*',xc_='b3lyp'):
 	mf.xc = xc_
 	e = mf.kernel()
 	return e
+
+def PyscfCcsd(m_,basis_="def2-tzvp"):
+	# if (not HAS_PYSCF):
+	# 	print("Missing PYSCF")
+	# 	return 0.0
+	pyscf_atomic_coords = []
+	atoms               = m_.atoms
+	atom_coords         = m_.coords
+	i = 0
+	while i < len(atoms):
+		pyscf_atomic_coords.append(["{}".format(atoms[i]), (atom_coords[i, 0], atom_coords[i, 1], atom_coords[i, 2])])
+		i = i + 1
+
+	mol = gto.M(atom=pyscf_atomic_coords, basis=basis_, spin=0, charge=0, verbose=0)
+
+	mf  = scf.RHF(mol)
+	mf.run()
+
+	my_cc = cc.CCSD(mf)
+	my_cc.kernel()
+	energy = my_cc.e_tot
+
+	return energy
+
+def PyscfCcsdt(m_,basis_="def2-tzvp"):
+	# if (not HAS_PYSCF):
+	# 	print("Missing PYSCF")
+	# 	return 0.0
+	pyscf_atomic_coords = []
+	atoms               = m_.atoms
+	atom_coords         = m_.coords
+	i = 0
+	while i < len(atoms):
+		pyscf_atomic_coords.append(["{}".format(atoms[i]), (atom_coords[i, 0], atom_coords[i, 1], atom_coords[i, 2])])
+		i = i + 1
+
+	mol = gto.M(atom=pyscf_atomic_coords, basis=basis_, spin=0, charge=0, verbose=0)
+
+	mf  = scf.RHF(mol)
+	mf.run()
+
+	my_cc = cc.CCSD(mf)
+	my_cc.kernel()
+	ccsdt_corr_energy = ccsd_t.kernel(my_cc, my_cc.ao2mo())
+	energy = my_cc.e_tot + ccsdt_corr_energy
+
+	return energy
 
 def QchemDFT(m_,basis_ = '6-31g*',xc_='b3lyp', jobtype_='force', filename_='tmp', path_='./qchem/', threads=False):
 	istring = '$molecule\n0 1 \n'
