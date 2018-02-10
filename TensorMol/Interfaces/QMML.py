@@ -8,14 +8,14 @@ from ..Containers import *
 from ..TFNetworks import *
 from .AbInitio import *
 
-def QMMLEnergy(manager, m_, qm_atom_count, method_="dft", basis_="631+g*", functional_="b3lyp"):
+def QMMLEnergy(manager_, m_, qm_atom_count_, method_="dft", basis_="631+g*", functional_="b3lyp"):
 	atoms = m_.atoms
 	atom_coords = m_.coords
 	a=MSet()
 	a.mols.append(m_)
 
 	def CalculateProperties(molecule):
-		Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient = manager.EvalBPDirectEEUpdateSingle(molecule, PARAMS["AN1_r_Rc"], PARAMS["AN1_a_Rc"], PARAMS["EECutoffOff"], True)
+		Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient = manager_.EvalBPDirectEEUpdateSingle(molecule, PARAMS["AN1_r_Rc"], PARAMS["AN1_a_Rc"], PARAMS["EECutoffOff"], True)
 		energy         = Etotal[0]
 		force          = gradient[0]
 		partial_charge = atom_charge[0]
@@ -28,8 +28,8 @@ def QMMLEnergy(manager, m_, qm_atom_count, method_="dft", basis_="631+g*", funct
 
 		full_molecule.atoms  = atoms
 		full_molecule.coords = atom_coords
-		qm_molecule.atoms    = atoms[:qm_atom_count]
-		qm_molecule.coords   = atom_coords[:qm_atom_count]
+		qm_molecule.atoms    = atoms[:qm_atom_count_]
+		qm_molecule.coords   = atom_coords[:qm_atom_count_]
 		qm_atomic_coords     = []
 		i = 0
 		while i < len(qm_molecule.atoms):
@@ -69,7 +69,7 @@ def QMMLEnergy(manager, m_, qm_atom_count, method_="dft", basis_="631+g*", funct
 		# -----------------------
 		qmml_energy = ml_full_energy + qm_energy - ml_qmregion_energy
 		# qmml_force  = np.copy(ml_full_force)
-		# qmml_force[:qm_atom_count] = qmml_force[:qm_atom_count] + qm_force - ml_qmregion_force
+		# qmml_force[:qm_atom_count_] = qmml_force[:qm_atom_count_] + qm_force - ml_qmregion_force
 		# print("QM-ML Force:")
 		# print(qmml_force)
 		# print("TM-Full Force:")
