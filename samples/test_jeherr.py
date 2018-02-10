@@ -269,10 +269,10 @@ def train_energy_symm_func(mset):
 	manager = TFMolManageDirect(a, network_type = "BPSymFunc")
 
 def train_energy_GauSH(mset):
-	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.35, 16)), axis=1)
+	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_NRAD"] = 16
-	PARAMS["SH_LMAX"] = 4
-	PARAMS["SH_rot_invar"] = True
+	PARAMS["SH_LMAX"] = 3
+	PARAMS["SH_rot_invar"] = False
 	PARAMS["EECutoffOn"] = 0.0
 	PARAMS["Elu_Width"] = 6.0
 	PARAMS["train_gradients"] = False
@@ -280,13 +280,15 @@ def train_energy_GauSH(mset):
 	PARAMS["train_rotation"] = False
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512, 512]
-	PARAMS["learning_rate"] = 0.0001
-	PARAMS["max_steps"] = 250
+	PARAMS["learning_rate"] = 0.00005
+	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
 	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
 	PARAMS["Profiling"] = False
+	PARAMS["train_sparse"] = False
+	PARAMS["sparse_cutoff"] = 7.0
 	manager = TFMolManageDirect(mset, network_type = "BPGauSH")
 
 def test_h2o():
@@ -792,6 +794,108 @@ def water_meta_react():
 	meta = MetaDynamics(EnAndForce, m,name_="water_10react", EandF_=EnAndForce)
 	meta.Prop()
 
+def meta_opt():
+	a=MSet("water10")
+	a.ReadXYZ()
+	TreatedAtoms = a.AtomTypes()
+	m=a.mols[0]
+	PARAMS["MDdt"] = 0.5
+	PARAMS["RemoveInvariant"] = True
+	PARAMS["MDMaxStep"] = 50000
+	PARAMS["MDThermostat"] = "Andersen"
+	PARAMS["MDTemp"]= 600.0
+	PARAMS["MDV0"] = "Random"
+	PARAMS["MetaMDBumpHeight"] = 2.0
+	PARAMS["MetaMDBumpWidth"] = 3.0
+	PARAMS["MetaMaxBumps"] = 2000
+	PARAMS["MetaBowlK"] = 0.2
+	PARAMS["MetaBumpTime"] = 5.0
+	PARAMS["tf_prec"] = "tf.float64"
+	PARAMS["NeuronType"] = "sigmoid_with_param"
+	PARAMS["sigmoid_alpha"] = 100.0
+	PARAMS["HiddenLayers"] = [500, 500, 500]
+	PARAMS["EECutoff"] = 15.0
+	PARAMS["EECutoffOn"] = 0
+	PARAMS["Elu_Width"] = 4.6  # when elu is used EECutoffOn should always equal to 0
+	PARAMS["EECutoffOff"] = 15.0
+	PARAMS["DSFAlpha"] = 0.18
+	PARAMS["AddEcc"] = True
+	PARAMS["KeepProb"] = [1.0, 1.0, 1.0, 1.0]
+	PARAMS["OptMaxCycles"]= 2000
+	PARAMS["OptThresh"] =0.00002
+	d = MolDigester(TreatedAtoms, name_="ANI1_Sym_Direct", OType_="EnergyAndDipole")
+	tset = TensorMolData_BP_Direct_EE_WithEle(a, d, order_=1, num_indis_=1, type_="mol",  WithGrad_ = True)
+	manager=TFMolManage("water_network",tset,False,"fc_sqdiff_BP_Direct_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout",False,False)
+	atomization_energy = 0.0
+	for atom in m.atoms:
+		if atom in ele_U:
+			atomization_energy += ele_U[atom]
+	def EnAndForce(x_, DoForce=True):
+		mtmp = Mol(m.atoms,x_)
+		Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient = manager.EvalBPDirectEEUpdateSingle(mtmp, PARAMS["AN1_r_Rc"], PARAMS["AN1_a_Rc"], PARAMS["EECutoffOff"], True)
+		energy = Etotal[0] + atomization_energy
+		force = gradient[0]
+		if DoForce:
+			return energy, force
+		else:
+			return energy
+#	PARAMS["OptMaxCycles"]=500
+	web = LocalReactions(EnAndForce,m,50)
+	exit(0)
+	Opt = MetaOptimizer(EnAndForce,m,Box_=False)
+	Opt.MetaOpt(m)
+
+def water_web():
+	a=MSet("WebPath")
+	a.ReadXYZ()
+	TreatedAtoms = a.AtomTypes()
+	m=a.mols[0]
+	PARAMS["MDdt"] = 0.5
+	PARAMS["RemoveInvariant"] = True
+	PARAMS["MDMaxStep"] = 50000
+	PARAMS["MDThermostat"] = "Andersen"
+	PARAMS["MDTemp"]= 600.0
+	PARAMS["MDV0"] = "Random"
+	PARAMS["MetaMDBumpHeight"] = 2.0
+	PARAMS["MetaMDBumpWidth"] = 3.0
+	PARAMS["MetaMaxBumps"] = 2000
+	PARAMS["MetaBowlK"] = 0.2
+	PARAMS["MetaBumpTime"] = 5.0
+	PARAMS["tf_prec"] = "tf.float64"
+	PARAMS["NeuronType"] = "sigmoid_with_param"
+	PARAMS["sigmoid_alpha"] = 100.0
+	PARAMS["HiddenLayers"] = [500, 500, 500]
+	PARAMS["EECutoff"] = 15.0
+	PARAMS["EECutoffOn"] = 0
+	PARAMS["Elu_Width"] = 4.6  # when elu is used EECutoffOn should always equal to 0
+	PARAMS["EECutoffOff"] = 15.0
+	PARAMS["DSFAlpha"] = 0.18
+	PARAMS["AddEcc"] = True
+	PARAMS["KeepProb"] = [1.0, 1.0, 1.0, 1.0]
+	PARAMS["OptMaxCycles"]= 2000
+	PARAMS["OptThresh"] =0.00002
+	d = MolDigester(TreatedAtoms, name_="ANI1_Sym_Direct", OType_="EnergyAndDipole")
+	tset = TensorMolData_BP_Direct_EE_WithEle(a, d, order_=1, num_indis_=1, type_="mol",  WithGrad_ = True)
+	manager=TFMolManage("water_network",tset,False,"fc_sqdiff_BP_Direct_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout",False,False)
+	atomization_energy = 0.0
+	for atom in m.atoms:
+		if atom in ele_U:
+			atomization_energy += ele_U[atom]
+	def EnAndForce(x_, DoForce=True):
+		mtmp = Mol(m.atoms,x_)
+		Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient = manager.EvalBPDirectEEUpdateSingle(mtmp, PARAMS["AN1_r_Rc"], PARAMS["AN1_a_Rc"], PARAMS["EECutoffOff"], True)
+		energy = Etotal[0] + atomization_energy
+		force = gradient[0]
+		if DoForce:
+			return energy, force
+		else:
+			return energy
+	f=open("web_energies.dat", "w")
+	for i, mol in enumerate(a.mols):
+		en = EnAndForce(mol.coords, DoForce=False)
+		f.write(str(i)+"  "+str(en*627.509)+"\n")
+	f.close()
+
 # PARAMS["RBFS"] = np.stack((np.linspace(0.1, 5.0, 32), np.repeat(0.25, 32)), axis=1)
 # PARAMS["SH_NRAD"] = 32
 # PARAMS["SH_LMAX"] = 4
@@ -806,7 +910,7 @@ def water_meta_react():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("SmallMols", 10000)
+# RandomSmallSet("water_wb97xd_6311gss", 10000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -816,7 +920,7 @@ def water_meta_react():
 # test_tf_neighbor()
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
-# train_energy_GauSH("water_wb97xd_6311gss")
+train_energy_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -828,7 +932,9 @@ def water_meta_react():
 #water_ir()
 # GetWaterNetwork()
 # water_meta_opt()
-water_meta_react()
+# water_meta_react()
+# meta_opt()
+# water_web()
 
 # f=open("nicotine_md_aimd_log.dat","r")
 # f2=open("nicotine_md_aimd_energies.dat", "w")
@@ -857,8 +963,8 @@ water_meta_react()
 # a.Save()
 
 # PARAMS["tf_prec"] = "tf.float32"
-# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.35, 16)), axis=1)
-# PARAMS["SH_NRAD"] = 16
+# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 5), np.repeat(0.35, 5)), axis=1)
+# PARAMS["SH_NRAD"] = 5
 # a = MSet("SmallMols_rand")
 # a.Load()
 # # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
@@ -871,53 +977,79 @@ water_meta_react()
 # # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
 # # # # mt.WriteXYZfile()
 # b=MSet()
-# for i in range(1):
+# for i in range(100):
 # 	b.mols.append(a.mols[i])
-# 	new_mol = copy.deepcopy(a.mols[i])
-# 	new_mol.RotateRandomUniform()
-# 	b.mols.append(new_mol)
+# 	# new_mol = copy.deepcopy(a.mols[i])
+# 	# new_mol.RotateRandomUniform()
+# 	# b.mols.append(new_mol)
 # # # a=MSet("SmallMols_rand")
 # # # a.Load()
 # maxnatoms = b.MaxNAtoms()
+# for mol in b.mols:
+# 	mol.make_neighbors(7.0)
+# max_num_pairs = b.max_neighbors()
+#
 # zlist = []
 # xyzlist = []
+# pairlist = []
 # n_atoms_list = []
 # for i, mol in enumerate(b.mols):
 # 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
 # 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
 # 	paddedz = np.zeros((maxnatoms), dtype=np.int32)
 # 	paddedz[:mol.atoms.shape[0]] = mol.atoms
+# 	paddedpairs = np.zeros((maxnatoms, max_num_pairs, 4), dtype=np.int32)
+# 	for j, atom_pairs in enumerate(mol.neighbor_list):
+# 		molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]),
+# 				np.array([j for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]),
+# 				mol.atoms[mol.neighbor_list[j]]]).T
+# 		paddedpairs[j,:len(atom_pairs)] = molpair
 # 	xyzlist.append(paddedxyz)
 # 	zlist.append(paddedz)
+# 	pairlist.append(paddedpairs)
 # 	n_atoms_list.append(mol.NAtoms())
 # 	if i == 99:
 # 		break
 # xyzstack = tf.stack(xyzlist)
 # zstack = tf.stack(zlist)
+# pairstack = tf.stack(pairlist)
 # natomsstack = tf.stack(n_atoms_list)
-# r_cutoff = 7.0
+# r_cutoff = 6.5
 # gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
 # # atomic_embed_factors = tf.Variable(PARAMS["ANES"], trainable=True, dtype=tf.float32)
-# elements = tf.constant([1, 8], dtype=tf.int32)
+# elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
 # # tmp = tf_neighbor_list_sort(xyzstack, zstack, natomsstack, elements, r_cutoff)
-# # tmp = tf_sparse_gauss_harmonics_echannel(xyzstack, zstack, natomsstack, elements, gaussian_params, 4, r_cutoff)
-# tmp2 = tf_gauss_harmonics_echannel(xyzstack, zstack, elements, gaussian_params, 8)
+# tmp = tf_sparse_gauss_harmonics_echannel(xyzstack, zstack, pairstack, elements, gaussian_params, 1)
+# tmp2 = tf_gauss_harmonics_echannel(xyzstack, zstack, elements, gaussian_params, 1)
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
-# # options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-# # run_metadata = tf.RunMetadata()
+# options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+# run_metadata = tf.RunMetadata()
 # # # for i in range(a.mols[0].atoms.shape[0]):
 # # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
 # @TMTiming("test")
 # def get_pairs():
-# 	tmp3 = sess.run(tmp2)
-# 	return tmp3
-# tmp5 = get_pairs()
-# print tmp5[:13].shape
-# print tmp5[13:].shape
-# print np.allclose(tmp5[:13], tmp5[13:], 1e-03)
-# # print np.isclose(tmp5[0][0], tmp6[0][0], 1e-01)
-# # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-# # chrome_trace = fetched_timeline.generate_chrome_trace_format()
-# # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
-# # 	f.write(chrome_trace)
+# 	tmp3, tmp4 = sess.run([tmp, tmp2], options=options, run_metadata=run_metadata)
+# 	return tmp3, tmp4
+# tmp5, tmp6 = get_pairs()
+# # print tmp5[14]
+# # print tmp6[14]
+# print tmp5[0][0].shape
+# print tmp6[0][0].shape
+# # print tmp5[0]
+# # print tmp6[0]
+# # print tmp6.shape
+# # print len(tmp5)
+# # print np.sum(tmp5[4,:12], axis=0)
+# # print np.sum(tmp6[4,:13], axis=0)
+# # print tmp5[13]
+# # print tmp6[13]
+# print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
+# # print np.allclose(tmp5, tmp6, 1e-01)
+# # print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
+# # print tmp5[0][10,0]
+# # print tmp6[0][10,0]
+# fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+# chrome_trace = fetched_timeline.generate_chrome_trace_format()
+# with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
+# 	f.write(chrome_trace)

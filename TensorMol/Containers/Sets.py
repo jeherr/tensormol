@@ -137,6 +137,9 @@ class MSet:
 	def MaxNAtoms(self):
 		return np.max([m.NAtoms() for m in self.mols])
 
+	def max_neighbors(self):
+		return max([mol.max_neighbors() for mol in self.mols])
+
 	def AtomTypes(self):
 		types = np.array([],dtype=np.uint8)
 		for m in self.mols:

@@ -80,6 +80,8 @@ class TMParams(dict):
 		self["EnergyScalar"] = 1.0
 		self["GradScalar"] = 1.0/20.0
 		self["DipoleScaler"]=1.0
+		self["train_sparse"] = False
+		self["sparse_cutoff"] = 5.0
 		# DATA usage parameters
 		self["InNormRoutine"] = None
 		self["OutNormRoutine"] = None
@@ -153,7 +155,10 @@ class TMParams(dict):
 		self["Erf_Width"] = 0.2
 		self["DSFAlpha"] = 0.18
 		#paths -- Allows for different placement of fast reads/writes.
-		self["tm_root"] = "."
+		if 'TENSORMOL_PATH' in os.environ:
+			self["tm_root"] = os.environ['TENSORMOL_PATH']
+		else:
+			self["tm_root"] = "."
 		self["sets_dir"] = self["tm_root"]+"/datasets/"
 		self["networks_directory"] = self["tm_root"]+"/networks/"
 		self["output_root"] = "."
@@ -182,7 +187,7 @@ def TMBanner():
 	print("--------------------------")
 	print("By using this software you accept the terms of the GNU public license in ")
 	print("COPYING, and agree to attribute the use of this software in publications as: \n")
-	print("K.Yao, J. E. Herr, D. Toth, R. McKintyre, J. Garside, J. Parkhill. TensorMol 0.2 (2018)")
+	print("K.Yao, J. E. Herr, D. Toth, R. McIntyre, J. Garside, J. Parckhill. TensorMol 0.2 (2018)")
 	print("--------------------------")
 
 def TMLogger(path_):
