@@ -5,6 +5,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 from ..PhysicalData import *
 from ..Util import *
+from ..Containers import *
 from .LinearOperations import *
 
 def RmsForce(f_):
