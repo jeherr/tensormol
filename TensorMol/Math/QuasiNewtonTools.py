@@ -5,7 +5,6 @@ from __future__ import absolute_import
 from __future__ import print_function
 from ..PhysicalData import *
 from ..Util import *
-from ..Containers import *
 from .LinearOperations import *
 
 def RmsForce(f_):
@@ -241,7 +240,7 @@ def HarmonicSpectra(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM_=False, Mu_ =
 		Mu_: A dipole field routine for intensities.
 
 	Returns:
-		Frequencies in wavenumbers and Normal modes (cart)
+		Frequencies in wavenumbers, Normal modes (cart), and Intensities
 	"""
 	LOGGER.info("Harmonic Analysis")
 	n = x_.shape[0]
@@ -335,17 +334,23 @@ def HarmonicSpectraWithProjection(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM
 	wave = np.sign(s)*np.sqrt(abs(s))*WAVENUMBERPERHARTREE
 	print("N3, shape v",n3,v.shape)
 	if (WriteNM_):
+		intensities = np.zeros(shape=(3*n))
 		for i in range(3*n):
-			nm = v[:,i].reshape((n,3))
-			nm *= np.sqrt(m_[:,np.newaxis]).T
-			tmp = nm.reshape((x_.shape[0],3))
+			nm = np.zeros(3*n)
+			for j,mi in enumerate(m_):
+				nm[3*j:3*(j+1)] = v[3*j:3*(j+1),i]/np.sqrt(mi/ELECTRONPERPROTONMASS)
+			#nm /= np.sqrt(np.sum(nm*nm))
+			nm = nm.reshape((n,3))
 			# Take finite difference derivative of mu(Q) and return the <dmu/dQ, dmu/dQ>
 			step = 0.01
-			dmudq = (Mu_(x_+step*tmp)-Mu_(x_))/step
+			dmudq = (Mu_(x_+step*nm)-Mu_(x_))/step
 			print("|f| (UNITS????) ",np.dot(dmudq,dmudq.T))
-			for alpha in np.append(np.linspace(-.1,.1,30),np.linspace(.1,-.1,30)):
-				mdisp = Mol(at_, x_+alpha*tmp)
-				mdisp.WriteXYZfile("./results/","NormalMode_"+str(i))
+			intensities[i] = np.dot(dmudq,dmudq.T)
+			# for alpha in np.append(np.linspace(0.1,-0.1,30),np.linspace(0.1,-0.1,30)):
+			# 	mdisp = Mol(at_, x_+alpha*nm)
+			# 	#print("Mu",Mu_(x_+alpha*nm))
+			# 	mdisp.WriteXYZfile("./results/","NormalMode_"+str(i))
+		return wave, v, intensities
 	return wave, v
 
 class ConjGradient:
