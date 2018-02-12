@@ -17,8 +17,6 @@ class Mol:
 		self.properties = {}
 		self.name=None
 		#things below here are sometimes populated if it is useful.
-		self.PESSamples = [] # a list of tuples (atom, new coordinates, energy) for storage.
-		self.ecoords = None # equilibrium coordinates.
 		self.DistMatrix = None # a list of equilbrium distances, for GO-models.
 		return
 
@@ -428,6 +426,48 @@ class Mol:
 		odm = MolEmb.Make_DistMat(m.coords)
 		tmp = (mdm-odm)
 		return np.sqrt(np.sum(tmp*tmp)/(mdm.shape[0]*mdm.shape[0]))
+
+	def HybMatrix(self,tol_=2.2,nreal_ = -1):
+		"""
+		This is a predictor of an atoms hybridization for each atom
+
+		returns 3 numbers for each atom (i) based off neighbors (j)
+		\sum_j (1-tanh(pi*(r_ij - 2.5)))/2
+		And the mean and std-dev of angles in the triples (radians) weighted by
+		the same cut-off factors.
+		"""
+		todo = nreal_
+		if (nreal_==-1):
+			todo = self.NAtoms()
+		tore = np.zeros((self.NAtoms(),3))
+		NL = MolEmb.Make_NListLinear(self.coords, tol_+1.5, todo, True)
+		for i,js in enumerate(NL):
+			Rijs = np.zeros(len(js))
+			for k,j in enumerate(js):
+				Rijs[k] = (np.linalg.norm(self.coords[i]-self.coords[j]))
+			weights = (1.0-np.tanh((Rijs - tol_)*2.0*3.1415))/2.0
+			tore[i,0] = np.sum(weights)
+			# Now do weighted angles for all triples.
+			angles = []
+			aweights = []
+			for ji in range(len(js)):
+				for ki in range(ji+1,len(js)):
+					v1 = self.coords[js[ji]]-self.coords[i]
+					v2 = self.coords[js[ki]]-self.coords[i]
+					ToACos = (np.sum(v1*v2))/(Rijs[ji]*Rijs[ki]+1e-15)
+					if (ToACos > 1.0):
+						ToACos = 1.0
+					elif (ToACos < -1.0):
+						ToACos = -1.0
+					angles.append(np.arccos(ToACos))
+					aweights.append(weights[ji]*weights[ki])
+			angles_a = np.array(angles)
+			print(angles_a)
+			weights_a = np.array(aweights)
+			tore[i,1] = np.sum(angles_a*weights_a)/np.sum(weights_a)
+			tmp = (angles_a-tore[i,1])
+			tore[i,2] = np.sum(tmp*tmp*weights_a)/np.sum(weights_a)
+		return tore
 
 	def BondMatrix(self,tol_ = 1.6):
 		"""
