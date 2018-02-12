@@ -1236,12 +1236,11 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=tuple([None, self.max_num_atoms, 3]))
-			self.Zs_pl = tf.placeholder(tf.int32, shape=tuple([None, self.max_num_atoms]))
-			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[None])
-			self.Reep_pl = tf.placeholder(tf.int32, shape=[None,3])
+			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
+			self.Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
+			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
 
-			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
+			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
 			embeddings_mean = tf.Variable(self.embeddings_mean, trainable=False, dtype = self.tf_precision)
 			embeddings_stddev = tf.Variable(self.embeddings_stddev, trainable=False, dtype = self.tf_precision)
@@ -1277,11 +1276,11 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			for element in range(len(self.elements)):
 				embeddings[element] -= embeddings_mean[element]
 				embeddings[element] /= embeddings_stddev[element]
-			self.dipoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embeddings, molecule_indices, self.xyzs_pl, self.num_atoms_pl)
-			self.coulomb_energy = tf_coulomb_dsf_elu(self.xyzs_pl, self.charges, self.Reep_pl, elu_width, dsf_alpha, coulomb_cutoff)
+			# self.dipoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embeddings, molecule_indices, self.xyzs_pl, self.num_atoms_pl)
+			# self.coulomb_energy = tf_coulomb_dsf_elu(self.xyzs_pl, self.charges, self.Reep_pl, elu_width, dsf_alpha, coulomb_cutoff)
 			norm_bp_energy, energy_variables = self.energy_inference(embeddings, molecule_indices)
 			self.bp_energy = (norm_bp_energy * labels_stddev) + labels_mean
-			self.total_energy = self.bp_energy + self.coulomb_energy
+			self.total_energy = self.bp_energy
 			self.gradients = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
@@ -1300,7 +1299,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		Returns:
 			Filled feed dictionary.
 		"""
-		feed_dict={i: d for i, d in zip([self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.Reep_pl], [xyzs, Zs, num_atoms, Reep])}
+		feed_dict={i: d for i, d in zip([self.xyzs_pl, self.Zs_pl, self.num_atoms_pl], [xyzs, Zs, num_atoms])}
 		return feed_dict
 
 	def evaluate_mol(self, mol, eval_forces=True):
@@ -1314,16 +1313,10 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		"""
 		if not self.sess:
 			print("loading the session..")
-			self.gaussian_params = PARAMS["RBFS"][:self.number_radial]
+			# self.gaussian_params = PARAMS["RBFS"]
 			self.assign_activation()
 			self.max_num_atoms = mol.NAtoms()
 			self.batch_size = 1
-			self.evaluate_prepare()
-		if mol.NAtoms() > self.max_num_atoms:
-			print("Atoms and max atoms", mol.NAtoms(), self.max_num_atoms)
-			self.sess.close()
-			tf.reset_default_graph()
-			self.max_num_atoms = mol.NAtoms()
 			self.evaluate_prepare()
 		xyzs_feed = np.zeros((1,self.max_num_atoms, 3))
 		xyzs_feed[0,:mol.NAtoms()] = mol.coords
@@ -1331,8 +1324,6 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		Zs_feed[0,:mol.NAtoms()] = mol.atoms
 		num_atoms_feed = np.zeros((1), dtype=np.int32)
 		num_atoms_feed[0] = mol.NAtoms()
-		NLEE = NeighborListSet(xyzs_feed, num_atoms_feed, False, False, None)
-		rad_eep = NLEE.buildPairs(self.coulomb_cutoff)
 		feed_dict=self.evaluate_fill_feed_dict(xyzs_feed, Zs_feed, num_atoms_feed, rad_eep)
 		atomization_energy = 0.0
 		for atom in mol.atoms:
