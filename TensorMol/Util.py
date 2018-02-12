@@ -58,6 +58,8 @@ try:
 	from pyscf import gto
 	from pyscf import dft
 	from pyscf import mp
+	from pyscf import cc
+	from pyscf.cc import ccsd_t
 	HAS_PYSCF = True
 	LOGGER.debug("Pyscf has been found")
 except Exception as Ex:
