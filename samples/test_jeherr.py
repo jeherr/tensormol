@@ -301,9 +301,12 @@ def test_h2o():
 	a = MSet("water")
 	# a.ReadXYZ()
 	a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
-	mol = a.mols[0]
-	manager = TFMolManageDirect(name="BehlerParinelloDirectGauSH_H2O_wb97xd_1to21_with_prontonated_Mon_Nov_13_11.11.15_2017", network_type = "BehlerParinelloDirectGauSH")
-	def force_field(mol, eval_forces=True):
+	m = a.mols[0]
+	manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Mon_Feb_05_11.44.43_2018", network_type = "BPGauSH")
+	def force_field(coords, eval_forces=True):
+		mol = Mol()
+		mol.atoms = m.atoms
+		mol.coords = coords
 		if eval_forces:
 			energy, forces = manager.evaluate_mol(mol, True)
 			forces = RemoveInvariantForce(mol.coords, forces, mol.atoms)
@@ -311,8 +314,8 @@ def test_h2o():
 		else:
 			energy = manager.evaluate_mol(mol, False)
 			return energy
-	Opt = GeometryOptimizer(force_field)
-	opt_mol = Opt.opt_conjugate_gradient(mol)
+	Opt = GeomOptimizer(force_field)
+	opt_mol = Opt.Opt(mol)
 
 def evaluate_BPSymFunc(mset):
 	a=MSet(mset)
@@ -920,8 +923,8 @@ def water_web():
 # test_tf_neighbor()
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
-train_energy_GauSH("water_wb97xd_6311gss")
-# test_h2o()
+# train_energy_GauSH("water_wb97xd_6311gss")
+test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
 # nicotine_cc_stretch_plot()
