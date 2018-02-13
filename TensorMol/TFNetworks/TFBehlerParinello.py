@@ -179,7 +179,6 @@ class BehlerParinelloNetwork(object):
 					mini_test_loss = test_loss
 					self.save_checkpoint(step)
 		self.sess.close()
-		self.save_network()
 		return
 
 	def save_checkpoint(self, step):
@@ -190,7 +189,7 @@ class BehlerParinelloNetwork(object):
 
 	def save_network(self):
 		print("Saving TFInstance")
-		f = open(self.network_directory+".tfn","wb")
+		f = open(PARAMS["networks_directory"]+self.name+".tfn","wb")
 		pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 		f.close()
 		return
@@ -1250,29 +1249,29 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			dsf_alpha = tf.Variable(self.dsf_alpha, trainable=False, dtype = self.tf_precision)
 			coulomb_cutoff = tf.Variable(self.coulomb_cutoff, trainable=False, dtype = self.tf_precision)
 
-			# self.tiled_xyzs = tf.tile(tf.expand_dims(self.xyzs_pl, axis=1), [1, 100, 1, 1])
-			# self.tiled_Zs = tf.tile(tf.expand_dims(self.Zs_pl, axis=1), [1, 100, 1])
-			# self.rotation_params = tf.tile(tf.expand_dims(tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.0, 2.0, 5), [20]), axis=1),
-			# 		np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.0, 2.0, 5), axis=1), [1,20]), [100,1]),
-			# 		tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.1, 1.9, 4), axis=1),
-			# 		axis=2), [5,1,5]), [100,1])], axis=1), axis=0), [self.batch_size, 1, 1])
-			# self.rotated_xyzs = tf_random_rotate(self.tiled_xyzs, self.rotation_params)
-			# self.rotated_xyzs = tf.reshape(self.rotated_xyzs, [-1, self.num_atoms, 3])
-			# # self.rotated_gradients = tf.reshape(rotated_gradients, [-1, self.max_num_atoms, 3])
-			# self.tiled_Zs = tf.reshape(self.tiled_Zs, [-1, self.num_atoms])
-
-			# tiled_xyzs = tf.tile(self.xyzs_pl, [self.batch_size, 1, 1])
-			# tiled_Zs = tf.tile(self.Zs_pl, [self.batch_size, 1])
-			# rotation_params = tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.001, 1.999, 5), [20]), axis=1),
-			# 		np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.001, 1.999, 5), axis=1), [1,20]), [100,1]),
-			# 		tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.001, 1.999, 4), axis=1),
-			# 		axis=2), [5,1,5]), [100,1])], axis=1)
-			# rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-			# 		np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-			# 		tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision)], axis=-1, name="rotation_params")
-			# rotated_xyzs = tf_random_rotate(tiled_xyzs, rotation_params)
-			embeddings, molecule_indices = tf_gaussian_spherical_harmonics_channel(self.xyzs_pl,
-											self.Zs_pl, elements, self.gaussian_params, self.l_max)
+			self.tiled_xyzs = tf.tile(self.xyzs_pl, [8, 1, 1])
+			self.tiled_Zs = tf.tile(tf.expand_dims(self.Zs_pl, axis=1), [1, 8, 1])
+			self.rotation_params = tf.cast(tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.0, 2.0, 2), [4]), axis=1),
+					np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.0, 2.0, 2), axis=1), [1,4]), [8,1]),
+					tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.1, 1.9, 2), axis=1),
+					axis=2), [2,1,2]), [8,1])], axis=1), dtype=self.tf_precision)
+			self.rotated_xyzs = tf_random_rotate(self.tiled_xyzs, self.rotation_params)
+			# # self.rotated_xyzs = tf.reshape(self.rotated_xyzs, [-1, self.num_atoms, 3])
+			# # # self.rotated_gradients = tf.reshape(rotated_gradients, [-1, self.max_num_atoms, 3])
+			# # self.tiled_Zs = tf.reshape(self.tiled_Zs, [-1, self.num_atoms])
+			#
+			# # tiled_xyzs = tf.tile(self.xyzs_pl, [self.batch_size, 1, 1])
+			# # tiled_Zs = tf.tile(self.Zs_pl, [self.batch_size, 1])
+			# # rotation_params = tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.001, 1.999, 5), [20]), axis=1),
+			# # 		np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.001, 1.999, 5), axis=1), [1,20]), [100,1]),
+			# # 		tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.001, 1.999, 4), axis=1),
+			# # 		axis=2), [5,1,5]), [100,1])], axis=1)
+			# # rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
+			# # 		np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
+			# # 		tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision)], axis=-1, name="rotation_params")
+			# # rotated_xyzs = tf_random_rotate(tiled_xyzs, rotation_params)
+			embeddings, molecule_indices = tf_gauss_harmonics_echannel(self.rotated_xyzs, self.tiled_Zs, elements,
+										self.gaussian_params, self.l_max)
 			for element in range(len(self.elements)):
 				embeddings[element] -= embeddings_mean[element]
 				embeddings[element] /= embeddings_stddev[element]
@@ -1280,15 +1279,14 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			# self.coulomb_energy = tf_coulomb_dsf_elu(self.xyzs_pl, self.charges, self.Reep_pl, elu_width, dsf_alpha, coulomb_cutoff)
 			norm_bp_energy, energy_variables = self.energy_inference(embeddings, molecule_indices)
 			self.bp_energy = (norm_bp_energy * labels_stddev) + labels_mean
-			self.total_energy = self.bp_energy
-			self.gradients = tf.gradients(self.total_energy, self.xyzs_pl)[0]
+			self.gradients = tf.gradients(self.bp_energy, self.xyzs_pl)[0]
 
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver()
 			self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
 		return
 
-	def evaluate_fill_feed_dict(self, xyzs, Zs, num_atoms, Reep):
+	def evaluate_fill_feed_dict(self, xyzs, Zs, num_atoms):
 		"""
 		Fill the tensorflow feed dictionary.
 
@@ -1311,7 +1309,11 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			xyzs (np.float): numpy array of atomic coordinates
 			Zs (np.int32): numpy array of atomic numbers
 		"""
-		if not self.sess:
+		try:
+			self.sess
+		except AttributeError:
+			self.sess = None
+		if self.sess is None:
 			print("loading the session..")
 			# self.gaussian_params = PARAMS["RBFS"]
 			self.assign_activation()
@@ -1324,15 +1326,15 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		Zs_feed[0,:mol.NAtoms()] = mol.atoms
 		num_atoms_feed = np.zeros((1), dtype=np.int32)
 		num_atoms_feed[0] = mol.NAtoms()
-		feed_dict=self.evaluate_fill_feed_dict(xyzs_feed, Zs_feed, num_atoms_feed, rad_eep)
+		feed_dict=self.evaluate_fill_feed_dict(xyzs_feed, Zs_feed, num_atoms_feed)
 		atomization_energy = 0.0
 		for atom in mol.atoms:
 			if atom in ele_U:
 				atomization_energy += ele_U[atom]
 		if eval_forces:
-			energy, gradients = self.sess.run([self.total_energy, self.gradients], feed_dict=feed_dict)
+			energy, gradients = self.sess.run([self.bp_energy, self.gradients], feed_dict=feed_dict)
 			forces = -gradients[0,:mol.NAtoms()]
 			return energy + atomization_energy, forces
 		else:
-			energy = self.sess.run(self.total_energy, feed_dict=feed_dict)
+			energy = self.sess.run(self.bp_energy, feed_dict=feed_dict)
 			return energy + atomization_energy

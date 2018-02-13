@@ -1537,7 +1537,7 @@ class TFMolManageDirect:
 		self.mol_set_name = mol_set_name
 		self.network_type = network_type
 		self.name = self.network_type+"_"+self.mol_set_name+"_"+time.strftime("%a_%b_%d_%H.%M.%S_%Y")
-		if (train):
+		if train:
 			self.train()
 			return
 		return
@@ -1591,10 +1591,10 @@ class TFMolManageDirect:
 
 	def prepare(self):
 		self.load()
-		if self.network_type == "BehlerParinelloDirectSymFunc":
-			self.network = BehlerParinelloDirectSymFunc(name=self.network_name)
-		elif (self.network_type == "BehlerParinelloDirectGauSH"):
-			self.network = BehlerParinelloDirectGauSH(name=self.network_name)
+		if self.network_type == "BPSymFunc":
+			self.network = BehlerParinelloSymFunc(name=self.network_name)
+		elif (self.network_type == "BPGauSH"):
+			self.network = BehlerParinelloGauSH(name=self.network_name)
 		else:
 			raise Exception("Unknown Network Type!")
 		return

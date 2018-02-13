@@ -292,17 +292,22 @@ def train_energy_GauSH(mset):
 	manager = TFMolManageDirect(mset, network_type = "BPGauSH")
 
 def test_h2o():
-	PARAMS["OptMaxCycles"]=60
+	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+	PARAMS["SH_NRAD"] = 16
+	PARAMS["SH_LMAX"] = 3
+	PARAMS["HiddenLayers"] = [512, 512, 512]
+	PARAMS["NeuronType"] = "shifted_softplus"
+	PARAMS["tf_prec"] = "tf.float64"
 	PARAMS["OptMaxCycles"]=500
 	PARAMS["OptStepSize"] = 0.1
 	PARAMS["OptThresh"]=0.0001
 	PARAMS["MDAnnealT0"] = 20.0
 	PARAMS["MDAnnealSteps"] = 2000
-	a = MSet("water")
-	# a.ReadXYZ()
+	a = MSet("water_tmp")
+	a.ReadXYZ()
 	a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
 	m = a.mols[0]
-	manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Mon_Feb_05_11.44.43_2018", network_type = "BPGauSH")
+	manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Mon_Feb_12_12.17.58_2018", network_type = "BPGauSH")
 	def force_field(coords, eval_forces=True):
 		mol = Mol()
 		mol.atoms = m.atoms
@@ -310,12 +315,12 @@ def test_h2o():
 		if eval_forces:
 			energy, forces = manager.evaluate_mol(mol, True)
 			forces = RemoveInvariantForce(mol.coords, forces, mol.atoms)
-			return energy, forces
+			return energy*JOULEPERHARTREE, forces*JOULEPERHARTREE
 		else:
 			energy = manager.evaluate_mol(mol, False)
-			return energy
+			return energy*JOULEPERHARTREE
 	Opt = GeomOptimizer(force_field)
-	opt_mol = Opt.Opt(mol)
+	opt_mol = Opt.Opt(m)
 
 def evaluate_BPSymFunc(mset):
 	a=MSet(mset)
@@ -336,9 +341,12 @@ def evaluate_BPSymFunc(mset):
 	print "RMSE:",np.sqrt(np.mean(np.square(output-labels)))*627.509
 
 def water_dimer_plot():
-	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 5.0, 32), np.repeat(0.25, 32)), axis=1)
-	PARAMS["SH_NRAD"] = 32
-	PARAMS["SH_LMAX"] = 4
+	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+	PARAMS["SH_NRAD"] = 16
+	PARAMS["SH_LMAX"] = 3
+	PARAMS["HiddenLayers"] = [512, 512, 512]
+	PARAMS["NeuronType"] = "shifted_softplus"
+	PARAMS["tf_prec"] = "tf.float64"
 	def qchemdft(m_,ghostatoms,basis_ = '6-31g*',xc_='b3lyp', jobtype_='force', filename_='tmp', path_='./qchem/', threads=False):
 		istring = '$molecule\n0 1 \n'
 		crds = m_.coords.copy()
@@ -388,24 +396,23 @@ def water_dimer_plot():
 
 	a = MSet("water_dimer")
 	a.ReadXYZ()
-	manager = TFMolManageDirect(name="BehlerParinelloDirectGauSH_H2O_wb97xd_1to21_with_prontonated_Mon_Nov_13_11.35.07_2017", network_type = "BehlerParinelloDirectGauSH")
+	manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Mon_Feb_12_12.17.58_2018", network_type = "BPGauSH")
 	qchemff = lambda x, y: qchemdft(x, y, basis_ = '6-311g**',xc_='wb97x-d', jobtype_='sp', filename_='tmp', path_='./qchem/', threads=8)
-	cp_correction = []
-	for mol in a.mols:
-		h2o1 = qchemff(Mol(mol.atoms[:3], mol.coords[:3]), [])
-		h2o2 = qchemff(Mol(mol.atoms[3:], mol.coords[3:]), [])
-		# h2o1cp = qchemff(mol, [3, 4, 5])
-		# h2o2cp = qchemff(mol, [0, 1, 2])
-		dimer = qchemff(mol, [])
-		# cpc = h2o1cp - h2o1 + h2o2cp - h2o2
-		# cp_correction.append(cpc)
-		bond_e = dimer - h2o1 - h2o2
-		print "{%.10f, %.10f}," % (np.linalg.norm(mol.coords[1] - mol.coords[3]), bond_e * 627.509)
+	# for mol in a.mols:
+	# 	h2o1 = qchemff(Mol(mol.atoms[:3], mol.coords[:3]), [])
+	# 	h2o2 = qchemff(Mol(mol.atoms[3:], mol.coords[3:]), [])
+	# 	# h2o1cp = qchemff(mol, [3, 4, 5])
+	# 	# h2o2cp = qchemff(mol, [0, 1, 2])
+	# 	dimer = qchemff(mol, [])
+	# 	# cpc = h2o1cp - h2o1 + h2o2cp - h2o2
+	# 	# cp_correction.append(cpc)
+	# 	bond_e = dimer - h2o1 - h2o2
+	# 	print "{%.10f, %.10f}," % (np.linalg.norm(mol.coords[1] - mol.coords[3]), bond_e * 627.509)
 	print "TensorMol evaluation"
 	for i, mol in enumerate(a.mols):
+		dimer = manager.evaluate_mol(mol, False)
 		h2o1 = manager.evaluate_mol(Mol(mol.atoms[:3], mol.coords[:3]), False)
 		h2o2 = manager.evaluate_mol(Mol(mol.atoms[3:], mol.coords[3:]), False)
-		dimer = manager.evaluate_mol(mol, False)
 		bond_e = dimer - h2o1 - h2o2
 		print "{%.10f, %.10f}," % (np.linalg.norm(mol.coords[1] - mol.coords[3]), bond_e * 627.509)
 
@@ -924,7 +931,7 @@ def water_web():
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
-test_h2o()
+# test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
 # nicotine_cc_stretch_plot()
@@ -1056,3 +1063,17 @@ test_h2o()
 # chrome_trace = fetched_timeline.generate_chrome_trace_format()
 # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
 # 	f.write(chrome_trace)
+
+PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+PARAMS["SH_NRAD"] = 16
+PARAMS["SH_LMAX"] = 3
+PARAMS["HiddenLayers"] = [512, 512, 512]
+PARAMS["NeuronType"] = "shifted_softplus"
+PARAMS["tf_prec"] = "tf.float64"
+a = MSet("water_dimer")
+a.ReadXYZ()
+manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Mon_Feb_12_12.17.58_2018", network_type = "BPGauSH")
+m=a.mols[0]
+c=manager.evaluate_mol(m, False)
+print c
+print c.shape
