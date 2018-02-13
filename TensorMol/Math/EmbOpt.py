@@ -99,21 +99,6 @@ class EmbeddingOptimizer:
 		LOGGER.info("Got Error: %.6f", berror+SelfDistances+OtherDistances)
 		return berror+SelfDistances+OtherDistances
 
-	def KRR_Objective(self, basisParams_):
-		"""
-		Resets the parameters. Builds the overlap if neccesary. Resets the desired embeddings. Reverses the distorted set and computes an error.
-		"""
-		berror = self.SetBasisParams(basisParams_)
-		sqerr = 0.0
-		tset = TensorData(self.set,self.dig)
-		tset.BuildTrainMolwise(self.set.name+"_BasisOpt")
-		for ele in self.elements:
-			ele_inst = Instance_KRR(tset, ele, None)
-			sqerr += (ele_inst.basis_opt_run())**2
-		LOGGER.info("Basis Params: %s", basisParams_)
-		LOGGER.info("SqError: %f", sqerr+berror)
-		return sqerr+berror
-
 	def PerformOptimization(self):
 		prm0 = PARAMS["RBFS"][:PARAMS["SH_NRAD"]].flatten()
 		# prm0 = np.array((PARAMS["ANES"][0], PARAMS["ANES"][5], PARAMS["ANES"][6], PARAMS["ANES"][7]))
