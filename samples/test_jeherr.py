@@ -271,7 +271,7 @@ def train_energy_symm_func(mset):
 def train_energy_GauSH(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_NRAD"] = 16
-	PARAMS["SH_LMAX"] = 3
+	PARAMS["SH_LMAX"] = 5
 	PARAMS["SH_rot_invar"] = False
 	PARAMS["EECutoffOn"] = 0.0
 	PARAMS["Elu_Width"] = 6.0
@@ -281,7 +281,7 @@ def train_energy_GauSH(mset):
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.00005
-	PARAMS["max_steps"] = 1000
+	PARAMS["max_steps"] = 10
 	PARAMS["test_freq"] = 5
 	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
@@ -394,27 +394,27 @@ def water_dimer_plot():
 		else:
 			raise Exception("jobtype needs formatted for return variables")
 
-	a = MSet("water_dimer")
+	a = MSet("H2O_dimer_flip_rightone")
 	a.ReadXYZ()
 	manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Mon_Feb_12_12.17.58_2018", network_type = "BPGauSH")
 	qchemff = lambda x, y: qchemdft(x, y, basis_ = '6-311g**',xc_='wb97x-d', jobtype_='sp', filename_='tmp', path_='./qchem/', threads=8)
-	# for mol in a.mols:
-	# 	h2o1 = qchemff(Mol(mol.atoms[:3], mol.coords[:3]), [])
-	# 	h2o2 = qchemff(Mol(mol.atoms[3:], mol.coords[3:]), [])
-	# 	# h2o1cp = qchemff(mol, [3, 4, 5])
-	# 	# h2o2cp = qchemff(mol, [0, 1, 2])
-	# 	dimer = qchemff(mol, [])
-	# 	# cpc = h2o1cp - h2o1 + h2o2cp - h2o2
-	# 	# cp_correction.append(cpc)
-	# 	bond_e = dimer - h2o1 - h2o2
-	# 	print "{%.10f, %.10f}," % (np.linalg.norm(mol.coords[1] - mol.coords[3]), bond_e * 627.509)
+	for i in range(len(a.mols)):
+		# h2o1 = qchemff(Mol(mol.atoms[:3], mol.coords[:3]), [])
+		# h2o23 = qchemff(Mol(mol.atoms[3:], mol.coords[3:]), [])
+		# h2o1cp = qchemff(mol, [3, 4, 5])
+		# h2o2cp = qchemff(mol, [0, 1, 2])
+		dimer = qchemff(a.mols[i], [])
+		# cpc = h2o1cp - h2o1 + h2o2cp - h2o2
+		# cp_correction.append(cpc)
+		bond_e = dimer# - h2o1 - h2o23
+		print "{%.10f, %.10f}," % (i, bond_e * 627.509)
 	print "TensorMol evaluation"
-	for i, mol in enumerate(a.mols):
-		dimer = manager.evaluate_mol(mol, False)
-		h2o1 = manager.evaluate_mol(Mol(mol.atoms[:3], mol.coords[:3]), False)
-		h2o2 = manager.evaluate_mol(Mol(mol.atoms[3:], mol.coords[3:]), False)
-		bond_e = dimer - h2o1 - h2o2
-		print "{%.10f, %.10f}," % (np.linalg.norm(mol.coords[1] - mol.coords[3]), bond_e * 627.509)
+	for i in range(len(a.mols)):
+		dimer = manager.evaluate_mol(a.mols[i], False)
+		# h2o1 = manager.evaluate_mol(Mol(mol.atoms[:3], mol.coords[:3]), False)
+		# h2o23 = manager.evaluate_mol(Mol(mol.atoms[3:], mol.coords[3:]), False)
+		bond_e = dimer# - h2o1 - h2o23
+		print "{%.10f, %.10f}," % (i, bond_e * 627.509)
 
 def nicotine_cc_stretch_plot():
 	def qchemdft(m_,ghostatoms,basis_ = '6-31g*',xc_='b3lyp', jobtype_='force', filename_='tmp', path_='./qchem/', threads=False):
@@ -930,10 +930,10 @@ def water_web():
 # test_tf_neighbor()
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
-# train_energy_GauSH("water_wb97xd_6311gss")
+train_energy_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
-water_dimer_plot()
+# water_dimer_plot()
 # nicotine_cc_stretch_plot()
 # meta_statistics()
 # meta_stat_plot()
@@ -1077,3 +1077,15 @@ water_dimer_plot()
 # c=manager.evaluate_mol(m, False)
 # print c
 # print c.shape
+
+# a=MSet("H2O_trimer_move")
+# a.ReadXYZ()
+# b=MSet("water_trimer_stretch")
+# m=a.mols[50]
+# oovec = (0.5*(m.coords[4] + m.coords[7]))-m.coords[1]
+# # oovec = m.coords[1]-m.coords[3]
+# for i in range(-100,18):
+# 	newmol=Mol(m.atoms, m.coords)
+# 	newmol.coords[:3] += oovec*i*0.02
+# 	b.mols.append(newmol)
+# b.WriteXYZ()
