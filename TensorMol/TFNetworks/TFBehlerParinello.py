@@ -1235,9 +1235,9 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
-			self.Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
-			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
+			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[1, self.max_num_atoms, 3])
+			self.Zs_pl = tf.placeholder(tf.int32, shape=[1, self.max_num_atoms])
+			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[1])
 
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
@@ -1249,12 +1249,12 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			dsf_alpha = tf.Variable(self.dsf_alpha, trainable=False, dtype = self.tf_precision)
 			coulomb_cutoff = tf.Variable(self.coulomb_cutoff, trainable=False, dtype = self.tf_precision)
 
-			self.tiled_xyzs = tf.tile(self.xyzs_pl, [8, 1, 1])
-			self.tiled_Zs = tf.tile(tf.expand_dims(self.Zs_pl, axis=1), [1, 8, 1])
-			self.rotation_params = tf.cast(tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.0, 2.0, 2), [4]), axis=1),
-					np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.0, 2.0, 2), axis=1), [1,4]), [8,1]),
-					tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.1, 1.9, 2), axis=1),
-					axis=2), [2,1,2]), [8,1])], axis=1), dtype=self.tf_precision)
+			self.tiled_xyzs = tf.tile(self.xyzs_pl, [64, 1, 1])
+			self.tiled_Zs = tf.tile(self.Zs_pl, [64, 1])
+			self.rotation_params = tf.cast(tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.0, 1.75, 4), [16]), axis=1),
+					np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.0, 1.75, 4), axis=1), [1,16]), [64,1]),
+					tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.1, 1.9, 4), axis=1),
+					axis=2), [4,1,4]), [64,1])], axis=1), dtype=self.tf_precision)
 			self.rotated_xyzs = tf_random_rotate(self.tiled_xyzs, self.rotation_params)
 			# # self.rotated_xyzs = tf.reshape(self.rotated_xyzs, [-1, self.num_atoms, 3])
 			# # # self.rotated_gradients = tf.reshape(rotated_gradients, [-1, self.max_num_atoms, 3])
@@ -1278,7 +1278,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			# self.dipoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embeddings, molecule_indices, self.xyzs_pl, self.num_atoms_pl)
 			# self.coulomb_energy = tf_coulomb_dsf_elu(self.xyzs_pl, self.charges, self.Reep_pl, elu_width, dsf_alpha, coulomb_cutoff)
 			norm_bp_energy, energy_variables = self.energy_inference(embeddings, molecule_indices)
-			self.bp_energy = (norm_bp_energy * labels_stddev) + labels_mean
+			self.bp_energy = tf.reduce_mean((norm_bp_energy * labels_stddev) + labels_mean)
 			self.gradients = tf.gradients(self.bp_energy, self.xyzs_pl)[0]
 
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
@@ -1315,10 +1315,9 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			self.sess = None
 		if self.sess is None:
 			print("loading the session..")
-			# self.gaussian_params = PARAMS["RBFS"]
 			self.assign_activation()
 			self.max_num_atoms = mol.NAtoms()
-			self.batch_size = 1
+			self.batch_size = 27
 			self.evaluate_prepare()
 		xyzs_feed = np.zeros((1,self.max_num_atoms, 3))
 		xyzs_feed[0,:mol.NAtoms()] = mol.coords

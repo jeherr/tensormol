@@ -933,7 +933,7 @@ def water_web():
 # train_energy_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
-# water_dimer_plot()
+water_dimer_plot()
 # nicotine_cc_stretch_plot()
 # meta_statistics()
 # meta_stat_plot()
@@ -1064,16 +1064,16 @@ def water_web():
 # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
 # 	f.write(chrome_trace)
 
-PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
-PARAMS["SH_NRAD"] = 16
-PARAMS["SH_LMAX"] = 3
-PARAMS["HiddenLayers"] = [512, 512, 512]
-PARAMS["NeuronType"] = "shifted_softplus"
-PARAMS["tf_prec"] = "tf.float64"
-a = MSet("water_dimer")
-a.ReadXYZ()
-manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Mon_Feb_12_12.17.58_2018", network_type = "BPGauSH")
-m=a.mols[0]
-c=manager.evaluate_mol(m, False)
-print c
-print c.shape
+# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+# PARAMS["SH_NRAD"] = 16
+# PARAMS["SH_LMAX"] = 3
+# PARAMS["HiddenLayers"] = [512, 512, 512]
+# PARAMS["NeuronType"] = "shifted_softplus"
+# PARAMS["tf_prec"] = "tf.float64"
+# a = MSet("water_dimer")
+# a.ReadXYZ()
+# manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Mon_Feb_12_12.17.58_2018", network_type = "BPGauSH")
+# m=a.mols[0]
+# c=manager.evaluate_mol(m, False)
+# print c
+# print c.shape

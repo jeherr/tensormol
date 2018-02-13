@@ -546,7 +546,7 @@ def tf_gauss_harmonics_echannel(xyzs, Zs, elements, gauss_params, l_max):
 	dxyzs = tf.expand_dims(xyzs, axis=2) - tf.expand_dims(xyzs, axis=1)
 	atom_idx = tf.where(tf.not_equal(Zs, 0))
 	dxyzs = tf.gather_nd(dxyzs, atom_idx)
-	dist_tensor = tf.norm(dxyzs+1.e-16,axis=2)
+	dist_tensor = tf.norm(dxyzs+1.e-16,axis=-1)
 	gauss = tf_gauss(dist_tensor, gauss_params)
 	harmonics = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)
 	channel_scatter = tf.gather(tf.equal(tf.expand_dims(Zs, axis=-1), elements), atom_idx[:,0])
