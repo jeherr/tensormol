@@ -1086,7 +1086,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 
 		sess = tf.Session()
 		sess.run(tf.global_variables_initializer())
-		for ministep in range(int(0.5 * self.num_train_cases/self.batch_size)):
+		for ministep in range(int(0.4 * self.num_train_cases/self.batch_size)):
 			batch_data = self.get_energy_train_batch(self.batch_size)
 			if self.train_sparse:
 				embedding, molecule_index = sess.run([embeddings, molecule_indices],
@@ -1108,7 +1108,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 
 		#Set the embedding and label shape
 		self.embedding_shape = embedding[0].shape[1]
-		self.label_shape = labels[0].shape
+		self.label_shape = self.energy_mean.shape
 		return
 
 	def train_prepare(self, restart=False):

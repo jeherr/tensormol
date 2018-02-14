@@ -346,7 +346,7 @@ def water_dimer_plot():
 	PARAMS["SH_LMAX"] = 3
 	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["NeuronType"] = "shifted_softplus"
-	PARAMS["tf_prec"] = "tf.float64"
+	PARAMS["tf_prec"] = "tf.float32"
 	def qchemdft(m_,ghostatoms,basis_ = '6-31g*',xc_='b3lyp', jobtype_='force', filename_='tmp', path_='./qchem/', threads=False):
 		istring = '$molecule\n0 1 \n'
 		crds = m_.coords.copy()
@@ -396,18 +396,18 @@ def water_dimer_plot():
 
 	a = MSet("H2O_dimer_flip_rightone")
 	a.ReadXYZ()
-	manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Mon_Feb_12_12.17.58_2018", network_type = "BPGauSH")
+	manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Wed_Feb_14_12.10.39_2018", network_type = "BPGauSH")
 	qchemff = lambda x, y: qchemdft(x, y, basis_ = '6-311g**',xc_='wb97x-d', jobtype_='sp', filename_='tmp', path_='./qchem/', threads=8)
-	for i in range(len(a.mols)):
-		# h2o1 = qchemff(Mol(mol.atoms[:3], mol.coords[:3]), [])
-		# h2o23 = qchemff(Mol(mol.atoms[3:], mol.coords[3:]), [])
-		# h2o1cp = qchemff(mol, [3, 4, 5])
-		# h2o2cp = qchemff(mol, [0, 1, 2])
-		dimer = qchemff(a.mols[i], [])
-		# cpc = h2o1cp - h2o1 + h2o2cp - h2o2
-		# cp_correction.append(cpc)
-		bond_e = dimer# - h2o1 - h2o23
-		print "{%.10f, %.10f}," % (i, bond_e * 627.509)
+	# for i in range(len(a.mols)):
+	# 	# h2o1 = qchemff(Mol(mol.atoms[:3], mol.coords[:3]), [])
+	# 	# h2o23 = qchemff(Mol(mol.atoms[3:], mol.coords[3:]), [])
+	# 	# h2o1cp = qchemff(mol, [3, 4, 5])
+	# 	# h2o2cp = qchemff(mol, [0, 1, 2])
+	# 	dimer = qchemff(a.mols[i], [])
+	# 	# cpc = h2o1cp - h2o1 + h2o2cp - h2o2
+	# 	# cp_correction.append(cpc)
+	# 	bond_e = dimer# - h2o1 - h2o23
+	# 	print "{%.10f, %.10f}," % (i, bond_e * 627.509)
 	print "TensorMol evaluation"
 	for i in range(len(a.mols)):
 		dimer = manager.evaluate_mol(a.mols[i], False)
@@ -930,10 +930,10 @@ def water_web():
 # test_tf_neighbor()
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
-train_energy_GauSH("water_wb97xd_6311gss")
+# train_energy_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
-# water_dimer_plot()
+water_dimer_plot()
 # nicotine_cc_stretch_plot()
 # meta_statistics()
 # meta_stat_plot()
@@ -1089,3 +1089,12 @@ train_energy_GauSH("water_wb97xd_6311gss")
 # 	newmol.coords[:3] += oovec*i*0.02
 # 	b.mols.append(newmol)
 # b.WriteXYZ()
+
+# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+# PARAMS["SH_NRAD"] = 16
+# PARAMS["SH_LMAX"] = 5
+# PARAMS["HiddenLayers"] = [512, 512, 512]
+# PARAMS["batch_size"] = 100
+# PARAMS["NeuronType"] = "shifted_softplus"
+# PARAMS["tf_prec"] = "tf.float32"
+# manager=TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Wed_Feb_14_12.10.39_2018", network_type = "BPGauSH")
