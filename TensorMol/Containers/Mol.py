@@ -81,8 +81,8 @@ class Mol:
 		elif ("energy" in self.properties):
 			AE = self.properties["energy"]
 			for i in range (0, self.atoms.shape[0]):
-				if (self.atoms[i] in ele_U):
-					AE = AE - ele_U[self.atoms[i]]
+				if (self.atoms[i] in ele_U_wb97xd):
+					AE = AE - ele_U_wb97xd[self.atoms[i]]
 			self.properties["atomization"] = AE
 		else:
 			raise Exception("Missing energy to calculate atomization... ")

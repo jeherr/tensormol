@@ -271,17 +271,17 @@ def train_energy_symm_func(mset):
 def train_energy_GauSH(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_NRAD"] = 16
-	PARAMS["SH_LMAX"] = 3
+	PARAMS["SH_LMAX"] = 5
 	PARAMS["SH_rot_invar"] = False
 	PARAMS["EECutoffOn"] = 0.0
 	PARAMS["Elu_Width"] = 6.0
-	PARAMS["train_gradients"] = False
+	PARAMS["train_gradients"] = True
 	PARAMS["train_dipole"] = False
-	PARAMS["train_rotation"] = False
+	PARAMS["train_rotation"] = True
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.00005
-	PARAMS["max_steps"] = 10
+	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
 	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
@@ -930,7 +930,7 @@ def water_web():
 # test_tf_neighbor()
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
-# train_energy_GauSH("water_wb97xd_6311gss")
+train_energy_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
