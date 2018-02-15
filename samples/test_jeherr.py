@@ -271,7 +271,7 @@ def train_energy_symm_func(mset):
 def train_energy_GauSH(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_NRAD"] = 16
-	PARAMS["SH_LMAX"] = 5
+	PARAMS["SH_LMAX"] = 3
 	PARAMS["SH_rot_invar"] = False
 	PARAMS["EECutoffOn"] = 0.0
 	PARAMS["Elu_Width"] = 6.0
@@ -933,7 +933,7 @@ def water_web():
 # train_energy_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
-water_dimer_plot()
+# water_dimer_plot()
 # nicotine_cc_stretch_plot()
 # meta_statistics()
 # meta_stat_plot()

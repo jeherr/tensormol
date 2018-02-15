@@ -1308,13 +1308,10 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		num_atoms_feed[0] = mol.NAtoms()
 		feed_dict=self.evaluate_fill_feed_dict(xyzs_feed, Zs_feed, num_atoms_feed)
 		atomization_energy = 0.0
-		for atom in mol.atoms:
-			if atom in ele_U:
-				atomization_energy += ele_U[atom]
 		if eval_forces:
 			energy, gradients = self.sess.run([self.bp_energy, self.gradients], feed_dict=feed_dict)
 			forces = -gradients[0,:mol.NAtoms()]
-			return energy + atomization_energy, forces
+			return energy, forces
 		else:
 			energy = self.sess.run(self.bp_energy, feed_dict=feed_dict)
-			return energy + atomization_energy
+			return energy
