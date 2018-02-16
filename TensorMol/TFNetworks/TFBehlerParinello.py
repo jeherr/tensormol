@@ -1074,9 +1074,11 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 				tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision)], axis=-1, name="rotation_params")
 		rotated_xyzs = tf_random_rotate(xyzs_pl, rotation_params)
 		if self.train_sparse:
-			embeddings, molecule_indices = tf_sparse_gauss_harmonics_echannel(rotated_xyzs, Zs_pl, pairs_pl, elements, gaussian_params, self.l_max)
+			embeddings, molecule_indices = tf_sparse_gaush_element_channel(rotated_xyzs, Zs_pl, pairs_pl,
+										elements, gaussian_params, self.l_max)
 		else:
-			embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, Zs_pl, elements, gaussian_params, self.l_max)
+			embeddings, molecule_indices = tf_gaush_element_channel(rotated_xyzs, Zs_pl, elements,
+										gaussian_params, self.l_max)
 
 		embeddings_list = []
 		for element in range(len(self.elements)):
@@ -1129,7 +1131,6 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
 			if self.train_sparse:
 				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
-			# self.Reep_pl = tf.placeholder(tf.int32, shape=[None, 3])
 
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
@@ -1137,9 +1138,6 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			embeddings_stddev = tf.Variable(self.embeddings_stddev, trainable=False, dtype = self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
-			elu_width = tf.Variable(self.elu_width * BOHRPERA, trainable=False, dtype = self.tf_precision)
-			dsf_alpha = tf.Variable(self.dsf_alpha, trainable=False, dtype = self.tf_precision)
-			coulomb_cutoff = tf.Variable(self.coulomb_cutoff, trainable=False, dtype = self.tf_precision)
 
 			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
 					np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
@@ -1147,10 +1145,10 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			rotated_xyzs, rotated_gradients = tf_random_rotate(self.xyzs_pl, rotation_params, self.gradients_pl)
 			self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
 			if self.train_sparse:
-				embeddings, molecule_indices = tf_sparse_gauss_harmonics_echannel(rotated_xyzs, self.Zs_pl,
+				embeddings, molecule_indices = tf_sparse_gaush_element_channel(rotated_xyzs, self.Zs_pl,
 											self.pairs_pl, elements, self.gaussian_params, self.l_max)
 			else:
-				embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, self.Zs_pl,
+				embeddings, molecule_indices = tf_gaush_element_channel(rotated_xyzs, self.Zs_pl,
 											elements, self.gaussian_params, self.l_max)
 			for element in range(len(self.elements)):
 				embeddings[element] -= embeddings_mean[element]
