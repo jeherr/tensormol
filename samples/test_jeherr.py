@@ -275,9 +275,9 @@ def train_energy_GauSH(mset):
 	PARAMS["SH_rot_invar"] = False
 	PARAMS["EECutoffOn"] = 0.0
 	PARAMS["Elu_Width"] = 6.0
-	PARAMS["train_gradients"] = True
+	PARAMS["train_gradients"] = False
 	PARAMS["train_dipole"] = False
-	PARAMS["train_rotation"] = True
+	PARAMS["train_rotation"] = False
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.00005
@@ -767,7 +767,7 @@ def water_web():
 # test_tf_neighbor()
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
-# train_energy_GauSH("water_wb97xd_6311gss")
+train_energy_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -784,86 +784,86 @@ def water_web():
 # metaopt_chemsp()
 # water_web()
 
-PARAMS["tf_prec"] = "tf.float32"
-PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
-PARAMS["SH_NRAD"] = 16
-a = MSet("SmallMols_rand")
-a.Load()
-# a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
-# # # Tesselate that water to create a box
-# ntess = 16
-# latv = 2.8*np.eye(3)
-# # # # Start with a water in a ten angstrom box.
-# lat = Lattice(latv)
-# mc = lat.CenteredInLattice(a.mols[0])
-# mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
-# # # mt.WriteXYZfile()
-b=MSet()
-for i in range(2):
-	b.mols.append(a.mols[i])
-	new_mol = copy.deepcopy(a.mols[i])
-	new_mol.RotateRandomUniform()
-	b.mols.append(new_mol)
-maxnatoms = b.MaxNAtoms()
-# for mol in a.mols:
-# 	mol.make_neighbors(7.0)
-# max_num_pairs = a.max_neighbors()
-
-zlist = []
-xyzlist = []
-# pairlist = []
-# n_atoms_list = []
-for i, mol in enumerate(b.mols):
-	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
-	paddedxyz[:mol.atoms.shape[0]] = mol.coords
-	paddedz = np.zeros((maxnatoms), dtype=np.int32)
-	paddedz[:mol.atoms.shape[0]] = mol.atoms
-	# paddedpairs = np.zeros((maxnatoms, max_num_pairs, 4), dtype=np.int32)
-	# for j, atom_pairs in enumerate(mol.neighbor_list):
-	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]),
-	# 			np.array([j for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]),
-	# 			mol.atoms[mol.neighbor_list[j]]]).T
-	# 	paddedpairs[j,:len(atom_pairs)] = molpair
-	xyzlist.append(paddedxyz)
-	zlist.append(paddedz)
-	# pairlist.append(paddedpairs)
-	# n_atoms_list.append(mol.NAtoms())
-	if i == 1:
-		break
-xyzstack = tf.stack(xyzlist)
-zstack = tf.stack(zlist)
-# pairstack = tf.stack(pairlist)
-# natomsstack = tf.stack(n_atoms_list)
-# r_cutoff = 6.5
-gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
-elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
-ele_neg = tf.constant([x[7] for x in AtomData], dtype=tf.float32)
-vdw_r = tf.constant([x[8] for x in AtomData], dtype=tf.float32)
-polariz = tf.constant([x[11] for x in AtomData], dtype=tf.float32)
-embed_facs = tf.transpose(tf.stack([ele_neg, vdw_r, polariz]))
-print embed_facs
-# atomic_embed_factors = tf.Variable(PARAMS["ANES"], trainable=True, dtype=tf.float32)
-# tmp = tf_neighbor_list_sort(xyzstack, zstack, natomsstack, elements, r_cutoff)
-# tmp = tf_sparse_gaush_element_channel(xyzstack, zstack, pairstack, elements, gaussian_params, 1)
-# tmp2 = tf_gaush_element_channel(xyzstack, zstack, elements, gaussian_params, 1)
-tmp = tf_gaush_embed_channel(xyzstack, zstack, elements, gaussian_params, 3, embed_facs)
-sess = tf.Session()
-sess.run(tf.global_variables_initializer())
-options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-run_metadata = tf.RunMetadata()
-# # for i in range(a.mols[0].atoms.shape[0]):
-# # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
-@TMTiming("test")
-def get_pairs():
-	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
-	return tmp3
-tmp5 = get_pairs()
-print tmp5[0][1]
-print tmp5[0][1].shape
-# print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
-# print np.allclose(tmp5, tmp6, 1e-01)
-# print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
-fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-chrome_trace = fetched_timeline.generate_chrome_trace_format()
-with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
-	f.write(chrome_trace)
+# PARAMS["tf_prec"] = "tf.float32"
+# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
+# PARAMS["SH_NRAD"] = 16
+# a = MSet("SmallMols_rand")
+# a.Load()
+# # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
+# # # # Tesselate that water to create a box
+# # ntess = 16
+# # latv = 2.8*np.eye(3)
+# # # # # Start with a water in a ten angstrom box.
+# # lat = Lattice(latv)
+# # mc = lat.CenteredInLattice(a.mols[0])
+# # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
+# # # # mt.WriteXYZfile()
+# b=MSet()
+# for i in range(2):
+# 	b.mols.append(a.mols[i])
+# 	new_mol = copy.deepcopy(a.mols[i])
+# 	new_mol.RotateRandomUniform()
+# 	b.mols.append(new_mol)
+# maxnatoms = b.MaxNAtoms()
+# # for mol in a.mols:
+# # 	mol.make_neighbors(7.0)
+# # max_num_pairs = a.max_neighbors()
+#
+# zlist = []
+# xyzlist = []
+# # pairlist = []
+# # n_atoms_list = []
+# for i, mol in enumerate(b.mols):
+# 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
+# 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
+# 	paddedz = np.zeros((maxnatoms), dtype=np.int32)
+# 	paddedz[:mol.atoms.shape[0]] = mol.atoms
+# 	# paddedpairs = np.zeros((maxnatoms, max_num_pairs, 4), dtype=np.int32)
+# 	# for j, atom_pairs in enumerate(mol.neighbor_list):
+# 	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]),
+# 	# 			np.array([j for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]),
+# 	# 			mol.atoms[mol.neighbor_list[j]]]).T
+# 	# 	paddedpairs[j,:len(atom_pairs)] = molpair
+# 	xyzlist.append(paddedxyz)
+# 	zlist.append(paddedz)
+# 	# pairlist.append(paddedpairs)
+# 	# n_atoms_list.append(mol.NAtoms())
+# 	if i == 1:
+# 		break
+# xyzstack = tf.stack(xyzlist)
+# zstack = tf.stack(zlist)
+# # pairstack = tf.stack(pairlist)
+# # natomsstack = tf.stack(n_atoms_list)
+# # r_cutoff = 6.5
+# gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
+# elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
+# ele_neg = tf.constant([x[7] for x in AtomData], dtype=tf.float32)
+# vdw_r = tf.constant([x[8] for x in AtomData], dtype=tf.float32)
+# polariz = tf.constant([x[11] for x in AtomData], dtype=tf.float32)
+# embed_facs = tf.transpose(tf.stack([ele_neg, vdw_r, polariz]))
+# print embed_facs
+# # atomic_embed_factors = tf.Variable(PARAMS["ANES"], trainable=True, dtype=tf.float32)
+# # tmp = tf_neighbor_list_sort(xyzstack, zstack, natomsstack, elements, r_cutoff)
+# # tmp = tf_sparse_gaush_element_channel(xyzstack, zstack, pairstack, elements, gaussian_params, 1)
+# # tmp2 = tf_gaush_element_channel(xyzstack, zstack, elements, gaussian_params, 1)
+# tmp = tf_gaush_embed_channel(xyzstack, zstack, elements, gaussian_params, 3, embed_facs)
+# sess = tf.Session()
+# sess.run(tf.global_variables_initializer())
+# options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+# run_metadata = tf.RunMetadata()
+# # # for i in range(a.mols[0].atoms.shape[0]):
+# # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
+# @TMTiming("test")
+# def get_pairs():
+# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
+# 	return tmp3
+# tmp5 = get_pairs()
+# print tmp5[0][1]
+# print tmp5[0][1].shape
+# # print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
+# # print np.allclose(tmp5, tmp6, 1e-01)
+# # print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
+# fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+# chrome_trace = fetched_timeline.generate_chrome_trace_format()
+# with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
+# 	f.write(chrome_trace)
