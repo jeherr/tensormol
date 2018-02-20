@@ -429,7 +429,7 @@ class Mol:
 
 	def HybMatrix(self,tol_=2.2,nreal_ = -1):
 		"""
-		This is a predictor of an atoms hybridization for each atom
+		This is a predictor of an atom's hybridization for each atom
 
 		returns 3 numbers for each atom (i) based off neighbors (j)
 		\sum_j (1-tanh(pi*(r_ij - 2.5)))/2

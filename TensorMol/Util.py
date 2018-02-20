@@ -43,7 +43,7 @@ MakeDirIfAbsent(PARAMS["results_dir"])
 MakeDirIfAbsent(PARAMS["dens_dir"])
 MakeDirIfAbsent(PARAMS["log_dir"])
 LOGGER = TMLogger(PARAMS["log_dir"])
-MAX_ATOMIC_NUMBER = 10
+MAX_ATOMIC_NUMBER = 55
 # Derived Quantities and useful things.
 #  TODO: Migrate these to PARAMS
 HAS_PYSCF = False
