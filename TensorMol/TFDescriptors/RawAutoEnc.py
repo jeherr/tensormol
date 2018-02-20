@@ -26,6 +26,7 @@ from __future__ import division
 from __future__ import print_function
 from ..ForceModifiers.Neighbors import *
 from ..Math.TFMath import * # Why is this imported here?
+from ..ElementData import *
 from tensorflow.python.client import timeline
 if (HAS_TF):
 	import tensorflow as tf
@@ -36,7 +37,7 @@ class ChemCoder:
 	to some pieces of chemical information you may decide are critical
 	to nearby energy.
 	"""
-	
+
 
 class GeometryCoder:
 	"""
@@ -52,7 +53,7 @@ class GeometryCoder:
 			NOutChan_: The dimension of the type channel which will result for this atom.
 		"""
 		self.batch_size = batch_size_
-		self.OutputPrototype = tf.Variable() # output shape and datatype for a single atom or cluster.
+		self.out_chan = NOutChan_
 	def train(self):
 		return
 	def decode(self):
@@ -76,7 +77,17 @@ class AtomCoder:
 	"""
 	def __init__(self,batch_size_=2000, NInChan_=1, NOutChan_=4, RCUT = 2.0):
 		GeometryCoder.__init__(self, batch_size_=2000, NInChan_=1, NOutChan_=4, RCUT = 2.0)
+		self.AtomInformation = tf.constant(np.array([AData[2:] for AData in AtomData]))
 		return
+	def SupervisedFeature(self,inXYZ_,inZs_):
+		"""
+		Args:
+			inXYZ_: a set of molecules. NMol X MaxNAtom X 3
+			inZs_: an atomic number tensor.
+		Returns:
+			Supervised Features for this batch.
+			Each Atom gets it's vector of atom information, followed
+		"""
 	def decode(self,in_):
 		"""
 		(VEC=>ZXYZ)

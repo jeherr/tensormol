@@ -460,42 +460,10 @@ def tf_spherical_harmonics(dxyzs, dist_tensor, max_l):
 		raise Exception("Spherical Harmonics only implemented up to l=8. Choose a lower order")
 	return harmonics
 
-def tf_gaussian_spherical_harmonics_element(xyzs, Zs, element, gauss_params, atomic_embed_factors, l_max, labels=None):
-	"""
-	Encodes atoms into a gaussians and spherical harmonics embedding
-
-	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
-		element (int): element to return embedding/labels for
-		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
-		atomic_embed_factors (tf.float): MaxElementNumber tensor of scaling factors for elements
-		l_max (tf.int32): Scalar for the highest order spherical harmonics to use (needs implemented)
-		labels (tf.Tensor): NMol x MaxNAtoms x label shape tensor of learning targets
-
-	Returns:
-		embedding (tf.float): atom embeddings for element
-		labels (tf.float): atom labels for element
-	"""
-	dxyzs = tf.expand_dims(xyzs, axis=2) - tf.expand_dims(xyzs, axis=1)
-	element_indices = tf.cast(tf.where(tf.equal(Zs, element)), tf.int32)
-	num_batch_elements = tf.shape(element_indices)[0]
-	element_dxyzs = tf.gather_nd(dxyzs, element_indices)
-	element_Zs = tf.gather(Zs, element_indices[:,0])
-	dist_tensor = tf.norm(element_dxyzs+1.e-16,axis=2)
-	atom_scaled_gauss, min_eigenval = tf_gauss(tf.expand_dims(dist_tensor, axis=-1), element_Zs, gauss_params, atomic_embed_factors)
-	spherical_harmonics = tf_spherical_harmonics(element_dxyzs, dist_tensor, l_max)
-	element_embedding = tf.reshape(tf.einsum('jkg,jkl->jgl', atom_scaled_gauss, spherical_harmonics),
-							[num_batch_elements, tf.shape(gauss_params)[0] * (l_max + 1) ** 2])
-	if labels != None:
-		element_labels = tf.gather_nd(labels, element_indices)
-		return element_embedding, element_labels, element_indices, min_eigenval
-	else:
-		return element_embedding, element_indices, min_eigenval
-
 def tf_gaussian_spherical_harmonics(xyzs, Zs, elements, gauss_params, atomic_embed_factors, l_max):
 	"""
 	Encodes atoms into a gaussians and spherical harmonics embedding
+	This one doesn't split into channels (not working?)
 
 	Args:
 		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
@@ -535,7 +503,6 @@ def tf_gauss_harmonics_echannel(xyzs, Zs, elements, gauss_params, l_max):
 		element (int): element to return embedding/labels for
 		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
 		l_max (tf.int32): Scalar for the highest order spherical harmonics to use (needs implemented)
-		labels (tf.Tensor): NMol x MaxNAtoms x label shape tensor of learning targets
 
 	Returns:
 		embedding (tf.float): atom embeddings for element
@@ -548,6 +515,7 @@ def tf_gauss_harmonics_echannel(xyzs, Zs, elements, gauss_params, l_max):
 	dxyzs = tf.gather_nd(dxyzs, atom_idx)
 	dist_tensor = tf.norm(dxyzs+1.e-16,axis=2)
 	gauss = tf_gauss(dist_tensor, gauss_params)
+	# dxyzs has dimension NNZ X MaxNAtoms X 3
 	harmonics = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)
 	channel_scatter = tf.gather(tf.equal(tf.expand_dims(Zs, axis=-1), elements), atom_idx[:,0])
 	channel_scatter = tf.where(channel_scatter, tf.ones_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])),
@@ -574,7 +542,6 @@ def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, pairs, elements, gauss_params, 
 		element (int): element to return embedding/labels for
 		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
 		l_max (tf.int32): Scalar for the highest order spherical harmonics to use
-		labels (tf.Tensor): NMol x MaxNAtoms x label shape tensor of learning targets
 
 	Returns:
 		embedding (tf.float): atom embeddings for element
