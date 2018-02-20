@@ -22,6 +22,7 @@ else:
 from ..Containers.TensorMolData import *
 from ..TFDescriptors.RawSH import *
 from ..TFDescriptors.RawSymFunc import *
+from ..ElementData import *
 from tensorflow.python.client import timeline
 
 class BehlerParinelloNetwork(object):
@@ -179,7 +180,6 @@ class BehlerParinelloNetwork(object):
 					mini_test_loss = test_loss
 					self.save_checkpoint(step)
 		self.sess.close()
-		self.save_network()
 		return
 
 	def save_checkpoint(self, step):
@@ -190,7 +190,7 @@ class BehlerParinelloNetwork(object):
 
 	def save_network(self):
 		print("Saving TFInstance")
-		f = open(self.network_directory+".tfn","wb")
+		f = open(PARAMS["networks_directory"]+self.name+".tfn","wb")
 		pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
 		f.close()
 		return
@@ -434,8 +434,8 @@ class BehlerParinelloNetwork(object):
 				for i in range(len(self.hidden_layers)):
 					if i == 0:
 						with tf.name_scope(str(self.elements[e])+'_hidden1'):
-							weights = self.variable_with_weight_decay(shape=[self.embedding_shape, self.hidden_layers[i]],
-									stddev=math.sqrt(2.0 / float(self.embedding_shape)), weight_decay=self.weight_decay, name="weights")
+							weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
+									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
 							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
 							branches[-1].append(self.activation_function(tf.matmul(inputs, weights) + biases))
 							variables.append(weights)
@@ -482,8 +482,8 @@ class BehlerParinelloNetwork(object):
 				for i in range(len(self.hidden_layers)):
 					if i == 0:
 						with tf.name_scope(str(self.elements[e])+'_hidden1'):
-							weights = self.variable_with_weight_decay(shape=[self.embedding_shape, self.hidden_layers[i]],
-									stddev=math.sqrt(2.0 / float(self.embedding_shape)), weight_decay=self.weight_decay, name="weights")
+							weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
+									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
 							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
 							branches[-1].append(self.activation_function(tf.matmul(inputs, weights) + biases))
 							variables.append(weights)
@@ -794,30 +794,30 @@ class BehlerParinelloSymFunc(BehlerParinelloNetwork):
 		eta = tf.constant(self.eta, dtype = self.tf_precision)
 		xyzs_pl = tf.placeholder(self.tf_precision, shape=tuple([self.batch_size, self.max_num_atoms, 3]))
 		Zs_pl = tf.placeholder(tf.int32, shape=tuple([self.batch_size, self.max_num_atoms]))
-		embeddings, molecule_indices = tf_symmetry_functions(xyzs_pl, Zs_pl, elements, element_pairs, radial_cutoff,
+		embed, mol_idx = tf_symmetry_functions(xyzs_pl, Zs_pl, elements, element_pairs, radial_cutoff,
 										angular_cutoff, radial_rs, angular_rs, theta_s, zeta, eta)
-		embeddings_list = [[], [], [], []]
+		embed_list = [[], [], [], []]
 		labels_list = []
 
-		self.embeddings_max = []
+		self.embed_max = []
 		sess = tf.Session()
 		sess.run(tf.global_variables_initializer())
 		for ministep in range (0, max(2, int(0.1 * self.num_train_cases/self.batch_size))):
 			batch_data = self.get_energy_train_batch(self.batch_size)
 			labels_list.append(batch_data[3])
-			embedding, molecule_index = sess.run([embeddings, molecule_indices], feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
+			embedding, mol_idx = sess.run([embed, mol_idx], feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
 			for element in range(len(self.elements)):
-				embeddings_list[element].append(embedding[element])
+				embed_list[element].append(embedding[element])
 		sess.close()
 		for element in range(len(self.elements)):
-			self.embeddings_max.append(np.amax(np.concatenate(embeddings_list[element])))
+			self.embed_max.append(np.amax(np.concatenate(embed_list[element])))
 		labels = np.concatenate(labels_list)
-		self.labels_mean = np.mean(labels)
-		self.labels_stddev = np.std(labels)
+		self.energy_mean = np.mean(labels)
+		self.energy_stddev = np.std(labels)
 		self.train_pointer = 0
 
 		#Set the embedding and label shape
-		self.embedding_shape = embedding[0].shape[1]
+		self.embed_shape = embedding[0].shape[1]
 		self.label_shape = labels[0].shape
 		return
 
@@ -855,20 +855,20 @@ class BehlerParinelloSymFunc(BehlerParinelloNetwork):
 			dsf_alpha = tf.Variable(self.dsf_alpha, trainable=False, dtype = self.tf_precision)
 			coulomb_cutoff = tf.Variable(self.coulomb_cutoff, trainable=False, dtype = self.tf_precision)
 
-			embeddings_max = tf.constant(self.embeddings_max, dtype = self.tf_precision)
-			labels_mean = tf.constant(self.labels_mean, dtype = self.tf_precision)
-			labels_stddev = tf.constant(self.labels_stddev, dtype = self.tf_precision)
+			embed_max = tf.constant(self.embed_max, dtype = self.tf_precision)
+			energy_mean = tf.constant(self.energy_mean, dtype = self.tf_precision)
+			energy_stddev = tf.constant(self.energy_stddev, dtype = self.tf_precision)
 			num_atoms_batch = tf.reduce_sum(self.num_atoms_pl)
 
-			embeddings, mol_idx = tf_symmetry_functions(self.xyzs_pl, self.Zs_pl, elements,
+			embed, mol_idx = tf_symmetry_functions(self.xyzs_pl, self.Zs_pl, elements,
 					element_pairs, radial_cutoff, angular_cutoff, radial_rs, angular_rs, theta_s, zeta, eta)
 			for element in range(len(self.elements)):
-				embeddings[element] /= embeddings_max[element]
-			norm_bp_energy, energy_variables = self.energy_inference(embeddings, mol_idx)
-			self.bp_energy = (norm_bp_energy * self.labels_stddev) + self.labels_mean
+				embed[element] /= embed_max[element]
+			norm_bp_energy, energy_variables = self.energy_inference(embed, mol_idx)
+			self.bp_energy = (norm_bp_energy * self.energy_stddev) + self.energy_mean
 
 			if self.train_dipole:
-				self.dipoles, self.quadrupoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embeddings, mol_idx, self.xyzs_pl, self.num_atoms_pl)
+				self.dipoles, self.quadrupoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embed, mol_idx, self.xyzs_pl, self.num_atoms_pl)
 				if (PARAMS["OPR12"]=="DSF"):
 					self.coulomb_energy = tf_coulomb_dsf_elu(rotated_xyzs, self.charges, self.Reep_pl, elu_width, dsf_alpha, coulomb_cutoff)
 				elif (PARAMS["OPR12"]=="Poly"):
@@ -943,17 +943,17 @@ class BehlerParinelloSymFunc(BehlerParinelloNetwork):
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_precision)
 
 			#Define normalization constants
-			embeddings_max = tf.constant(self.embeddings_max, dtype = self.tf_precision)
-			labels_mean = tf.constant(self.labels_mean, dtype = self.tf_precision)
-			labels_stddev = tf.constant(self.labels_stddev, dtype = self.tf_precision)
+			embed_max = tf.constant(self.embed_max, dtype = self.tf_precision)
+			energy_mean = tf.constant(self.energy_mean, dtype = self.tf_precision)
+			energy_stddev = tf.constant(self.energy_stddev, dtype = self.tf_precision)
 
 			#Define the graph for computing the embedding, feeding through the network, and evaluating the loss
-			element_embeddings, mol_indices = tf_symmetry_functions(self.xyzs_pl, self.Zs_pl, elements,
+			element_embed, mol_indices = tf_symmetry_functions(self.xyzs_pl, self.Zs_pl, elements,
 					element_pairs, radial_cutoff, angular_cutoff, radial_rs, angular_rs, theta_s, zeta, eta)
 			for element in range(len(self.elements)):
-				element_embeddings[element] /= embeddings_max[element]
-			self.normalized_output = self.inference(element_embeddings, mol_indices)
-			self.bp_energy = (self.normalized_output * self.labels_stddev) + self.labels_mean
+				element_embed[element] /= embed_max[element]
+			self.normalized_output = self.inference(element_embed, mol_indices)
+			self.bp_energy = (self.normalized_output * self.energy_stddev) + self.energy_mean
 			self.gradients = tf.gradients(self.bp_energy, self.xyzs_pl)[0]
 
 			self.summary_op = tf.summary.merge_all()
@@ -1059,7 +1059,8 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			self.network_directory = PARAMS["networks_directory"]+self.name
 			self.l_max = PARAMS["SH_LMAX"]
 			self.gaussian_params = PARAMS["RBFS"]
-			self.atomic_embed_factors = PARAMS["ANES"]
+			self.embed_factor = np.transpose(np.array([[x[7] for x in AtomData],
+								[x[8] for x in AtomData], [x[11] for x in AtomData]]))
 		return
 
 	def compute_normalization(self):
@@ -1068,6 +1069,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		if self.train_sparse:
 			pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
 		gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
+		embed_factor = tf.Variable(self.embed_factor, trainable=False, dtype=self.tf_precision)
 		elements = tf.constant(self.elements, dtype = tf.int32)
 
 		rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
@@ -1075,44 +1077,50 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 				tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision)], axis=-1, name="rotation_params")
 		rotated_xyzs = tf_random_rotate(xyzs_pl, rotation_params)
 		if self.train_sparse:
-			embeddings, molecule_indices = tf_sparse_gauss_harmonics_echannel(rotated_xyzs, Zs_pl, pairs_pl, elements, gaussian_params, self.l_max)
+			embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, Zs_pl, pairs_pl,
+										elements, gaussian_params, self.l_max)
 		else:
-			embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, Zs_pl, elements, gaussian_params, self.l_max)
-
-		embeddings_list = []
-		for element in range(len(self.elements)):
-			embeddings_list.append([])
-		labels_list = []
-		self.embeddings_mean = []
-		self.embeddings_stddev = []
+			embed, mol_idx = tf_gaush_embed_channel(rotated_xyzs, Zs_pl, elements,
+										gaussian_params, self.l_max, embed_factor)
+		self.embed_mean = []
+		self.embed_stddev = []
+		num_cases = [0, 0, 0, 0]
 
 		sess = tf.Session()
 		sess.run(tf.global_variables_initializer())
-		for ministep in range (max(2, int(0.1 * self.num_train_cases/self.batch_size))):
+		for ministep in range(int(self.num_train_cases/self.batch_size)):
 			batch_data = self.get_energy_train_batch(self.batch_size)
-			labels_list.append(batch_data[3])
 			if self.train_sparse:
-				embedding, molecule_index = sess.run([embeddings, molecule_indices],
+				embedding, _ = sess.run([embed, mol_idx],
 										feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1], pairs_pl:batch_data[5]})
 			else:
-				embedding, molecule_index = sess.run([embeddings, molecule_indices],
+				embedding, _ = sess.run([embed, mol_idx],
 										feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
 			for element in range(len(self.elements)):
-				embeddings_list[element].append(embedding[element])
+				if ministep == 0:
+					self.embed_stddev.append(np.var(embedding[element], axis=0))
+					self.embed_mean.append(np.mean(embedding[element], axis=0))
+				else:
+					self.embed_stddev[element] = (((self.embed_stddev[element] * num_cases[element]
+												+ np.var(embedding[element], axis=0) * embedding[element].shape[0])
+												/ (num_cases[element] + embedding[element].shape[0]))
+												+ (np.square(self.embed_mean[element] - np.mean(embedding[element], axis=0))
+												* num_cases[element] * embedding[element].shape[0] /
+												((num_cases[element] + embedding[element].shape[0]) ** 2)))
+					self.embed_mean[element] = ((self.embed_mean[element] * num_cases[element]
+												+ np.mean(embedding[element], axis=0) * embedding[element].shape[0])
+												/ (num_cases[element] + embedding[element].shape[0]))
+				num_cases[element] += embedding[element].shape[0]
 		sess.close()
-		for element in range(len(self.elements)):
-			self.embeddings_mean.append(np.mean(np.concatenate(embeddings_list[element]), axis=0))
-			self.embeddings_stddev.append(np.std(np.concatenate(embeddings_list[element]), axis=0))
-		self.embeddings_mean = np.stack(self.embeddings_mean)
-		self.embeddings_stddev = np.stack(self.embeddings_stddev)
-		labels = np.concatenate(labels_list)
-		self.labels_mean = np.mean(labels)
-		self.labels_stddev = np.std(labels)
+		self.embed_mean = np.stack(self.embed_mean)
+		self.embed_stddev = np.sqrt(np.stack(self.embed_stddev))
+		self.energy_mean = np.mean(self.energy_data)
+		self.energy_stddev = np.std(self.energy_data)
 		self.train_pointer = 0
 
 		#Set the embedding and label shape
-		self.embedding_shape = embedding[0].shape[1]
-		self.label_shape = labels[0].shape
+		self.embed_shape = embedding[0].shape[1]
+		self.label_shape = self.energy_mean.shape
 		return
 
 	def train_prepare(self, restart=False):
@@ -1133,17 +1141,14 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
 			if self.train_sparse:
 				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
-			# self.Reep_pl = tf.placeholder(tf.int32, shape=[None, 3])
 
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
+			embed_factor = tf.Variable(self.embed_factor, trainable=False, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
-			embeddings_mean = tf.Variable(self.embeddings_mean, trainable=False, dtype = self.tf_precision)
-			embeddings_stddev = tf.Variable(self.embeddings_stddev, trainable=False, dtype = self.tf_precision)
-			labels_mean = tf.Variable(self.labels_mean, trainable=False, dtype = self.tf_precision)
-			labels_stddev = tf.Variable(self.labels_stddev, trainable=False, dtype = self.tf_precision)
-			elu_width = tf.Variable(self.elu_width * BOHRPERA, trainable=False, dtype = self.tf_precision)
-			dsf_alpha = tf.Variable(self.dsf_alpha, trainable=False, dtype = self.tf_precision)
-			coulomb_cutoff = tf.Variable(self.coulomb_cutoff, trainable=False, dtype = self.tf_precision)
+			embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
+			embed_stddev = tf.Variable(self.embed_stddev, trainable=False, dtype = self.tf_precision)
+			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
+			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 
 			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
 					np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
@@ -1151,18 +1156,18 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			rotated_xyzs, rotated_gradients = tf_random_rotate(self.xyzs_pl, rotation_params, self.gradients_pl)
 			self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
 			if self.train_sparse:
-				embeddings, molecule_indices = tf_sparse_gauss_harmonics_echannel(rotated_xyzs, self.Zs_pl,
+				embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, self.Zs_pl,
 											self.pairs_pl, elements, self.gaussian_params, self.l_max)
 			else:
-				embeddings, molecule_indices = tf_gauss_harmonics_echannel(rotated_xyzs, self.Zs_pl,
-											elements, self.gaussian_params, self.l_max)
+				embed, mol_idx = tf_gaush_embed_channel(rotated_xyzs, self.Zs_pl,
+											elements, self.gaussian_params, self.l_max, embed_factor)
 			for element in range(len(self.elements)):
-				embeddings[element] -= embeddings_mean[element]
-				embeddings[element] /= embeddings_stddev[element]
-			norm_bp_energy, energy_variables = self.energy_inference(embeddings, molecule_indices)
-			self.bp_energy = (norm_bp_energy * labels_stddev) + labels_mean
+				embed[element] -= embed_mean[element]
+				embed[element] /= embed_stddev[element]
+			norm_bp_energy, energy_variables = self.energy_inference(embed, mol_idx)
+			self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
 			if self.train_dipole:
-				self.dipoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embeddings, molecule_indices, rotated_xyzs, self.num_atoms_pl)
+				self.dipoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embed, mol_idx, rotated_xyzs, self.num_atoms_pl)
 				if (PARAMS["OPR12"]=="DSF"):
 					self.coulomb_energy = tf_coulomb_dsf_elu(rotated_xyzs, self.charges, self.Reep_pl, elu_width, dsf_alpha, coulomb_cutoff)
 				elif (PARAMS["OPR12"]=="Poly"):
@@ -1236,59 +1241,42 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
-			self.Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
-			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
+			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[1, self.max_num_atoms, 3])
+			self.Zs_pl = tf.placeholder(tf.int32, shape=[1, self.max_num_atoms])
+			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[1])
 
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
-			embeddings_mean = tf.Variable(self.embeddings_mean, trainable=False, dtype = self.tf_precision)
-			embeddings_stddev = tf.Variable(self.embeddings_stddev, trainable=False, dtype = self.tf_precision)
-			labels_mean = tf.Variable(self.labels_mean, trainable=False, dtype = self.tf_precision)
-			labels_stddev = tf.Variable(self.labels_stddev, trainable=False, dtype = self.tf_precision)
+			embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
+			embed_stddev = tf.Variable(self.embed_stddev, trainable=False, dtype = self.tf_precision)
+			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
+			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 			elu_width = tf.Variable(self.elu_width * BOHRPERA, trainable=False, dtype = self.tf_precision)
 			dsf_alpha = tf.Variable(self.dsf_alpha, trainable=False, dtype = self.tf_precision)
 			coulomb_cutoff = tf.Variable(self.coulomb_cutoff, trainable=False, dtype = self.tf_precision)
 
-			# self.tiled_xyzs = tf.tile(tf.expand_dims(self.xyzs_pl, axis=1), [1, 100, 1, 1])
-			# self.tiled_Zs = tf.tile(tf.expand_dims(self.Zs_pl, axis=1), [1, 100, 1])
-			# self.rotation_params = tf.tile(tf.expand_dims(tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.0, 2.0, 5), [20]), axis=1),
-			# 		np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.0, 2.0, 5), axis=1), [1,20]), [100,1]),
-			# 		tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.1, 1.9, 4), axis=1),
-			# 		axis=2), [5,1,5]), [100,1])], axis=1), axis=0), [self.batch_size, 1, 1])
-			# self.rotated_xyzs = tf_random_rotate(self.tiled_xyzs, self.rotation_params)
-			# self.rotated_xyzs = tf.reshape(self.rotated_xyzs, [-1, self.num_atoms, 3])
-			# # self.rotated_gradients = tf.reshape(rotated_gradients, [-1, self.max_num_atoms, 3])
-			# self.tiled_Zs = tf.reshape(self.tiled_Zs, [-1, self.num_atoms])
-
-			# tiled_xyzs = tf.tile(self.xyzs_pl, [self.batch_size, 1, 1])
-			# tiled_Zs = tf.tile(self.Zs_pl, [self.batch_size, 1])
-			# rotation_params = tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.001, 1.999, 5), [20]), axis=1),
-			# 		np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.001, 1.999, 5), axis=1), [1,20]), [100,1]),
-			# 		tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.001, 1.999, 4), axis=1),
-			# 		axis=2), [5,1,5]), [100,1])], axis=1)
-			# rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-			# 		np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-			# 		tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision)], axis=-1, name="rotation_params")
-			# rotated_xyzs = tf_random_rotate(tiled_xyzs, rotation_params)
-			embeddings, molecule_indices = tf_gaussian_spherical_harmonics_channel(self.xyzs_pl,
-											self.Zs_pl, elements, self.gaussian_params, self.l_max)
+			self.tiled_xyzs = tf.tile(self.xyzs_pl, [27, 1, 1])
+			self.tiled_Zs = tf.tile(self.Zs_pl, [27, 1])
+			self.rotation_params = tf.cast(tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.0, 1.5, 3), [9]), axis=1),
+					np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.0, 1.5, 3), axis=1), [1,9]), [27,1]),
+					tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.1, 1.9, 3), axis=1),
+					axis=2), [3,1,3]), [27,1])], axis=1), dtype=self.tf_precision)
+			self.rotated_xyzs = tf_random_rotate(self.tiled_xyzs, self.rotation_params)
+			embed, mol_idx = tf_gauss_harmonics_echannel(self.rotated_xyzs, self.tiled_Zs, elements,
+										self.gaussian_params, self.l_max)
 			for element in range(len(self.elements)):
-				embeddings[element] -= embeddings_mean[element]
-				embeddings[element] /= embeddings_stddev[element]
-			# self.dipoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embeddings, molecule_indices, self.xyzs_pl, self.num_atoms_pl)
-			# self.coulomb_energy = tf_coulomb_dsf_elu(self.xyzs_pl, self.charges, self.Reep_pl, elu_width, dsf_alpha, coulomb_cutoff)
-			norm_bp_energy, energy_variables = self.energy_inference(embeddings, molecule_indices)
-			self.bp_energy = (norm_bp_energy * labels_stddev) + labels_mean
-			self.total_energy = self.bp_energy
-			self.gradients = tf.gradients(self.total_energy, self.xyzs_pl)[0]
+				embed[element] -= embed_mean[element]
+				embed[element] /= embed_stddev[element]
+			norm_bp_energy, energy_variables = self.energy_inference(embed, mol_idx)
+			self.bp_energy = tf.reduce_mean((norm_bp_energy * energy_stddev) + energy_mean)
+			self.gradients = tf.gradients(self.bp_energy, self.xyzs_pl)[0]
 
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver()
 			self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
 		return
 
-	def evaluate_fill_feed_dict(self, xyzs, Zs, num_atoms, Reep):
+	def evaluate_fill_feed_dict(self, xyzs, Zs, num_atoms):
 		"""
 		Fill the tensorflow feed dictionary.
 
@@ -1311,12 +1299,15 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			xyzs (np.float): numpy array of atomic coordinates
 			Zs (np.int32): numpy array of atomic numbers
 		"""
-		if not self.sess:
+		try:
+			self.sess
+		except AttributeError:
+			self.sess = None
+		if self.sess is None:
 			print("loading the session..")
-			# self.gaussian_params = PARAMS["RBFS"]
 			self.assign_activation()
 			self.max_num_atoms = mol.NAtoms()
-			self.batch_size = 1
+			self.batch_size = 27
 			self.evaluate_prepare()
 		xyzs_feed = np.zeros((1,self.max_num_atoms, 3))
 		xyzs_feed[0,:mol.NAtoms()] = mol.coords
@@ -1324,15 +1315,12 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		Zs_feed[0,:mol.NAtoms()] = mol.atoms
 		num_atoms_feed = np.zeros((1), dtype=np.int32)
 		num_atoms_feed[0] = mol.NAtoms()
-		feed_dict=self.evaluate_fill_feed_dict(xyzs_feed, Zs_feed, num_atoms_feed, rad_eep)
+		feed_dict=self.evaluate_fill_feed_dict(xyzs_feed, Zs_feed, num_atoms_feed)
 		atomization_energy = 0.0
-		for atom in mol.atoms:
-			if atom in ele_U:
-				atomization_energy += ele_U[atom]
 		if eval_forces:
-			energy, gradients = self.sess.run([self.total_energy, self.gradients], feed_dict=feed_dict)
+			energy, gradients = self.sess.run([self.bp_energy, self.gradients], feed_dict=feed_dict)
 			forces = -gradients[0,:mol.NAtoms()]
-			return energy + atomization_energy, forces
+			return energy, forces
 		else:
-			energy = self.sess.run(self.total_energy, feed_dict=feed_dict)
-			return energy + atomization_energy
+			energy = self.sess.run(self.bp_energy, feed_dict=feed_dict)
+			return energy

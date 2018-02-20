@@ -491,18 +491,17 @@ def tf_gaussian_spherical_harmonics(xyzs, Zs, elements, gauss_params, atomic_emb
 	molecule_indices = tf.dynamic_partition(element_indices[:,0:2], element_indices[:,2], num_elements)
 	return element_embeddings, molecule_indices
 
-def tf_gauss_harmonics_echannel(xyzs, Zs, elements, gauss_params, l_max):
+def tf_gaush_element_channel(xyzs, Zs, elements, gauss_params, l_max):
 	"""
 	Encodes atoms into a gaussians * spherical harmonics embedding
-	Works on a batch of molecules. This is the embedding routine used
-	in BehlerParinelloDirectGauSH.
+	cast into element channels. Works on a batch of molecules.
 
 	Args:
 		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
 		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
 		element (int): element to return embedding/labels for
 		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
-		l_max (tf.int32): Scalar for the highest order spherical harmonics to use (needs implemented)
+		l_max (tf.int32): Scalar for the highest order spherical harmonics to use
 
 	Returns:
 		embedding (tf.float): atom embeddings for element
@@ -510,35 +509,37 @@ def tf_gauss_harmonics_echannel(xyzs, Zs, elements, gauss_params, l_max):
 	"""
 	num_elements = elements.get_shape().as_list()[0]
 	num_mols = Zs.get_shape().as_list()[0]
+	padding_mask = tf.where(tf.not_equal(Zs, 0))
+
 	dxyzs = tf.expand_dims(xyzs, axis=2) - tf.expand_dims(xyzs, axis=1)
-	atom_idx = tf.where(tf.not_equal(Zs, 0))
-	dxyzs = tf.gather_nd(dxyzs, atom_idx)
-	dist_tensor = tf.norm(dxyzs+1.e-16,axis=2)
+	dxyzs = tf.gather_nd(dxyzs, padding_mask)
+	dist_tensor = tf.norm(dxyzs+1.e-16,axis=-1)
 	gauss = tf_gauss(dist_tensor, gauss_params)
 	# dxyzs has dimension NNZ X MaxNAtoms X 3
 	harmonics = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)
-	channel_scatter = tf.gather(tf.equal(tf.expand_dims(Zs, axis=-1), elements), atom_idx[:,0])
+	channel_scatter = tf.gather(tf.equal(tf.expand_dims(Zs, axis=-1), elements), padding_mask[:,0])
 	channel_scatter = tf.where(channel_scatter, tf.ones_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])),
 					tf.zeros_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])))
 	channel_gauss = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(channel_scatter, axis=-1)
 	channel_harmonics = tf.expand_dims(harmonics, axis=-2) * tf.expand_dims(channel_scatter, axis=-1)
 	embeds = tf.reshape(tf.einsum('ijkg,ijkl->ikgl', channel_gauss, channel_harmonics),
-			[tf.shape(atom_idx)[0], -1])
-	partition_idx = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, atom_idx), axis=-1),
+			[tf.shape(padding_mask)[0], -1])
+	partition_idx = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=-1),
 						tf.expand_dims(elements, axis=0)))[:,1], tf.int32)
 	embeds = tf.dynamic_partition(embeds, partition_idx, num_elements)
-	mol_idx = tf.dynamic_partition(atom_idx, partition_idx, num_elements)
+	mol_idx = tf.dynamic_partition(padding_mask, partition_idx, num_elements)
 	return embeds, mol_idx
 
-def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, pairs, elements, gauss_params, l_max):
+def tf_sparse_gaush_element_channel(xyzs, Zs, pairs, elements, gauss_params, l_max):
 	"""
+	Sparse version of tf_gauss_harmonics_echannel.
 	Encodes atoms into a gaussians * spherical harmonics embedding
-	Works on a batch of molecules. This is the embedding routine used
-	in BehlerParinelloDirectGauSH.
+	cast into element channels. Works on a batch of molecules.
 
 	Args:
 		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
 		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
+		pairs (tf.int32): NMol x MaxNAtoms x MaxNNeighbors neighbor index tensor
 		element (int): element to return embedding/labels for
 		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
 		l_max (tf.int32): Scalar for the highest order spherical harmonics to use
@@ -569,6 +570,43 @@ def tf_sparse_gauss_harmonics_echannel(xyzs, Zs, pairs, elements, gauss_params, 
 					elements))[:,-1], tf.int32)
 	embeds = tf.dynamic_partition(embeds, element_partition, num_elements)
 	mol_idx = tf.dynamic_partition(pairs[...,0,:2], element_partition, num_elements)
+	return embeds, mol_idx
+
+def tf_gaush_embed_channel(xyzs, Zs, elements, gauss_params, l_max, embed_factor):
+	"""
+	Encodes atoms into a gaussians * spherical harmonics embedding
+	cast into channels with embedding factors. Works on a batch of molecules.
+
+	Args:
+		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
+		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
+		elements (tf.int32): NElements tensor of unique atomic numbers
+		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
+		l_max (tf.int32): Scalar for the highest order spherical harmonics to use
+		embed_factor (tf.float): NChannels x NElements tensor of embedding factors
+
+	Returns:
+		embeds (tf.float): list of atomic embedding tensors for each element
+		mol_idx (tf.int32): list of molecule and atom indices matching embeds
+	"""
+	num_elements = elements.get_shape().as_list()[0]
+	num_mols = Zs.get_shape().as_list()[0]
+	num_channels = embed_factor.get_shape().as_list()[0]
+	padding_mask = tf.where(tf.not_equal(Zs, 0))
+
+	dxyzs = tf.expand_dims(xyzs, axis=2) - tf.expand_dims(xyzs, axis=1)
+	dxyzs = tf.gather_nd(dxyzs, padding_mask)
+	dist_tensor = tf.norm(dxyzs+1.e-16,axis=-1)
+	gauss = tf_gauss(dist_tensor, gauss_params)
+	harmonics = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)
+	channel_factors = tf.gather(tf.gather(embed_factor, Zs), padding_mask[:,0])
+	channel_gauss = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(channel_factors, axis=-1)
+	embeds = tf.reshape(tf.einsum('ijkg,ijl->ikgl', channel_gauss, harmonics),
+			[tf.shape(padding_mask)[0], -1])
+	partition_idx = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=-1),
+						tf.expand_dims(elements, axis=0)))[:,1], tf.int32)
+	embeds = tf.dynamic_partition(embeds, partition_idx, num_elements)
+	mol_idx = tf.dynamic_partition(padding_mask, partition_idx, num_elements)
 	return embeds, mol_idx
 
 def tf_random_rotate(xyzs, rot_params, labels = None, return_matrix = False):

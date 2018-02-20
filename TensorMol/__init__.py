@@ -25,6 +25,7 @@ from __future__ import print_function
 __version__="0.2"
 from TensorMol.Util import * # Populates the PARAMS and LOGGER.
 from TensorMol.PhysicalData import *
+from TensorMol.ElementData import *
 from .Containers import *
 from .Math import *
 from .TFNetworks import *
