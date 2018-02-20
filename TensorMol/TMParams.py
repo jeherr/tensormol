@@ -179,15 +179,15 @@ def TMBanner():
 	print("--------------------------")
 	try:
 		if sys.version_info[0] < 3:
-			print(("    "+unichr(0x1350)+unichr(0x2107)+unichr(0x2115)+unichr(0x405)+unichr(0x29be)+unichr(0x2c64)+'-'+unichr(0x164f)+unichr(0x29be)+unichr(0x2112)+"  0.1"))
+			print(("    "+unichr(0x1350)+unichr(0x2107)+unichr(0x2115)+unichr(0x405)+unichr(0x29be)+unichr(0x2c64)+'-'+unichr(0x164f)+unichr(0x29be)+unichr(0x2112)+"  0.2"))
 		else:
-			print(("    "+chr(0x1350)+chr(0x2107)+chr(0x2115)+chr(0x405)+chr(0x29be)+chr(0x2c64)+'-'+chr(0x164f)+chr(0x29be)+chr(0x2112)+"  0.1"))
+			print(("    "+chr(0x1350)+chr(0x2107)+chr(0x2115)+chr(0x405)+chr(0x29be)+chr(0x2c64)+'-'+chr(0x164f)+chr(0x29be)+chr(0x2112)+"  0.2"))
 	except:
 		pass
 	print("--------------------------")
 	print("By using this software you accept the terms of the GNU public license in ")
 	print("COPYING, and agree to attribute the use of this software in publications as: \n")
-	print("K.Yao, J. E. Herr, D. Toth, R. McIntyre, J. Garside, J. Parckhill. TensorMol 0.2 (2018)")
+	print("K.Yao, J. E. Herr, D. Toth, R. McIntyre, J. Garside, J. Parkhill. TensorMol 0.2 (2018)")
 	print("--------------------------")
 
 def TMLogger(path_):

@@ -1,15 +1,12 @@
-# The spatial unit of TensorMol is Angstrom.
-# Tne energy unit of Tensormol is Hartree except in MD where it is kcal/mol
-# The time unit of Tensormol is the Fs.
 #
-# These should be all Caps. etc...
+# This is a tentative set of atomic identity data.
+# Anyone got an opinion about a better spot for this?
 #
+
 from __future__ import absolute_import
-import numpy as np
-from math import pi as Pi
 
 AtomFields = ['symbol','name','atomicnum','mass','ns','np','nd','elecneg','radius','ione','elecaff','polariz']
-AtomData = [['X','Null', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+AtomData = [['X','Nullium', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
 ['H','Hydrogen', 1.0, 1.00794, 1.0, 0.0, 0.0, 2.3, 53.0, 1312.0, 0.754195, 4.4923955],
 ['He','Helium', 2.0, 4.002602, 2.0, 0.0, 0.0, 4.16, 31.0, 2372.0, -0.52, 1.383191],
 ['Li','Lithium', 3.0, 6.941, 1.0, 0.0, 0.0, 0.912, 167.0, 520.0, 0.618049, 164.0],
