@@ -27,8 +27,6 @@ if sys.version_info[0] < 3:
 else:
 	import _pickle as pickle
 
-mol_set=MSet()
-
 class TFMolManage(TFManage):
 	"""
 		A manager of tensorflow instances which perform molecule-wise predictions

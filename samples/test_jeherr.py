@@ -291,6 +291,24 @@ def train_energy_GauSH(mset):
 	PARAMS["sparse_cutoff"] = 7.0
 	manager = TFMolManageDirect(mset, network_type = "BPGauSH")
 
+def train_AE_GauSH(mset):
+	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+	PARAMS["SH_LMAX"] = 5
+	PARAMS["train_rotation"] = False
+	PARAMS["weight_decay"] = None
+	PARAMS["HiddenLayers"] = [512, 512, 512]
+	PARAMS["learning_rate"] = 0.00005
+	PARAMS["max_steps"] = 1000
+	PARAMS["test_freq"] = 5
+	PARAMS["batch_size"] = 100
+	PARAMS["NeuronType"] = "shifted_softplus"
+	PARAMS["tf_prec"] = "tf.float32"
+	PARAMS["Profiling"] = False
+	PARAMS["train_sparse"] = False
+	PARAMS["sparse_cutoff"] = 7.0
+	network = GauSHEncoder(mset)
+	network.start_training()
+
 def test_h2o():
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_NRAD"] = 16
@@ -767,7 +785,8 @@ def water_web():
 # test_tf_neighbor()
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
-train_energy_GauSH("water_wb97xd_6311gss")
+# train_energy_GauSH("chemspider12_wb97xd_6311gss")
+train_AE_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()

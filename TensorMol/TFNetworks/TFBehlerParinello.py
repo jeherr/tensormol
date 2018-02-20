@@ -1,10 +1,6 @@
 """
 This version of the Behler-Parinello is aperiodic,non-sparse.
 It's being developed to explore alternatives to symmetry functions. It's not for production use.
-
-John: Do you think they really have to be kept separate?
-Cant the descriptor just be conditionally switched in Prepare?
-That would seem to make more sense to me.
 """
 
 from __future__ import absolute_import
@@ -19,7 +15,6 @@ if sys.version_info[0] < 3:
 else:
 	import _pickle as pickle
 
-from ..Containers.TensorMolData import *
 from ..TFDescriptors.RawSH import *
 from ..TFDescriptors.RawSymFunc import *
 from ..ElementData import *
@@ -1080,8 +1075,8 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, Zs_pl, pairs_pl,
 										elements, gaussian_params, self.l_max)
 		else:
-			embed, mol_idx = tf_gaush_embed_channel(rotated_xyzs, Zs_pl, elements,
-										gaussian_params, self.l_max, embed_factor)
+			embed, mol_idx = tf_gaush_element_channel(rotated_xyzs, Zs_pl, elements,
+										gaussian_params, self.l_max)
 		self.embed_mean = []
 		self.embed_stddev = []
 		num_cases = [0, 0, 0, 0]
@@ -1159,8 +1154,8 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 				embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, self.Zs_pl,
 											self.pairs_pl, elements, self.gaussian_params, self.l_max)
 			else:
-				embed, mol_idx = tf_gaush_embed_channel(rotated_xyzs, self.Zs_pl,
-											elements, self.gaussian_params, self.l_max, embed_factor)
+				embed, mol_idx = tf_gaush_element_channel(rotated_xyzs, self.Zs_pl,
+											elements, self.gaussian_params, self.l_max)
 			for element in range(len(self.elements)):
 				embed[element] -= embed_mean[element]
 				embed[element] /= embed_stddev[element]
