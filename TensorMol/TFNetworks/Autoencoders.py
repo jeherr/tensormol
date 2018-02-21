@@ -295,13 +295,13 @@ class GauSHEncoder(object):
 		feed_dict={i: d for i, d in zip(pl_list, batch_data)}
 		return feed_dict
 
-	def print_epoch(self, step, duration, loss, embed_loss, rotation_loss, num_mols, testing=False):
+	def print_epoch(self, step, duration, loss, embed_loss, rotation_loss, num_atoms, testing=False):
 		if testing:
 			LOGGER.info("step: %5d  duration: %.3f  test loss: %.10f  embed loss: %.10f  rotation loss: %.10f",
-			step, duration, loss / num_mols, embed_loss / num_mols, rotation_loss / num_mols)
+			step, duration, loss / num_atoms, embed_loss / num_atoms, rotation_loss / num_atoms)
 		else:
 			LOGGER.info("step: %5d  duration: %.3f  train loss: %.10f  embed loss: %.10f  rotation loss: %.10f",
-			step, duration, loss / num_mols, embed_loss / num_mols, rotation_loss / num_mols)
+			step, duration, loss / num_atoms, embed_loss / num_atoms, rotation_loss / num_atoms)
 		return
 
 	def encoder(self, inputs):
@@ -343,12 +343,12 @@ class GauSHEncoder(object):
 		Returns:
 			The decoded GauSH descriptor
 		"""
-		# inputs = tf.concat([inputs, rotation_params], axis=1)
+		inputs = tf.concat([inputs, rotation_params], axis=1)
 		with tf.name_scope("decoder"):
 			for i in range(len(self.hidden_layers)):
 				if i == 0:
 					with tf.name_scope('decoder_hidden1'):
-						weights = self.variable_with_weight_decay(shape=[self.latent_shape, self.hidden_layers[i]],
+						weights = self.variable_with_weight_decay(shape=[self.latent_shape+3, self.hidden_layers[i]],
 								stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
 						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
 						hidden_output = self.activation_function(tf.matmul(inputs, weights) + biases)
@@ -397,41 +397,29 @@ class GauSHEncoder(object):
 		gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
 		elements = tf.constant(self.elements, dtype = tf.int32)
 
-		rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-				np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-				tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision)], axis=-1, name="rotation_params")
-		rotated_xyzs = tf_random_rotate(xyzs_pl, rotation_params)
-		if self.train_sparse:
-			embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, Zs_pl, pairs_pl,
-										elements, gaussian_params, self.l_max)
-		else:
-			embed = tf_gaush_element_channelv2(rotated_xyzs, Zs_pl, elements,
-										gaussian_params, self.l_max)
-		self.embed_mean = []
-		self.embed_stddev = []
-		num_cases = 0
+		rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+		embed, rot_embed, rotate_params = tf_gaush_element_channelv2(xyzs_pl, Zs_pl, elements,
+									gaussian_params, self.l_max, rotation_params)
+		combined_embed = tf.concat([embed, rot_embed], axis=0)
 
 		sess = tf.Session()
 		sess.run(tf.global_variables_initializer())
-		for ministep in range(int(0.1 * self.num_train_cases/self.batch_size)):
+		num_cases = 0
+		for ministep in range(int(0.5 * self.num_train_cases/self.batch_size)):
 			batch_data = self.get_train_batch(self.batch_size)
-			if self.train_sparse:
-				embedding = sess.run(embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1], pairs_pl:batch_data[3]})
-			else:
-				embedding = sess.run(embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
+			embedding = sess.run(combined_embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
 			if ministep == 0:
-				self.embed_stddev.append(np.var(embedding, axis=0))
-				self.embed_mean.append(np.mean(embedding, axis=0))
+				self.embed_stddev = np.var(embedding, axis=0)
+				self.embed_mean = np.mean(embedding, axis=0)
 			else:
-				self.embed_stddev = (((self.embed_stddev * num_cases
-											+ np.var(embedding, axis=0) * embedding.shape[0])
-											/ (num_cases + embedding.shape[0]))
-											+ (np.square(self.embed_mean - np.mean(embedding, axis=0))
-											* num_cases * embedding.shape[0] /
-											((num_cases + embedding.shape[0]) ** 2)))
-				self.embed_mean = ((self.embed_mean * num_cases
-											+ np.mean(embedding, axis=0) * embedding.shape[0])
-											/ (num_cases + embedding.shape[0]))
+				self.embed_stddev = (((self.embed_stddev * num_cases + np.var(embedding, axis=0) * embedding.shape[0])
+									/ (num_cases + embedding.shape[0]))
+									+ (np.square(self.embed_mean - np.mean(embedding, axis=0)) * num_cases * embedding.shape[0]
+									/ ((num_cases + embedding.shape[0]) ** 2)))
+				self.embed_mean = ((self.embed_mean * num_cases + np.mean(embedding, axis=0) * embedding.shape[0])
+								/ (num_cases + embedding.shape[0]))
 			num_cases += embedding.shape[0]
 		sess.close()
 		self.train_pointer = 0
@@ -458,27 +446,18 @@ class GauSHEncoder(object):
 			embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
 			embed_stddev = tf.Variable(self.embed_stddev, trainable=False, dtype = self.tf_precision)
 
-			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-					np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-					tf.random_uniform([self.batch_size], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
-			rotated_xyzs = tf_random_rotate(self.xyzs_pl, rotation_params)
-			if self.train_sparse:
-				embed, _ = tf_sparse_gaush_element_channel(self.xyzs_pl, self.Zs_pl,
-											self.pairs_pl, elements, self.gaussian_params, self.l_max)
-				rotated_embed, _ = tf_sparse_gaush_element_channel(rotated_xyzs, self.Zs_pl,
-											self.pairs_pl, elements, self.gaussian_params, self.l_max)
-			else:
-				embed = tf_gaush_element_channelv2(self.xyzs_pl, self.Zs_pl,
-											elements, self.gaussian_params, self.l_max)
-				rotated_embed = tf_gaush_element_channelv2(rotated_xyzs, self.Zs_pl,
-											elements, self.gaussian_params, self.l_max)
+			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+					np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+					tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+			self.embed, rotated_embed, rotate_params = tf_gaush_element_channelv2(self.xyzs_pl, self.Zs_pl,
+										elements, self.gaussian_params, self.l_max, rotation_params)
 			rotated_embed = (rotated_embed - embed_mean) / embed_stddev
 			latent_vector = self.encoder(rotated_embed)
-			norm_output = self.decoder(latent_vector, rotation_params)
-			embed_output = (norm_output * embed_stddev) + embed_mean
+			norm_output = self.decoder(latent_vector, rotate_params)
+			self.embed_output = (norm_output * embed_stddev) + embed_mean
 			rot_grad = tf.gradients(latent_vector, rotation_params)
 
-			self.embed_loss = self.loss_op(embed_output - embed)
+			self.embed_loss = self.loss_op(self.embed_output - self.embed)
 			tf.summary.scalar("embed_loss", self.embed_loss)
 			tf.add_to_collection('embed_losses', self.embed_loss)
 			self.rotation_loss = self.loss_op(rot_grad)
@@ -515,7 +494,7 @@ class GauSHEncoder(object):
 		train_loss =  0.0
 		train_embed_loss = 0.0
 		train_rotation_loss = 0.0
-		num_mols = 0
+		num_atoms = 0
 		for ministep in range (0, int(Ncase_train/self.batch_size)):
 			batch_data = self.get_train_batch(self.batch_size)
 			feed_dict = self.fill_feed_dict(batch_data)
@@ -537,10 +516,10 @@ class GauSHEncoder(object):
 					self.summary_op, self.embed_losses, self.embed_loss], feed_dict=feed_dict)
 			train_loss += total_loss
 			train_embed_loss += embed_loss
-			num_mols += self.batch_size
+			num_atoms += np.sum(batch_data[2])
 			self.summary_writer.add_summary(summaries, step * int(Ncase_train/self.batch_size) + ministep)
 		duration = time.time() - start_time
-		self.print_epoch(step, duration, train_loss, train_embed_loss, train_rotation_loss, num_mols)
+		self.print_epoch(step, duration, train_loss, train_embed_loss, train_rotation_loss, num_atoms)
 		return
 
 	def test_step(self, step):
@@ -550,20 +529,31 @@ class GauSHEncoder(object):
 		Args:
 			step: the index of this step.
 		"""
+		print( "testing...")
 		Ncase_test = self.num_test_cases
 		start_time = time.time()
 		test_loss =  0.0
 		test_embed_loss = 0.0
 		test_rotation_loss = 0.0
-		num_mols = 0
+		num_atoms = 0
+		test_epoch_errors = []
 		for ministep in range (0, int(Ncase_test/self.batch_size)):
 			batch_data = self.get_test_batch(self.batch_size)
 			feed_dict = self.fill_feed_dict(batch_data)
-			_, total_loss, embed_loss, rotation_loss = self.sess.run([self.embed_losses, self.embed_loss, self.rotation_loss], feed_dict=feed_dict)
+			total_loss, embed_loss, rotation_loss, embed, embed_output = self.sess.run([self.embed_losses, self.embed_loss,
+													self.rotation_loss, self.embed, self.embed_output], feed_dict=feed_dict)
 			test_loss += total_loss
 			test_embed_loss += embed_loss
 			test_rotation_loss += rotation_loss
-			num_mols += self.batch_size
+			test_epoch_errors.append(embed_output - embed)
+			num_atoms += np.sum(batch_data[2])
+		test_epoch_errors = np.concatenate(test_epoch_errors)
+		test_mse = np.mean(test_epoch_errors)
+		test_mae = np.mean(np.abs(test_epoch_errors))
+		test_rmse = np.sqrt(np.mean(np.square(test_epoch_errors)))
+		LOGGER.info("MAE : %11.8f", test_mae)
+		LOGGER.info("MSE : %11.8f", test_mse)
+		LOGGER.info("RMSE: %11.8f", test_rmse)
 		duration = time.time() - start_time
-		self.print_epoch(step, duration, test_loss, test_embed_loss, test_rotation_loss, num_mols, testing=True)
+		self.print_epoch(step, duration, test_loss, test_embed_loss, test_rotation_loss, num_atoms, testing=True)
 		return

@@ -5,8 +5,8 @@ Routines for running calculations from OpenBabel
 from __future__ import absolute_import
 from __future__ import print_function
 import numpy as np
-import openbabel as ob
-import pybel as pb
+# import openbabel as ob
+# import pybel as pb
 from ..Util import *
 import random, math, subprocess
 
