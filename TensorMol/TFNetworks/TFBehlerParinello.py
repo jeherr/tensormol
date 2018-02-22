@@ -1160,7 +1160,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 				embed[element] -= embed_mean[element]
 				embed[element] /= embed_stddev[element]
 			atom_energies, energy_variables = self.energy_inference(embed, mol_idx)
-			norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size]), variables
+			norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
 			self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
 			if self.train_dipole:
 				self.dipoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embed, mol_idx, rotated_xyzs, self.num_atoms_pl)
@@ -1320,3 +1320,175 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		else:
 			energy = self.sess.run(self.bp_energy, feed_dict=feed_dict)
 			return energy
+
+class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
+	"""
+	Behler-Parinello network using symmetry function embedding from RawEmbeddings.py
+	also has sparse evaluation using an updated version of the
+	neighbor list, and a polynomial cutoff coulomb interaction.
+	"""
+	def compute_normalization(self):
+		xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
+		Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
+		if self.train_sparse:
+			pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
+		gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
+		embed_factor = tf.Variable(self.embed_factor, trainable=False, dtype=self.tf_precision)
+		elements = tf.constant(self.elements, dtype = tf.int32)
+
+		rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+						np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+						tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision)], axis=-1)
+		padding_mask = tf.where(tf.not_equal(Zs_pl, 0))
+		centered_xyzs = tf.expand_dims(tf.gather_nd(xyzs_pl, padding_mask), axis=1) - tf.gather(xyzs_pl, padding_mask[:,0])
+		rotation_params = tf.gather_nd(rotation_params, padding_mask)
+		rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
+		if self.train_sparse:
+			embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, Zs_pl, pairs_pl,
+										elements, gaussian_params, self.l_max)
+		else:
+			embed, mol_idx = tf_gaush_element_channelv3(rotated_xyzs, Zs_pl, elements,
+										gaussian_params, self.l_max)
+		self.embed_mean = []
+		self.embed_stddev = []
+		num_cases = [0, 0, 0, 0]
+
+		sess = tf.Session()
+		sess.run(tf.global_variables_initializer())
+		for ministep in range(int(self.num_train_cases/self.batch_size)):
+			batch_data = self.get_energy_train_batch(self.batch_size)
+			if self.train_sparse:
+				embedding = sess.run(embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1], pairs_pl:batch_data[5]})
+			else:
+				embedding = sess.run(embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
+			for element in range(len(self.elements)):
+				if ministep == 0:
+					self.embed_stddev.append(np.var(embedding[element], axis=0))
+					self.embed_mean.append(np.mean(embedding[element], axis=0))
+				else:
+					self.embed_stddev[element] = (((self.embed_stddev[element] * num_cases[element]
+												+ np.var(embedding[element], axis=0) * embedding[element].shape[0])
+												/ (num_cases[element] + embedding[element].shape[0]))
+												+ (np.square(self.embed_mean[element] - np.mean(embedding[element], axis=0))
+												* num_cases[element] * embedding[element].shape[0] /
+												((num_cases[element] + embedding[element].shape[0]) ** 2)))
+					self.embed_mean[element] = ((self.embed_mean[element] * num_cases[element]
+												+ np.mean(embedding[element], axis=0) * embedding[element].shape[0])
+												/ (num_cases[element] + embedding[element].shape[0]))
+				num_cases[element] += embedding[element].shape[0]
+		sess.close()
+		self.embed_mean = np.stack(self.embed_mean)
+		self.embed_stddev = np.sqrt(np.stack(self.embed_stddev))
+		self.energy_mean = np.mean(self.energy_data)
+		self.energy_stddev = np.std(self.energy_data)
+		self.train_pointer = 0
+
+		#Set the embedding and label shape
+		self.embed_shape = embedding[0].shape[1]
+		self.label_shape = self.energy_mean.shape
+		return
+
+	def train_prepare(self, restart=False):
+		"""
+		Get placeholders, graph and losses in order to begin training.
+		Also assigns the desired padding.
+
+		Args:
+			continue_training: should read the graph variables from a saved checkpoint.
+		"""
+		with tf.Graph().as_default():
+			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
+			self.Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
+			self.energy_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size])
+			self.dipole_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, 3])
+			self.quadrupole_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, 3])
+			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
+			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
+			if self.train_sparse:
+				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
+			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
+			embed_factor = tf.Variable(self.embed_factor, trainable=False, dtype=self.tf_precision)
+			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
+			embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
+			embed_stddev = tf.Variable(self.embed_stddev, trainable=False, dtype = self.tf_precision)
+			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
+			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
+
+			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision)], axis=-1)
+			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
+			centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
+			rotation_params = tf.gather_nd(rotation_params, padding_mask)
+			rotated_xyzs, rot_matrix = tf_random_rotate(centered_xyzs, rotation_params, return_matrix=True)
+			self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
+			if self.train_sparse:
+				embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, self.Zs_pl,
+											self.pairs_pl, elements, self.gaussian_params, self.l_max)
+			else:
+				embed, mol_idx = tf_gaush_element_channelv3(rotated_xyzs, self.Zs_pl,
+											elements, self.gaussian_params, self.l_max)
+			for element in range(len(self.elements)):
+				embed[element] -= embed_mean[element]
+				embed[element] /= embed_stddev[element]
+			atom_energies, energy_variables = self.energy_inference(embed, mol_idx)
+			norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
+			self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
+			if self.train_dipole:
+				self.dipoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embed, mol_idx, rotated_xyzs, self.num_atoms_pl)
+				if (PARAMS["OPR12"]=="DSF"):
+					self.coulomb_energy = tf_coulomb_dsf_elu(rotated_xyzs, self.charges, self.Reep_pl, elu_width, dsf_alpha, coulomb_cutoff)
+				elif (PARAMS["OPR12"]=="Poly"):
+					self.coulomb_energy = PolynomialRangeSepCoulomb(rotated_xyzs, self.charges, self.Reep_pl, 5.0, 12.0, 5.0)
+				self.total_energy = self.bp_energy + self.coulomb_energy
+				self.dipole_loss = self.loss_op(self.dipoles - self.dipole_labels)
+				tf.add_to_collection('dipole_losses', self.dipole_loss)
+				self.dipole_losses = tf.add_n(tf.get_collection('dipole_losses'))
+				tf.summary.scalar("dipole losses", self.dipole_losses)
+				self.dipole_train_op = self.optimizer(self.dipole_losses, self.learning_rate, self.momentum, dipole_variables)
+			else:
+				self.total_energy = self.bp_energy
+			xyz_grad, rot_grad = tf.gradients(self.total_energy, [rotated_xyzs, rotation_params])
+			invrot_matrix = tf.matrix_inverse(rot_matrix)
+			unrot_xyz_grad = tf.einsum("lij,lkj->lki", invrot_matrix, (rotated_xyzs + xyz_grad)) - centered_xyzs
+			gradients = tf.zeros([self.batch_size, self.max_num_atoms, 3], dtype=self.tf_precision)
+			gradients += tf.scatter_nd(padding_mask[:,0], unrot_xyz_grad, [self.batch_size, self.max_num_atoms, 3])
+			self.gradients = tf.gather_nd(xyz_grad, padding_mask)
+			self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
+			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
+			tf.summary.scalar("energy loss", self.energy_loss)
+			tf.add_to_collection('energy_losses', self.energy_loss)
+			self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+			self.rotation_loss = 0.02 * self.loss_op(rot_grad)
+			if self.train_gradients:
+				tf.add_to_collection('energy_losses', self.gradient_loss)
+				tf.summary.scalar("gradient loss", self.gradient_loss)
+			if self.train_rotation:
+				tf.add_to_collection('energy_losses', self.rotation_loss)
+				tf.summary.scalar("rotational loss", self.rotation_loss)
+
+			# barrier_function = 1.e5 * tf.concat([tf.pow((0.15 - self.gaussian_params), 3.0), tf.expand_dims(tf.pow((self.gaussian_params[:,0] - 6.1), 3.0), axis=-1),
+			# 			tf.expand_dims(tf.pow((self.gaussian_params[:,1] - 3.6), 3.0), axis=-1)], axis=1)
+			# truncated_barrier_function = tf.reduce_sum(tf.where(tf.greater(barrier_function, 0.0),
+			# 					barrier_function, tf.zeros_like(barrier_function)))
+			# gaussian_overlap_loss = tf.square(0.001 / tf.reduce_min(tf.self_adjoint_eig(tf_gaussian_overlap(self.gaussian_params))[0]))
+			# tf.add_to_collection('dipole_losses', truncated_barrier_function)
+			# tf.add_to_collection('dipole_losses', gaussian_overlap_loss)
+
+			self.energy_losses = tf.add_n(tf.get_collection('energy_losses'))
+			tf.summary.scalar("energy losses", self.energy_losses)
+
+			self.energy_train_op = self.optimizer(self.energy_losses, self.learning_rate, self.momentum, energy_variables)
+			self.summary_op = tf.summary.merge_all()
+			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
+			self.summary_writer = tf.summary.FileWriter(self.network_directory, self.sess.graph)
+			if restart:
+				self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
+			else:
+				init = tf.global_variables_initializer()
+				self.sess.run(init)
+			if self.profiling:
+				self.options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+				self.run_metadata = tf.RunMetadata()
+		return
