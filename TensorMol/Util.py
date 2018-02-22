@@ -84,6 +84,7 @@ except:
 
 try:
 	import openbabel as ob
+	import pybel as pb
 	LOGGER.debug("OpenBabel module found.")
 except Exception as Ex:
 	print("OpenBabel module not installed -- no classical force field sampling")

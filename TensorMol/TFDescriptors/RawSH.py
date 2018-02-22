@@ -526,8 +526,9 @@ def tf_gaush_element_channel(xyzs, Zs, elements, gauss_params, l_max):
 			[tf.shape(padding_mask)[0], -1])
 	partition_idx = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=-1),
 						tf.expand_dims(elements, axis=0)))[:,1], tf.int32)
-	embeds = tf.dynamic_partition(embeds, partition_idx, num_elements)
-	mol_idx = tf.dynamic_partition(padding_mask, partition_idx, num_elements)
+	with tf.device('/cpu:0'):
+		embeds = tf.dynamic_partition(embeds, partition_idx, num_elements)
+		mol_idx = tf.dynamic_partition(padding_mask, partition_idx, num_elements)
 	return embeds, mol_idx
 
 def tf_sparse_gaush_element_channel(xyzs, Zs, pairs, elements, gauss_params, l_max):

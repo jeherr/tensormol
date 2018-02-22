@@ -452,7 +452,7 @@ class BehlerParinelloNetwork(object):
 					variables.append(biases)
 					output += tf.scatter_nd(index, branches[-1][-1], [self.batch_size, self.max_num_atoms])
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
-		return tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size]), variables
+		return output, variables
 
 	def dipole_inference(self, inp, indexs, xyzs, natom):
 		"""
@@ -1159,7 +1159,8 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			for element in range(len(self.elements)):
 				embed[element] -= embed_mean[element]
 				embed[element] /= embed_stddev[element]
-			norm_bp_energy, energy_variables = self.energy_inference(embed, mol_idx)
+			atom_energies, energy_variables = self.energy_inference(embed, mol_idx)
+			norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size]), variables
 			self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
 			if self.train_dipole:
 				self.dipoles, self.charges, self.net_charge, dipole_variables = self.dipole_inference(embed, mol_idx, rotated_xyzs, self.num_atoms_pl)

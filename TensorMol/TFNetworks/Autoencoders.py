@@ -348,19 +348,19 @@ class GauSHEncoder(object):
 			for i in range(len(self.hidden_layers)):
 				if i == 0:
 					with tf.name_scope('decoder_hidden1'):
-						weights = self.variable_with_weight_decay(shape=[self.latent_shape+3, self.hidden_layers[i]],
+						weights = self.variable_with_weight_decay(shape=[self.latent_shape+3, self.hidden_layers[-1]],
 								stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
-						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+						biases = tf.Variable(tf.zeros([self.hidden_layers[-1]], dtype=self.tf_precision), name='biases')
 						hidden_output = self.activation_function(tf.matmul(inputs, weights) + biases)
 				else:
 					with tf.name_scope('decoder_hidden'+str(i+1)):
-						weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
-								stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
-						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+						weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-i], self.hidden_layers[-1-i]],
+								stddev=math.sqrt(2.0 / float(self.hidden_layers[-i])), weight_decay=self.weight_decay, name="weights")
+						biases = tf.Variable(tf.zeros([self.hidden_layers[-1-i]], dtype=self.tf_precision), name='biases')
 						hidden_output = self.activation_function(tf.matmul(hidden_output, weights) + biases)
 			with tf.name_scope('decoder_output'):
-				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], self.embed_shape],
-						stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
+				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[0], self.embed_shape],
+						stddev=math.sqrt(2.0 / float(self.hidden_layers[0])), weight_decay=self.weight_decay, name="weights")
 				biases = tf.Variable(tf.zeros([self.embed_shape], dtype=self.tf_precision), name='biases')
 				outputs = tf.matmul(hidden_output, weights) + biases
 		return outputs

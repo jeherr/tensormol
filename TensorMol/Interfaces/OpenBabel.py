@@ -5,8 +5,6 @@ Routines for running calculations from OpenBabel
 from __future__ import absolute_import
 from __future__ import print_function
 import numpy as np
-# import openbabel as ob
-# import pybel as pb
 from ..Util import *
 import random, math, subprocess
 
@@ -50,4 +48,4 @@ def ob_minimize_geom(mol, forcefield="MMFF94"):
 	min_coords = np.zeros((len(pbmol.atoms),3))
 	for i, atom in enumerate(pbmol.atoms):
 		min_coords[i] = atom.coords
-	return Mol(mol.atoms, min_coords)
+	return min_coords

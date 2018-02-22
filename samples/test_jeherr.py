@@ -296,7 +296,7 @@ def train_AE_GauSH(mset):
 	PARAMS["SH_LMAX"] = 5
 	PARAMS["train_rotation"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [512, 512, 512]
+	PARAMS["HiddenLayers"] = [960, 768]
 	PARAMS["learning_rate"] = 0.00005
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 1
@@ -772,6 +772,18 @@ def water_web():
 		f.write(str(i)+"  "+str(en*627.509)+"\n")
 	f.close()
 
+def minimize_ob():
+	import glob
+	for file in glob.iglob("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/uncharged/*.xyz"):
+		try:
+			mol = Mol()
+			mol.read_xyz_with_properties(file, [])
+			new_mol = Mol(mol.atoms, ob_minimize_geom(mol))
+			new_mol.WriteXYZfile("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/uncharged/ob_min", file[64:-4], "w")
+		except:
+			pass
+	
+minimize_ob()
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
@@ -785,8 +797,8 @@ def water_web():
 # test_tf_neighbor()
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
-# train_energy_GauSH("chemspider12_wb97xd_6311gss")
-train_AE_GauSH("water_wb97xd_6311gss")
+# train_energy_GauSH("water_wb97xd_6311gss")
+# train_AE_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
