@@ -291,6 +291,24 @@ def train_energy_GauSH(mset):
 	PARAMS["sparse_cutoff"] = 7.0
 	manager = TFMolManageDirect(mset, network_type = "BPGauSH")
 
+def train_AE_GauSH(mset):
+	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+	PARAMS["SH_LMAX"] = 5
+	PARAMS["train_rotation"] = True
+	PARAMS["weight_decay"] = None
+	PARAMS["HiddenLayers"] = [512, 512, 512]
+	PARAMS["learning_rate"] = 0.00005
+	PARAMS["max_steps"] = 1000
+	PARAMS["test_freq"] = 1
+	PARAMS["batch_size"] = 100
+	PARAMS["NeuronType"] = "shifted_softplus"
+	PARAMS["tf_prec"] = "tf.float32"
+	PARAMS["Profiling"] = False
+	PARAMS["train_sparse"] = False
+	PARAMS["sparse_cutoff"] = 7.0
+	network = GauSHEncoder(mset)
+	network.start_training()
+
 def test_h2o():
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_NRAD"] = 16
@@ -767,7 +785,8 @@ def water_web():
 # test_tf_neighbor()
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
-train_energy_GauSH("water_wb97xd_6311gss")
+# train_energy_GauSH("chemspider12_wb97xd_6311gss")
+train_AE_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -801,9 +820,6 @@ train_energy_GauSH("water_wb97xd_6311gss")
 # b=MSet()
 # for i in range(2):
 # 	b.mols.append(a.mols[i])
-# 	new_mol = copy.deepcopy(a.mols[i])
-# 	new_mol.RotateRandomUniform()
-# 	b.mols.append(new_mol)
 # maxnatoms = b.MaxNAtoms()
 # # for mol in a.mols:
 # # 	mol.make_neighbors(7.0)
@@ -837,16 +853,14 @@ train_energy_GauSH("water_wb97xd_6311gss")
 # # r_cutoff = 6.5
 # gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
 # elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
-# ele_neg = tf.constant([x[7] for x in AtomData], dtype=tf.float32)
-# vdw_r = tf.constant([x[8] for x in AtomData], dtype=tf.float32)
-# polariz = tf.constant([x[11] for x in AtomData], dtype=tf.float32)
-# embed_facs = tf.transpose(tf.stack([ele_neg, vdw_r, polariz]))
-# print embed_facs
+# rotation_params = tf.stack([np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
+# 		np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
+# 		tf.random_uniform([2, maxnatoms], minval=0.1, maxval=1.9, dtype=tf.float32)], axis=-1)
 # # atomic_embed_factors = tf.Variable(PARAMS["ANES"], trainable=True, dtype=tf.float32)
 # # tmp = tf_neighbor_list_sort(xyzstack, zstack, natomsstack, elements, r_cutoff)
 # # tmp = tf_sparse_gaush_element_channel(xyzstack, zstack, pairstack, elements, gaussian_params, 1)
 # # tmp2 = tf_gaush_element_channel(xyzstack, zstack, elements, gaussian_params, 1)
-# tmp = tf_gaush_embed_channel(xyzstack, zstack, elements, gaussian_params, 3, embed_facs)
+# tmp = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3, rotation_params)
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
 # options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -855,11 +869,12 @@ train_energy_GauSH("water_wb97xd_6311gss")
 # # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
 # @TMTiming("test")
 # def get_pairs():
-# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
-# 	return tmp3
-# tmp5 = get_pairs()
-# print tmp5[0][1]
-# print tmp5[0][1].shape
+# 	tmp3, tmp4 = sess.run(tmp, options=options, run_metadata=run_metadata)
+# 	return tmp3, tmp4
+# tmp5, tmp6 = get_pairs()
+# print tmp5
+# print tmp5.shape
+# print tmp6.shape
 # # print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
 # # print np.allclose(tmp5, tmp6, 1e-01)
 # # print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)

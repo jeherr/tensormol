@@ -83,6 +83,12 @@ except:
 	pass
 
 try:
+	import openbabel as ob
+	LOGGER.debug("OpenBabel module found.")
+except Exception as Ex:
+	print("OpenBabel module not installed -- no classical force field sampling")
+
+try:
 	import multiprocessing
 	N_CORES=multiprocessing.cpu_count()
 	LOGGER.debug("Found "+str(N_CORES)+" CPUs to thread over... ")
