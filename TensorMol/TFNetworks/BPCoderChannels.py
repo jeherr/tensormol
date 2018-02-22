@@ -7,12 +7,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
-import numpy as np
-import matplotlib.pyplot as plt
-import time
-import random
-import sys
+from .TFInstance import *
+from ..Containers.TensorMolData import *
+from .TFMolInstance import *
+from ..ForceModels.ElectrostaticsTF import *
+from ..ForceModifiers.Neighbors import *
+from ..TFDescriptors.RawSymFunc import *
+from ..TFDescriptors.RawAutoEnc import *
 if sys.version_info[0] < 3:
 	import cPickle as pickle
 else:

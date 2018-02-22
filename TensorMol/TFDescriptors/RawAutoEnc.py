@@ -72,6 +72,9 @@ class AtomCoder(Coder):
 	If you make a plot of the latent vectors with these settings
 	Lots of periodic information is encoded in the 4-D latent vector which
 	is also quantitatively reversible into the atom's identity.
+
+	There are clear downsides to using this coding (it depends on parameters)
+	But hopefully it allows us to treat many atom types.
 	"""
 	def __init__(self,sess_=None,batch_size_=2000, MaxNAtom_=64, NOutChan_=4):
 		self.feature_len = len(AtomData[0][2:])
@@ -182,6 +185,19 @@ class AtomCoder(Coder):
 		for step in range(1, mxsteps+1):
 			self.train_step(step)
 		return
+	def make_emb_factors(self):
+		"""
+		I really don't think this is how this class should be used.
+		instead I think the encoding shoule be trainable with the energy
+		but for the time-being, let's just give it a try.
+		"""
+		tmp = np.zeros((53,self.out_chan))
+		for I in range(54):
+		    data = np.ones((self.batch_size,self.MaxNAtom))*I
+		    feed_dict = {self.Z_pl:data}
+		    lout = ac.sess.run([self.LatentOutput], feed_dict=feed_dict)
+		    tmp[I] = lout[0][0]
+		return tmp
 
 class GeometryCoder(AtomCoder):
 	"""

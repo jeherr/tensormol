@@ -40,6 +40,7 @@ class MSet:
 		if filename == None:
 			filename = self.name
 		from ..Containers.PickleTM import UnPickleTM as UnPickleTM
+		print("Loading Set: ", self.path+filename+self.suffix)
 		tmp = UnPickleTM(self.path+filename+self.suffix)
 		self.__dict__.update(tmp)
 		LOGGER.info("Loaded, "+str(len(self.mols))+" molecules "+str(self.NAtoms())+" Atoms total "+str(self.AtomTypes())+" Types ")
