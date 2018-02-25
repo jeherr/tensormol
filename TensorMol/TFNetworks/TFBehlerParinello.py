@@ -304,8 +304,6 @@ class BehlerParinelloNetwork(object):
 		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		if self.train_sparse:
 			batch_data.append(self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
-		# NLEE = NeighborListSet(xyzs, num_atoms, False, False, None)
-		# rad_eep = NLEE.buildPairs(self.coulomb_cutoff)
 		return batch_data
 
 	def get_dipole_test_batch(self, batch_size):
@@ -334,8 +332,6 @@ class BehlerParinelloNetwork(object):
 		batch_data.append(self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		if self.train_sparse:
 			batch_data.append(self.pairs_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
-		# NLEE = NeighborListSet(xyzs, num_atoms, False, False, None)
-		# rad_eep = NLEE.buildPairs(self.coulomb_cutoff)
 		return batch_data
 
 	def variable_summaries(self, var):
@@ -374,7 +370,7 @@ class BehlerParinelloNetwork(object):
 		variable = tf.Variable(tf.truncated_normal(shape, stddev = stddev, dtype = self.tf_precision), name = name)
 		if weight_decay is not None:
 			weightdecay = tf.multiply(tf.nn.l2_loss(variable), weight_decay, name='weight_loss')
-			tf.add_to_collection('losses', weightdecay)
+			tf.add_to_collection('energy_losses', weightdecay)
 		return variable
 
 	def fill_dipole_feed_dict(self, batch_data):
@@ -584,8 +580,15 @@ class BehlerParinelloNetwork(object):
 			batch_data = self.get_energy_train_batch(self.batch_size)
 			feed_dict = self.fill_energy_feed_dict(batch_data)
 			if self.train_gradients and self.train_rotation:
-				_, summaries, total_loss, energy_loss, gradient_loss, rotation_loss = self.sess.run([self.energy_train_op,
-				self.summary_op, self.energy_losses, self.energy_loss, self.gradient_loss, self.rotation_loss], feed_dict=feed_dict)
+				_, summaries, total_loss, energy_loss, gradient_loss, rotation_loss, total_energy, energy_labels  = self.sess.run([self.energy_train_op,
+				self.summary_op, self.energy_losses, self.energy_loss, self.gradient_loss, self.rotation_loss, self.total_energy, self.energy_pl], feed_dict=feed_dict)
+				if energy_loss > 1.0:
+					print("Largest batch error:", np.amax(np.absolute(total_energy - energy_labels)))
+					lei = np.argmax(np.absolute(total_energy - energy_labels))
+					print("Output and label:", total_energy[lei], energy_labels[lei])
+					print("Molecule batch index:", self.train_idxs[self.train_pointer - lei])
+					print(self.energy_data[self.train_idxs[self.train_pointer - self.batch_size:self.train_pointer]])
+					print(energy_labels)
 				train_gradient_loss += gradient_loss
 				train_rotation_loss += rotation_loss
 			elif self.train_gradients:
@@ -1069,7 +1072,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 
 		rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
 				np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-				tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision)], axis=-1, name="rotation_params")
+				tf.random_uniform([self.batch_size], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1, name="rotation_params")
 		rotated_xyzs = tf_random_rotate(xyzs_pl, rotation_params)
 		if self.train_sparse:
 			embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, Zs_pl, pairs_pl,
@@ -1338,7 +1341,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 
 		rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
 						np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-						tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision)], axis=-1)
+						tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
 		padding_mask = tf.where(tf.not_equal(Zs_pl, 0))
 		centered_xyzs = tf.expand_dims(tf.gather_nd(xyzs_pl, padding_mask), axis=1) - tf.gather(xyzs_pl, padding_mask[:,0])
 		rotation_params = tf.gather_nd(rotation_params, padding_mask)
@@ -1416,7 +1419,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 
 			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
 							np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-							tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision)], axis=-1)
+							tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
 			rotation_params = tf.gather_nd(rotation_params, padding_mask)

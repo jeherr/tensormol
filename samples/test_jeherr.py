@@ -302,7 +302,7 @@ def train_energy_GauSHv2(mset):
 	PARAMS["train_gradients"] = True
 	PARAMS["train_dipole"] = False
 	PARAMS["train_rotation"] = True
-	PARAMS["weight_decay"] = None
+	PARAMS["weight_decay"] = 0.0005
 	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.00005
 	PARAMS["max_steps"] = 1000
@@ -799,12 +799,14 @@ def water_web():
 
 def minimize_ob():
 	import glob
-	for file in glob.iglob("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/uncharged/*.xyz"):
+	import os
+	for file in glob.iglob("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/uncharged/6*.xyz"):
 		try:
-			mol = Mol()
-			mol.read_xyz_with_properties(file, [])
-			new_mol = Mol(mol.atoms, ob_minimize_geom(mol))
-			new_mol.WriteXYZfile("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/uncharged/ob_min", file[64:-4], "w")
+			if not os.path.isfile("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/uncharged/ob_min"+file[64:-4]+".xyz"):
+				mol = Mol()
+				mol.read_xyz_with_properties(file, [])
+				new_mol = Mol(mol.atoms, ob_minimize_geom(mol))
+				new_mol.WriteXYZfile("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/uncharged/ob_min", file[64:-4], "w")
 		except:
 			pass
 
