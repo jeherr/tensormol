@@ -49,6 +49,8 @@ class BehlerParinelloNetwork(object):
 		self.train_dipole = PARAMS["train_dipole"]
 		self.train_quadrupole = PARAMS["train_quadrupole"]
 		self.train_rotation = PARAMS["train_rotation"]
+		self.train_dropout = PARAMS["train_dropout"]
+		self.keep_prob = PARAMS["keep_prob"]
 		self.train_sparse = PARAMS["train_sparse"]
 		self.sparse_cutoff = PARAMS["sparse_cutoff"]
 		self.profiling = PARAMS["Profiling"]
@@ -304,6 +306,8 @@ class BehlerParinelloNetwork(object):
 		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		if self.train_sparse:
 			batch_data.append(self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		if self.train_dropout:
+			batch_data.append(self.keep_prob)
 		return batch_data
 
 	def get_dipole_test_batch(self, batch_size):
@@ -332,6 +336,8 @@ class BehlerParinelloNetwork(object):
 		batch_data.append(self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		if self.train_sparse:
 			batch_data.append(self.pairs_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		if self.train_dropout:
+			batch_data.append(1.0)
 		return batch_data
 
 	def variable_summaries(self, var):
@@ -401,6 +407,8 @@ class BehlerParinelloNetwork(object):
 		pl_list = [self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.energy_pl, self.gradients_pl]
 		if self.train_sparse:
 			pl_list.append(self.pairs_pl)
+		if self.train_dropout:
+			pl_list.append(self.keep_prob_pl)
 		feed_dict={i: d for i, d in zip(pl_list, batch_data)}
 		return feed_dict
 
@@ -429,6 +437,8 @@ class BehlerParinelloNetwork(object):
 									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
 							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
 							branches[-1].append(self.activation_function(tf.matmul(inputs, weights) + biases))
+							if self.train_dropout:
+								branches[-1].append(tf.nn.dropout(branches[-1][-1], self.keep_prob_pl))
 							variables.append(weights)
 							variables.append(biases)
 					else:
@@ -437,6 +447,8 @@ class BehlerParinelloNetwork(object):
 									stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
 							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
 							branches[-1].append(self.activation_function(tf.matmul(branches[-1][-1], weights) + biases))
+							if self.train_dropout:
+								branches[-1].append(tf.nn.dropout(branches[-1][-1], self.keep_prob_pl))
 							variables.append(weights)
 							variables.append(biases)
 				with tf.name_scope(str(self.elements[e])+'_regression_linear'):
@@ -444,6 +456,8 @@ class BehlerParinelloNetwork(object):
 							stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
 					biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
 					branches[-1].append(tf.squeeze(tf.matmul(branches[-1][-1], weights) + biases, axis=1))
+					if self.train_dropout:
+						branches[-1].append(tf.nn.dropout(branches[-1][-1], self.keep_prob_pl))
 					variables.append(weights)
 					variables.append(biases)
 					output += tf.scatter_nd(index, branches[-1][-1], [self.batch_size, self.max_num_atoms])
@@ -580,15 +594,8 @@ class BehlerParinelloNetwork(object):
 			batch_data = self.get_energy_train_batch(self.batch_size)
 			feed_dict = self.fill_energy_feed_dict(batch_data)
 			if self.train_gradients and self.train_rotation:
-				_, summaries, total_loss, energy_loss, gradient_loss, rotation_loss, total_energy, energy_labels  = self.sess.run([self.energy_train_op,
-				self.summary_op, self.energy_losses, self.energy_loss, self.gradient_loss, self.rotation_loss, self.total_energy, self.energy_pl], feed_dict=feed_dict)
-				if energy_loss > 1.0:
-					print("Largest batch error:", np.amax(np.absolute(total_energy - energy_labels)))
-					lei = np.argmax(np.absolute(total_energy - energy_labels))
-					print("Output and label:", total_energy[lei], energy_labels[lei])
-					print("Molecule batch index:", self.train_idxs[self.train_pointer - lei])
-					print(self.energy_data[self.train_idxs[self.train_pointer - self.batch_size:self.train_pointer]])
-					print(energy_labels)
+				_, summaries, total_loss, energy_loss, gradient_loss, rotation_loss  = self.sess.run([self.energy_train_op,
+				self.summary_op, self.energy_losses, self.energy_loss, self.gradient_loss, self.rotation_loss], feed_dict=feed_dict)
 				train_gradient_loss += gradient_loss
 				train_rotation_loss += rotation_loss
 			elif self.train_gradients:
@@ -1407,6 +1414,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			self.quadrupole_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, 3])
 			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
+			self.keep_prob_pl = tf.placeholder(self.tf_precision, shape=())
 			if self.train_sparse:
 				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)

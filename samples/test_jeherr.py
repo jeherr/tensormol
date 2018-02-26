@@ -313,6 +313,8 @@ def train_energy_GauSHv2(mset):
 	PARAMS["Profiling"] = False
 	PARAMS["train_sparse"] = False
 	PARAMS["sparse_cutoff"] = 7.0
+	PARAMS["train_dropout"] = True
+	PARAMS["keep_prob"] = 0.7
 	network = BehlerParinelloGauSHv2(mset)
 	network.start_training()
 

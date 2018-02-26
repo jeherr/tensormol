@@ -95,6 +95,8 @@ class TMParams(dict):
 		self["train_dipole"] = True
 		self["train_quadrupole"] = False
 		self["train_rotation"] = True
+		self["train_dropout"] = False
+		self["keep_prob"] = 0.7
 		# Opt Parameters
 		self["OptMaxCycles"]=50
 		self["OptThresh"]=0.0001
