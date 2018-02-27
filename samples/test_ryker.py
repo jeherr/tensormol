@@ -3,7 +3,22 @@ import os
 import numpy as np
 import time
 
-def test():
+def train_AE_GauSH(mset):
+	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+	PARAMS["SH_LMAX"] = 3
+	PARAMS["train_rotation"] = True
+	PARAMS["weight_decay"] = None
+	PARAMS["HiddenLayers"] = [512]
+	PARAMS["learning_rate"] = 0.00005
+	PARAMS["max_steps"] = 1000
+	PARAMS["test_freq"] = 1
+	PARAMS["batch_size"] = 100
+	PARAMS["NeuronType"] = "shifted_softplus"
+	PARAMS["tf_prec"] = "tf.float32"
+	network = GauSHEncoder(mset)
+	network.start_training()
+
+def test_quads():
 	a = MSet("water_aug_cc_pvdz")
 	a.Load()
 	for mol in a.mols:
@@ -74,8 +89,9 @@ def optimize_taxol():
 	Taxol.ReadXYZ()
 	GeomOptimizer("EnergyForceField").Opt(Taxol, filename="OptLog", Debug=False)
 
-#test()
+train_AE_GauSH("water_wb97xd_6311gss")
+#test_quads()
 #make_mini_set("water_aug_cc_pvdz")
-train_energy_symm_func("water_aug_cc_pvdz_mini")
+#train_energy_symm_func("water_aug_cc_pvdz_mini")
 #get_losses("networks/nicotine_aimd_log.txt")
 #optimize_taxol()
