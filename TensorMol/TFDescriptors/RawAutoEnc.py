@@ -31,6 +31,91 @@ from tensorflow.python.client import timeline
 if (HAS_TF):
 	import tensorflow as tf
 
+class VariationalAutoencoder(object):
+	"""
+	Base Class for a Kingma-style variational autoencoder
+	with a few bells and whistles (Gradient Clipping)
+
+	TODO: Choose intelligent Initializers.
+	"""
+	def __init__(self):
+		self.n_latent = 5
+		self.act_fcn = tf.nn.selu
+		return
+	def Encoder(self,in_):
+		l1 = tf.layers.dense(inputs=in_, units=64, activation=act_fcn, use_bias=True)
+		l2 = tf.layers.dense(inputs=l1, units=64, activation=act_fcn, use_bias=True)
+		latent_vector = tf.layers.dense(inputs=l2, units=self.n_latent, activation=act_fcn, use_bias=True)
+		z_mean = tf.layers.dense(inputs=latent_vector, units=self.n_latent, activation=None, use_bias=True)
+		z_log_sigma = tf.layers.dense(inputs=latent_vector, units=self.n_latent, activation=None, use_bias=True)
+		return latent_vector, z_mean, z_log_sigma
+	def Decoder(self,in_,target_shape_):
+		l1 = tf.layers.dense(inputs=in_, units=64, activation=act_fcn, use_bias=True)
+		l2 = tf.layers.dense(inputs=l1, units=64, activation=act_fcn, use_bias=True)
+		l3 = tf.layers.dense(inputs=l2, units=target_shape_, activation=act_fcn, use_bias=True)
+		return
+	@staticmethod
+	def sampleGaussian(mu, log_sigma):
+		"""
+		The noise process which regularizes the autoencoder
+		"""
+		with tf.name_scope("sample_gaussian"):
+			# reparameterization trick
+			epsilon = tf.random_normal(tf.shape(log_sigma), name="epsilon")
+			return mu + epsilon * tf.exp(log_sigma) # N(mu, I * sigma**2)
+	@staticmethod
+	def crossEntropy(obs, actual, offset=1e-7):
+		"""Binary cross-entropy, per training example"""
+		# (tf.Tensor, tf.Tensor, float) -> tf.Tensor
+		with tf.name_scope("cross_entropy"):
+			# bound by clipping to avoid nan
+			obs_ = tf.clip_by_value(obs, offset, 1 - offset)
+			return -tf.reduce_sum(actual * tf.log(obs_) + (1 - actual) * tf.log(1 - obs_), 1)
+	@staticmethod
+	def l1_loss(obs, actual):
+		"""L1 loss (a.k.a. LAD), per training example"""
+		# (tf.Tensor, tf.Tensor, float) -> tf.Tensor
+		with tf.name_scope("l1_loss"):
+			return tf.reduce_sum(tf.abs(obs - actual) , 1)
+	@staticmethod
+	def crossEntropy(obs, actual, offset=1e-15):
+		"""Binary cross-entropy, per training example"""
+		# (tf.Tensor, tf.Tensor, float) -> tf.Tensor
+		with tf.name_scope("cross_entropy"):
+			obs_ = tf.clip_by_value(obs, offset, 1 - offset)# bound by clipping to avoid nan
+			return -tf.reduce_sum(actual * tf.log(obs_) + (1 - actual) * tf.log(1 - obs_), 1)
+	@staticmethod
+	def kullbackLeibler(mu, log_sigma):
+		"""(Gaussian) Kullback-Leibler divergence KL(q||p), per training example"""
+		# (tf.Tensor, tf.Tensor) -> tf.Tensor
+		with tf.name_scope("KL_divergence"):
+			# = -0.5 * (1 + log(sigma**2) - mu**2 - sigma**2)
+			return -0.5 * tf.reduce_sum(1 + 2 * log_sigma - mu**2 -tf.exp(2 * log_sigma), 1)
+	def composeVAE(in_):
+		"""
+		Put together the autoencoder, encoder is a tensor which depends on the input.
+		"""
+		with tf.name_scope("VAE"):
+			encoded, z_mean, z_log_sigma = self.Encoder(in_)
+			z = VariationalAutoencoder.sampleGaussian(z_mean,z_log_sigma)
+			decoded = self.Decoder(z, tf.shape(in_)[1:])
+
+		with tf.name_scope("cost"):
+			rec_loss =
+			# average over minibatch
+			cost = tf.reduce_mean(rec_loss + kl_loss, name="vae_cost")
+			cost += l2_reg
+
+		with tf.name_scope("Adam_optimizer"):
+			global_step = tf.Variable(0, trainable=False)
+			optimizer = tf.train.AdamOptimizer(self.learning_rate)
+			tvars = tf.trainable_variables()
+			grads_and_vars = optimizer.compute_gradients(cost, tvars)
+			clipped = [(tf.clip_by_value(grad, -5, 5), tvar) for grad, tvar in grads_and_vars]
+			train_op = optimizer.apply_gradients(clipped, global_step=global_step,
+				name="minimize_cost")
+			return (encoded,decoded,loss,global_step)
+
 class Coder:
 	"""
 	This is an abstract base class for a "coder"
