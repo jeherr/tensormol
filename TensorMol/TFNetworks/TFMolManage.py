@@ -14,6 +14,7 @@ from .TFMolInstance import *
 from .TFMolInstanceDirect import *
 from .TFBehlerParinello import *
 from .TFBehlerParinelloSymEE import *
+from .TFBPAutoencoder import *
 from .TFMolInstanceEE import *
 from .TFMolInstanceDirect import *
 from ..Math.QuasiNewtonTools import *
@@ -126,6 +127,8 @@ class TFMolManage(TFManage):
 			self.Instances = MolInstance_DirectBP_EE_SymFunction(self.TData)
 		elif (self.NetType == "fc_sqdiff_BP_Direct_EandG_SymFunction"):
 			self.Instances = MolInstance_DirectBP_EandG_SymFunction(self.TData)
+		elif (self.NetType == "fc_sqdiff_BP_Direct_EandG_SymChannel"):
+			self.Instances = MolInstance_DirectBP_EandG_SymChannel(self.TData)
 		elif (self.NetType == "fc_sqdiff_BP_Direct_Charge_SymFunction"):
 			self.Instances = MolInstance_DirectBP_Charge_SymFunction(self.TData)
 		elif (self.NetType == "Dipole_BP"):
@@ -1485,6 +1488,8 @@ class TFMolManage(TFManage):
 			self.Instances = MolInstance_DirectBP_EE_SymFunction(None,self.TrainedNetworks[0], Trainable_ = self.Trainable)
 		elif (self.NetType == "fc_sqdiff_BP_Direct_EandG_SymFunction"):
 			self.Instances = MolInstance_DirectBP_EandG_SymFunction(None,self.TrainedNetworks[0], Trainable_ = self.Trainable)
+		elif (self.NetType == "fc_sqdiff_BP_Direct_EandG_SymChannel"):
+			self.Instances =MolInstance_DirectBP_EandG_SymChannel(None,self.TrainedNetworks[0], Trainable_ = self.Trainable)
 		elif (self.NetType == "fc_sqdiff_BP_Direct_Charge_SymFunction"):
 			self.Instances = MolInstance_DirectBP_Charge_SymFunction(None,self.TrainedNetworks[0], Trainable_ = self.Trainable)
 		elif (self.NetType == "Dipole_BP"):
@@ -1567,6 +1572,8 @@ class TFMolManageDirect:
 			self.network = BehlerParinelloSymFunc(self.mol_set_name)
 		elif self.network_type == "BPGauSH":
 			self.network = BehlerParinelloGauSH(self.mol_set_name)
+		elif self.network_type == "BPAutoEncGauSH":
+			self.network = BPAutoEncGauSH(self.mol_set_name)
 		else:
 			raise Exception("Unknown Network Type!")
 		return
@@ -1593,6 +1600,8 @@ class TFMolManageDirect:
 			self.network = BehlerParinelloSymFunc(name=self.network_name)
 		elif (self.network_type == "BPGauSH"):
 			self.network = BehlerParinelloGauSH(name=self.network_name)
+		elif (self.network_type == "BPAutoEncGauSH"):
+			self.network = BPAutoEncGauSH(name=self.network_name)
 		else:
 			raise Exception("Unknown Network Type!")
 		return

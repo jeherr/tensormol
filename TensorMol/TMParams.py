@@ -81,7 +81,8 @@ class TMParams(dict):
 		self["GradScalar"] = 1.0/20.0
 		self["DipoleScaler"]=1.0
 		self["train_sparse"] = False
-		self["sparse_cutoff"] = 5.0
+		self["sparse_cutoff"] = 5.0 # This should specify type of sparsity ie: gau_sh_sparse_cutoff.
+		self["atom_coding"] = "AtomCoder" # Planned options. GeometryCoder...
 		# DATA usage parameters
 		self["InNormRoutine"] = None
 		self["OutNormRoutine"] = None

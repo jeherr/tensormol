@@ -134,6 +134,16 @@ def TMTiming(nm_="Obs"):
 		return wf
 	return wrap
 
+def SavedOnInterrupt(f):
+	def wrapper(*args,**kwargs):
+		try:
+			return f(*args,**kwargs)
+		except(KeyboardInterrupt):
+			print("Calling Save() due to KeyboardInterrupt... ")
+			args[0].Save()
+			sys.exit(0)
+	return wrapper
+
 @atexit.register
 def exitTensorMol():
 	PrintTMTIMER()

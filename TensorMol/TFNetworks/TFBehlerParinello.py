@@ -1048,7 +1048,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 	also has sparse evaluation using an updated version of the
 	neighbor list, and a polynomial cutoff coulomb interaction.
 	"""
-	def __init__(self, mol_set=None, name=None):
+	def __init__(self, mol_set_name=None, name=None):
 		"""
 		Args:
 			mol_set (TensorMol.MSet object): a class which holds the training data
@@ -1057,7 +1057,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		Notes:
 			if name != None, attempts to load a previously saved network, otherwise assumes a new network
 		"""
-		BehlerParinelloNetwork.__init__(self, mol_set, name)
+		BehlerParinelloNetwork.__init__(self, mol_set_name, name)
 		if name == None:
 			self.network_type = "BPGauSH"
 			self.name = self.network_type+"_"+self.mol_set_name+"_"+time.strftime("%a_%b_%d_%H.%M.%S_%Y")
