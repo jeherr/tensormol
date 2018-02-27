@@ -84,7 +84,6 @@ class GauSHEncoder(object):
 		self.network_directory = PARAMS["networks_directory"]+self.name
 		self.l_max = PARAMS["SH_LMAX"]
 		self.gaussian_params = PARAMS["RBFS"]
-		self.latent_shape = 512
 		return
 
 	def assign_activation(self):
@@ -424,6 +423,7 @@ class GauSHEncoder(object):
 		sess.close()
 		self.train_pointer = 0
 		self.embed_shape = embedding.shape[1]
+		self.latent_shape = self.embed_shape - 3
 		return
 
 	def train_prepare(self, restart=False):

@@ -1462,30 +1462,21 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			xyz_grad, rot_grad = tf.gradients(self.total_energy, [rotated_xyzs, rotation_params])
 			invrot_matrix = tf.matrix_inverse(rot_matrix)
 			unrot_xyz_grad = tf.einsum("lij,lkj->lki", invrot_matrix, (rotated_xyzs + xyz_grad)) - centered_xyzs
-			gradients = tf.zeros([self.batch_size, self.max_num_atoms, 3], dtype=self.tf_precision)
-			gradients += tf.scatter_nd(padding_mask[:,0], unrot_xyz_grad, [self.batch_size, self.max_num_atoms, 3])
-			self.gradients = tf.gather_nd(xyz_grad, padding_mask)
+			gradients = tf.scatter_nd(padding_mask, unrot_xyz_grad, [self.batch_size, self.max_num_atoms, self.max_num_atoms, 3])
+			gradients = tf.reduce_sum(gradients, axis=1)
+			self.gradients = tf.gather_nd(gradients, padding_mask)
 			self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
 			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
 			tf.summary.scalar("energy loss", self.energy_loss)
 			tf.add_to_collection('energy_losses', self.energy_loss)
 			self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
-			self.rotation_loss = 0.02 * self.loss_op(rot_grad)
+			self.rotation_loss = 0.002 * self.loss_op(rot_grad)
 			if self.train_gradients:
 				tf.add_to_collection('energy_losses', self.gradient_loss)
 				tf.summary.scalar("gradient loss", self.gradient_loss)
 			if self.train_rotation:
 				tf.add_to_collection('energy_losses', self.rotation_loss)
 				tf.summary.scalar("rotational loss", self.rotation_loss)
-
-			# barrier_function = 1.e5 * tf.concat([tf.pow((0.15 - self.gaussian_params), 3.0), tf.expand_dims(tf.pow((self.gaussian_params[:,0] - 6.1), 3.0), axis=-1),
-			# 			tf.expand_dims(tf.pow((self.gaussian_params[:,1] - 3.6), 3.0), axis=-1)], axis=1)
-			# truncated_barrier_function = tf.reduce_sum(tf.where(tf.greater(barrier_function, 0.0),
-			# 					barrier_function, tf.zeros_like(barrier_function)))
-			# gaussian_overlap_loss = tf.square(0.001 / tf.reduce_min(tf.self_adjoint_eig(tf_gaussian_overlap(self.gaussian_params))[0]))
-			# tf.add_to_collection('dipole_losses', truncated_barrier_function)
-			# tf.add_to_collection('dipole_losses', gaussian_overlap_loss)
-
 			self.energy_losses = tf.add_n(tf.get_collection('energy_losses'))
 			tf.summary.scalar("energy losses", self.energy_losses)
 

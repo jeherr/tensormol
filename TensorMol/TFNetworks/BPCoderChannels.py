@@ -21,6 +21,11 @@ else:
 # A Variation on BP which uses a classification channel.
 #
 class BPCoder(object):
+	'''
+	I'm so sorry guys.
+	I'm trying really hard to make this class work.
+	<3 -Ryker
+	'''
 	def __init__(self):
 
 		# Network params
