@@ -294,45 +294,33 @@ def train_energy_GauSH(mset):
 
 def train_energy_GauSHv2(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
-	PARAMS["SH_NRAD"] = 16
 	PARAMS["SH_LMAX"] = 5
-	PARAMS["SH_rot_invar"] = False
-	PARAMS["EECutoffOn"] = 0.0
-	PARAMS["Elu_Width"] = 6.0
 	PARAMS["train_gradients"] = True
 	PARAMS["train_dipole"] = False
 	PARAMS["train_rotation"] = True
-	PARAMS["weight_decay"] = 0.0005
-	PARAMS["HiddenLayers"] = [512, 512, 512]
-	PARAMS["learning_rate"] = 0.00005
-	PARAMS["max_steps"] = 1000
-	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 100
-	PARAMS["NeuronType"] = "shifted_softplus"
-	PARAMS["tf_prec"] = "tf.float32"
-	PARAMS["Profiling"] = False
-	PARAMS["train_sparse"] = False
-	PARAMS["sparse_cutoff"] = 7.0
-	PARAMS["train_dropout"] = True
-	PARAMS["keep_prob"] = 0.7
-	network = BehlerParinelloGauSHv2(mset)
-	network.start_training()
-
-def train_AE_GauSH(mset):
-	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
-	PARAMS["SH_LMAX"] = 5
-	PARAMS["train_rotation"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [960, 768]
+	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.00005
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 1
 	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
-	PARAMS["Profiling"] = False
-	PARAMS["train_sparse"] = False
-	PARAMS["sparse_cutoff"] = 7.0
+	network = BehlerParinelloGauSHv2(mset)
+	network.start_training()
+
+def train_AE_GauSH(mset):
+	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+	PARAMS["SH_LMAX"] = 3
+	PARAMS["train_rotation"] = True
+	PARAMS["weight_decay"] = None
+	PARAMS["HiddenLayers"] = [512]
+	PARAMS["learning_rate"] = 0.00005
+	PARAMS["max_steps"] = 1000
+	PARAMS["test_freq"] = 1
+	PARAMS["batch_size"] = 100
+	PARAMS["NeuronType"] = "shifted_softplus"
+	PARAMS["tf_prec"] = "tf.float32"
 	network = GauSHEncoder(mset)
 	network.start_training()
 
