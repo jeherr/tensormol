@@ -101,7 +101,7 @@ class VariationalAutoencoder(object):
 			decoded = self.Decoder(z, tf.shape(in_)[1:])
 
 		with tf.name_scope("cost"):
-			rec_loss =
+			# rec_loss =
 			# average over minibatch
 			cost = tf.reduce_mean(rec_loss + kl_loss, name="vae_cost")
 			cost += l2_reg
