@@ -1459,12 +1459,8 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				self.dipole_train_op = self.optimizer(self.dipole_losses, self.learning_rate, self.momentum, dipole_variables)
 			else:
 				self.total_energy = self.bp_energy
-			xyz_grad, rot_grad = tf.gradients(self.total_energy, [rotated_xyzs, rotation_params])
-			invrot_matrix = tf.matrix_inverse(rot_matrix)
-			unrot_xyz_grad = tf.einsum("lij,lkj->lki", invrot_matrix, (rotated_xyzs + xyz_grad)) - centered_xyzs
-			gradients = tf.scatter_nd(padding_mask, unrot_xyz_grad, [self.batch_size, self.max_num_atoms, self.max_num_atoms, 3])
-			gradients = tf.reduce_sum(gradients, axis=1)
-			self.gradients = tf.gather_nd(gradients, padding_mask)
+			xyz_grad, rot_grad = tf.gradients((atom_energies * energy_stddev) + energy_mean, [self.xyzs_pl, rotation_params])
+			self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 			self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
 			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
 			tf.summary.scalar("energy loss", self.energy_loss)
