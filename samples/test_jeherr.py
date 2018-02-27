@@ -289,11 +289,14 @@ def train_energy_GauSH(mset):
 	PARAMS["Profiling"] = False
 	PARAMS["train_sparse"] = False
 	PARAMS["sparse_cutoff"] = 7.0
-	manager = TFMolManageDirect(mset, network_type = "BPGauSH")
+	network = BehlerParinelloGauSH(mset)
+	network.start_training()
 
-def train_AE_GauSH(mset):
+def train_energy_GauSHv2(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_LMAX"] = 5
+	PARAMS["train_gradients"] = True
+	PARAMS["train_dipole"] = False
 	PARAMS["train_rotation"] = True
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512, 512]
@@ -303,9 +306,21 @@ def train_AE_GauSH(mset):
 	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
-	PARAMS["Profiling"] = False
-	PARAMS["train_sparse"] = False
-	PARAMS["sparse_cutoff"] = 7.0
+	network = BehlerParinelloGauSHv2(mset)
+	network.start_training()
+
+def train_AE_GauSH(mset):
+	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+	PARAMS["SH_LMAX"] = 3
+	PARAMS["train_rotation"] = True
+	PARAMS["weight_decay"] = None
+	PARAMS["HiddenLayers"] = [512]
+	PARAMS["learning_rate"] = 0.00005
+	PARAMS["max_steps"] = 1000
+	PARAMS["test_freq"] = 1
+	PARAMS["batch_size"] = 100
+	PARAMS["NeuronType"] = "shifted_softplus"
+	PARAMS["tf_prec"] = "tf.float32"
 	network = GauSHEncoder(mset)
 	network.start_training()
 
@@ -772,6 +787,20 @@ def water_web():
 		f.write(str(i)+"  "+str(en*627.509)+"\n")
 	f.close()
 
+def minimize_ob():
+	import glob
+	import os
+	for file in glob.iglob("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/uncharged/6*.xyz"):
+		try:
+			if not os.path.isfile("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/uncharged/ob_min"+file[64:-4]+".xyz"):
+				mol = Mol()
+				mol.read_xyz_with_properties(file, [])
+				new_mol = Mol(mol.atoms, ob_minimize_geom(mol))
+				new_mol.WriteXYZfile("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/uncharged/ob_min", file[64:-4], "w")
+		except:
+			pass
+
+# minimize_ob()
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
@@ -785,8 +814,9 @@ def water_web():
 # test_tf_neighbor()
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
-# train_energy_GauSH("chemspider12_wb97xd_6311gss")
-train_AE_GauSH("water_wb97xd_6311gss")
+# train_energy_GauSH("water_wb97xd_6311gss")
+train_energy_GauSHv2("water_wb97xd_6311gss")
+# train_AE_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
