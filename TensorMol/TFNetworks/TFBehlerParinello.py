@@ -1048,7 +1048,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 	also has sparse evaluation using an updated version of the
 	neighbor list, and a polynomial cutoff coulomb interaction.
 	"""
-	def __init__(self, mol_set=None, name=None):
+	def __init__(self, mol_set_name=None, name=None):
 		"""
 		Args:
 			mol_set (TensorMol.MSet object): a class which holds the training data
@@ -1057,7 +1057,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		Notes:
 			if name != None, attempts to load a previously saved network, otherwise assumes a new network
 		"""
-		BehlerParinelloNetwork.__init__(self, mol_set, name)
+		BehlerParinelloNetwork.__init__(self, mol_set_name, name)
 		if name == None:
 			self.network_type = "BPGauSH"
 			self.name = self.network_type+"_"+self.mol_set_name+"_"+time.strftime("%a_%b_%d_%H.%M.%S_%Y")
@@ -1459,12 +1459,8 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				self.dipole_train_op = self.optimizer(self.dipole_losses, self.learning_rate, self.momentum, dipole_variables)
 			else:
 				self.total_energy = self.bp_energy
-			xyz_grad, rot_grad = tf.gradients(self.total_energy, [rotated_xyzs, rotation_params])
-			invrot_matrix = tf.matrix_inverse(rot_matrix)
-			unrot_xyz_grad = tf.einsum("lij,lkj->lki", invrot_matrix, (rotated_xyzs + xyz_grad)) - centered_xyzs
-			gradients = tf.scatter_nd(padding_mask, unrot_xyz_grad, [self.batch_size, self.max_num_atoms, self.max_num_atoms, 3])
-			gradients = tf.reduce_sum(gradients, axis=1)
-			self.gradients = tf.gather_nd(gradients, padding_mask)
+			xyz_grad, rot_grad = tf.gradients((atom_energies * energy_stddev) + energy_mean, [self.xyzs_pl, rotation_params])
+			self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 			self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
 			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
 			tf.summary.scalar("energy loss", self.energy_loss)

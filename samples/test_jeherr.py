@@ -302,7 +302,7 @@ def train_energy_GauSHv2(mset):
 	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.00005
 	PARAMS["max_steps"] = 1000
-	PARAMS["test_freq"] = 1
+	PARAMS["test_freq"] = 5
 	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
