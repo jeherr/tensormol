@@ -2379,6 +2379,10 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.mil_j_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
+
+			#self.mil_jk_2_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
+			#self.mil_j_2_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
+
 			self.natom_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			self.keep_prob_pl =  tf.placeholder(self.tf_prec, shape=tuple([self.nlayer+1]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
@@ -2389,7 +2393,8 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			Ra_cut = tf.Variable(self.Ra_cut, trainable=False, dtype = self.tf_prec)
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_prec)
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_prec)
-			self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
+			#self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
+			self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
 			self.Etotal, self.Ebp, self.Ebp_atom = self.energy_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.keep_prob_pl)
 			self.gradient  = tf.gradients(self.Etotal, self.xyzs_pl, name="BPEGrad")
 			self.total_loss, self.loss, self.energy_loss, self.grads_loss = self.loss_op(self.Etotal, self.gradient, self.Elabel_pl, self.grads_pl, self.natom_pl)
@@ -2431,12 +2436,13 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			batch_data = self.TData.GetTrainBatch(self.batch_size) + [self.keep_prob]
 			actual_mols  = self.batch_size
 			t = time.time()
-			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal, Scatter_Sym= self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal, self.Scatter_Sym], feed_dict=self.fill_feed_dict(batch_data))
+			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal= self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal], feed_dict=self.fill_feed_dict(batch_data))
 			train_loss = train_loss + loss_value
 			train_energy_loss += energy_loss
 			train_grads_loss += grads_loss
 			duration = time.time() - start_time
 			num_of_mols += actual_mols
+			#print ("equal 1:", np.allclose(Scatter_Sym[0], Scatter_Sym_2[0]), np.allclose(Scatter_Sym[1], Scatter_Sym_2[1]))
 		self.print_training(step, train_loss, train_energy_loss, train_grads_loss, num_of_mols, duration)
 		return
 
@@ -2491,3 +2497,59 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
 		total_energy = tf.identity(bp_energy)
 		return total_energy, bp_energy, output
+
+
+	def fill_feed_dict(self, batch_data):
+		"""
+		Fill the tensorflow feed dictionary.
+
+		Args:
+			batch_data: a list of numpy arrays containing inputs, bounds, matrices and desired energies in that order.
+			and placeholders to be assigned. (it can be longer than that c.f. TensorMolData_BP)
+
+		Returns:
+			Filled feed dictionary.
+		"""
+		if (not np.all(np.isfinite(batch_data[2]),axis=(0))):
+			raise Exception("Please check your inputs")
+
+		#t = time.time()
+		#mil_j = batch_data[-4]
+		#mil_jk = batch_data[-3]
+		#npair = mil_j.shape[0]	
+		#ntriple = mil_jk.shape[0]
+	
+		#mil_j_2 = np.copy(mil_j)
+		#mil_jk_2 = np.copy(mil_jk)
+
+		#prev_mol = mil_j[0][0]
+		#prev_atom =  mil_j[0][1]
+		#index = 0 
+		#for i in range(0, npair):
+		#	if mil_j[i][0] == prev_mol and  mil_j[i][1] == prev_atom:
+		#		mil_j_2[i][3] = index
+		#		index += 1
+		#	else:
+		#		index = 0
+		#		mil_j_2[i][3] = index
+		#		prev_mol = mil_j[i][0]
+		#		prev_atom = mil_j[i][1]
+		#		index += 1
+	
+		#prev_mol = mil_jk[0][0]
+		#prev_atom =  mil_jk[0][1]
+		#index = 0 
+		#for i in range(0, ntriple):
+		#	if mil_jk[i][0] == prev_mol and  mil_jk[i][1] == prev_atom:
+		#		mil_jk_2[i][3] = index
+		#		index += 1
+		#	else:
+		#		index = 0
+		#		mil_jk_2[i][3] = index
+		#		prev_mol = mil_jk[i][0]
+		#		prev_atom = mil_jk[i][1]
+		#		index += 1
+		#batch_data[-4] = mil_j_2
+		#batch_data[-3] = mil_jk_2
+		feed_dict={i: d for i, d in zip([self.xyzs_pl]+[self.Zs_pl]+[self.Elabel_pl] + [self.grads_pl] + [self.Radp_Ele_pl] + [self.Angt_Elep_pl] + [self.mil_j_pl] + [self.mil_jk_pl] + [self.natom_pl] + [self.keep_prob_pl], batch_data)}
+		return feed_dict
