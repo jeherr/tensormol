@@ -2325,6 +2325,46 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		self.name = "Mol_"+self.TData.name+"_"+self.TData.dig.name+"_"+self.NetType+"_"+self.suffix
 		self.train_dir = PARAMS["networks_directory"]+self.name
 
+	def SetANI1Param(self, prec=np.float64):
+		"""
+		Generate ANI1 symmetry function parameter tensor.
+		"""
+		self.Ra_cut = PARAMS["AN1_a_Rc"]
+		self.Rr_cut = PARAMS["AN1_r_Rc"]
+		zetas = np.array([[PARAMS["AN1_zeta"]]], dtype = prec)
+		etas = np.array([[PARAMS["AN1_eta"]]], dtype = prec)
+		AN1_num_a_As = PARAMS["AN1_num_a_As"]
+		AN1_num_a_Rs = PARAMS["AN1_num_a_Rs"]
+		thetas = np.array([ 2.0*Pi*i/AN1_num_a_As for i in range (0, AN1_num_a_As)], dtype = prec)
+		rs =  np.array([ self.Ra_cut*i/AN1_num_a_Rs for i in range (0, AN1_num_a_Rs)], dtype = prec)
+		# Create a parameter tensor. 4 x nzeta X neta X ntheta X nr
+		p1 = np.tile(np.reshape(zetas,[1,1,1,1,1]),[1,1,AN1_num_a_As,AN1_num_a_Rs,1])
+		p2 = np.tile(np.reshape(etas,[1,1,1,1,1]),[1,1,AN1_num_a_As,AN1_num_a_Rs,1])
+		p3 = np.tile(np.reshape(thetas,[1,1,AN1_num_a_As,1,1]),[1,1,1,AN1_num_a_Rs,1])
+		p4 = np.tile(np.reshape(rs,[1,1,1,AN1_num_a_Rs,1]),[1,1,AN1_num_a_As,1,1])
+		SFPa = np.concatenate([p1,p2,p3,p4],axis=4)
+		self.SFPa = np.transpose(SFPa, [4,0,1,2,3])
+		etas_R = np.array([[PARAMS["AN1_eta"]]], dtype = prec)
+		AN1_num_r_Rs = PARAMS["AN1_num_r_Rs"]
+		rs_R =  np.array([ self.Rr_cut*i/AN1_num_r_Rs for i in range (0, AN1_num_r_Rs)], dtype = prec)
+		# Create a parameter tensor. 2 x  neta X nr
+		p1_R = np.tile(np.reshape(etas_R,[1,1,1]),[1,AN1_num_r_Rs,1])
+		p2_R = np.tile(np.reshape(rs_R,[1,AN1_num_r_Rs,1]),[1,1,1])
+		SFPr = np.concatenate([p1_R,p2_R],axis=2)
+		self.SFPr = np.transpose(SFPr, [2,0,1])
+		self.inshape = int(AN1_num_r_Rs + AN1_num_a_Rs*AN1_num_a_As)
+		self.inshape_withencode = int(self.inshape + AN1_num_r_Rs)
+		#self.inshape = int(len(self.eles)*AN1_num_r_Rs)
+		p1 = np.tile(np.reshape(thetas,[AN1_num_a_As,1,1]),[1,AN1_num_a_Rs,1])
+		p2 = np.tile(np.reshape(rs,[1,AN1_num_a_Rs,1]),[AN1_num_a_As,1,1])
+		SFPa2 = np.concatenate([p1,p2],axis=2)
+		self.SFPa2 = np.transpose(SFPa2, [2,0,1])
+		p1_new = np.reshape(rs_R,[AN1_num_r_Rs,1])
+		self.SFPr2 = np.transpose(p1_new, [1,0])
+		self.zeta = PARAMS["AN1_zeta"]
+		self.eta = PARAMS["AN1_eta"]
+		self.HasANI1PARAMS = True
+		print ("self.inshape:", self.inshape)
 
 	def TrainPrepare(self,  continue_training =False):
 		"""
@@ -2339,6 +2379,10 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.mil_j_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
+
+			#self.mil_jk_2_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
+			#self.mil_j_2_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
+
 			self.natom_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			self.keep_prob_pl =  tf.placeholder(self.tf_prec, shape=tuple([self.nlayer+1]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
@@ -2349,7 +2393,8 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			Ra_cut = tf.Variable(self.Ra_cut, trainable=False, dtype = self.tf_prec)
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_prec)
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_prec)
-			self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
+			#self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
+			self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
 			self.Etotal, self.Ebp, self.Ebp_atom = self.energy_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.keep_prob_pl)
 			self.gradient  = tf.gradients(self.Etotal, self.xyzs_pl, name="BPEGrad")
 			self.total_loss, self.loss, self.energy_loss, self.grads_loss = self.loss_op(self.Etotal, self.gradient, self.Elabel_pl, self.grads_pl, self.natom_pl)
@@ -2370,3 +2415,141 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 				self.summary_writer.add_run_metadata(self.run_metadata, "init", global_step=None)
 			self.sess.graph.finalize()
 
+
+
+	def train_step(self, step):
+		"""
+		Perform a single training step (complete processing of all input), using minibatches of size self.batch_size.
+		Training object including dipole, energy and gradient
+
+		Args:
+			step: the index of this step.
+		"""
+		Ncase_train = self.TData.NTrain
+		start_time = time.time()
+		train_loss =  0.0
+		train_energy_loss = 0.0
+		train_grads_loss = 0.0
+		num_of_mols = 0
+		pre_output = np.zeros((self.batch_size),dtype=np.float64)
+		for ministep in range (0, int(Ncase_train/self.batch_size)):
+			batch_data = self.TData.GetTrainBatch(self.batch_size) + [self.keep_prob]
+			actual_mols  = self.batch_size
+			t = time.time()
+			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal= self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal], feed_dict=self.fill_feed_dict(batch_data))
+			train_loss = train_loss + loss_value
+			train_energy_loss += energy_loss
+			train_grads_loss += grads_loss
+			duration = time.time() - start_time
+			num_of_mols += actual_mols
+			#print ("equal 1:", np.allclose(Scatter_Sym[0], Scatter_Sym_2[0]), np.allclose(Scatter_Sym[1], Scatter_Sym_2[1]))
+		self.print_training(step, train_loss, train_energy_loss, train_grads_loss, num_of_mols, duration)
+		return
+
+
+	def energy_inference(self, inp, indexs, xyzs, keep_prob):
+		"""
+		Builds a Behler-Parinello graph for calculating energy.
+
+		Args:
+			inp: a list of (num_of atom type X flattened input shape) matrix of input cases.
+			index: a list of (num_of atom type X batchsize) array which linearly combines the elements.
+			xyzs: xyz coordinates of atoms.
+			keep_prob: dropout prob of each layer.
+		Returns:
+			The BP graph energy output
+		"""
+		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
+		Ebranches=[]
+		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		atom_outputs = []
+		with tf.name_scope("EnergyNet"):
+			for e in range(len(self.eles)):
+				Ebranches.append([])
+				inputs = inp[e]
+				shp_in = tf.shape(inputs)
+				index = tf.cast(indexs[e], tf.int64)
+				for i in range(len(self.HiddenLayers)):
+					if i == 0:
+						with tf.name_scope(str(self.eles[e])+'_hidden1'):
+							weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.inshape, self.HiddenLayers[i]], var_stddev=1.0/(100+math.sqrt(float(self.inshape))), var_wd=0.001)
+							biases = tf.Variable(tf.zeros([self.HiddenLayers[i]], dtype=self.tf_prec), name='biaseslayer'+str(i))
+							Ebranches[-1].append(self.activation_function(tf.matmul(tf.nn.dropout(inputs, keep_prob[i]), weights) + biases))
+					else:
+						with tf.name_scope(str(self.eles[e])+'_hidden'+str(i+1)):
+							weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.HiddenLayers[i-1], self.HiddenLayers[i]], var_stddev=1.0/(100+math.sqrt(float(self.HiddenLayers[i-1]))), var_wd=0.001)
+							biases = tf.Variable(tf.zeros([self.HiddenLayers[i]], dtype=self.tf_prec), name='biaseslayer'+str(i))
+							Ebranches[-1].append(self.activation_function(tf.matmul(tf.nn.dropout(Ebranches[-1][-1], keep_prob[i]), weights) + biases))
+				with tf.name_scope(str(self.eles[e])+'_regression_linear'):
+					shp = tf.shape(inputs)
+					weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.HiddenLayers[-1], 1], var_stddev=1.0/(100+math.sqrt(float(self.HiddenLayers[-1]))), var_wd=None)
+					biases = tf.Variable(tf.zeros([1], dtype=self.tf_prec), name='biases')
+					Ebranches[-1].append(tf.matmul(tf.nn.dropout(Ebranches[-1][-1], keep_prob[-1]), weights) + biases)
+					shp_out = tf.shape(Ebranches[-1][-1])
+					cut = tf.slice(Ebranches[-1][-1],[0,0],[shp_out[0],1])
+					rshp = tf.reshape(cut,[1,shp_out[0]])
+					atom_outputs.append(rshp)
+					rshpflat = tf.reshape(cut,[shp_out[0]])
+					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					output = tf.add(output, ToAdd)
+				tf.verify_tensor_all_finite(output,"Nan in output!!!")
+			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
+		total_energy = tf.identity(bp_energy)
+		return total_energy, bp_energy, output
+
+
+	def fill_feed_dict(self, batch_data):
+		"""
+		Fill the tensorflow feed dictionary.
+
+		Args:
+			batch_data: a list of numpy arrays containing inputs, bounds, matrices and desired energies in that order.
+			and placeholders to be assigned. (it can be longer than that c.f. TensorMolData_BP)
+
+		Returns:
+			Filled feed dictionary.
+		"""
+		if (not np.all(np.isfinite(batch_data[2]),axis=(0))):
+			raise Exception("Please check your inputs")
+
+		#t = time.time()
+		#mil_j = batch_data[-4]
+		#mil_jk = batch_data[-3]
+		#npair = mil_j.shape[0]	
+		#ntriple = mil_jk.shape[0]
+	
+		#mil_j_2 = np.copy(mil_j)
+		#mil_jk_2 = np.copy(mil_jk)
+
+		#prev_mol = mil_j[0][0]
+		#prev_atom =  mil_j[0][1]
+		#index = 0 
+		#for i in range(0, npair):
+		#	if mil_j[i][0] == prev_mol and  mil_j[i][1] == prev_atom:
+		#		mil_j_2[i][3] = index
+		#		index += 1
+		#	else:
+		#		index = 0
+		#		mil_j_2[i][3] = index
+		#		prev_mol = mil_j[i][0]
+		#		prev_atom = mil_j[i][1]
+		#		index += 1
+	
+		#prev_mol = mil_jk[0][0]
+		#prev_atom =  mil_jk[0][1]
+		#index = 0 
+		#for i in range(0, ntriple):
+		#	if mil_jk[i][0] == prev_mol and  mil_jk[i][1] == prev_atom:
+		#		mil_jk_2[i][3] = index
+		#		index += 1
+		#	else:
+		#		index = 0
+		#		mil_jk_2[i][3] = index
+		#		prev_mol = mil_jk[i][0]
+		#		prev_atom = mil_jk[i][1]
+		#		index += 1
+		#batch_data[-4] = mil_j_2
+		#batch_data[-3] = mil_jk_2
+		feed_dict={i: d for i, d in zip([self.xyzs_pl]+[self.Zs_pl]+[self.Elabel_pl] + [self.grads_pl] + [self.Radp_Ele_pl] + [self.Angt_Elep_pl] + [self.mil_j_pl] + [self.mil_jk_pl] + [self.natom_pl] + [self.keep_prob_pl], batch_data)}
+		return feed_dict
