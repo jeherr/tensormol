@@ -130,6 +130,36 @@ def RotationMatrix(axis, theta):
 					 [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
 					 [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
 
+def RandomRotationBatch(sz_):
+	"""
+	Returns a batch of uniform rotation matrices,
+	and the angles of each.
+	"""
+	thetas = np.arccos(2.0*np.random.random(size=(sz_))-1)
+	phis = np.random.random(size=(sz_))*2*Pi
+	matrices = np.zeros(shape=(sz_,3,3))
+	axes = np.zeros(shape=(sz_,3))
+	axes[:,0] = np.sin(thetas)*np.cos(phis)
+	axes[:,1] = np.sin(thetas)*np.sin(phis)
+	axes[:,2] = np.cos(thetas)
+	psis = np.random.random(size=(sz_))*2*Pi
+	ct = np.cos(psis)
+	st = np.sin(psis)
+	omct = 1.0-np.cos(psis)
+	matrices[:,0,0] = ct+axes[:,0]*axes[:,0]*omct
+	matrices[:,0,1] = axes[:,0]*axes[:,1]*omct - axes[:,2]*st
+	matrices[:,0,2] = axes[:,0]*axes[:,2]*omct + axes[:,1]*st
+	matrices[:,1,0] = axes[:,1]*axes[:,0]*omct + axes[:,2]*st
+	matrices[:,1,1] = ct+axes[:,1]*axes[:,1]*omct
+	matrices[:,1,2] = axes[:,1]*axes[:,2]*omct - axes[:,0]*st
+	matrices[:,2,0] = axes[:,2]*axes[:,0]*omct - axes[:,1]*st
+	matrices[:,2,1] = axes[:,2]*axes[:,1]*omct + axes[:,0]*st
+	matrices[:,2,2] = ct + axes[:,2]*axes[:,2]*omct
+	axes[:,0] = thetas
+	axes[:,1] = phis
+	axes[:,2] = psis
+	return matrices, axes
+
 def RotationMatrix_v2(randnums=None, deflection=1.0):
 	"""
 	Creates a uniformly random rotation matrix
