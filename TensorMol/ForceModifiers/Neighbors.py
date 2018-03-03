@@ -469,6 +469,46 @@ class NeighborListSet:
 	def buildPairsAndTriplesWithEleIndexLinear(self, rcut_pairs=5.0, rcut_triples=5.0, ele=None, elep=None):
 		return self.buildPairsAndTriplesWithEleIndexPeriodic(rcut_pairs, rcut_triples, ele, elep)
 
+	@TMTiming("buildPairsAndTriplesWithEleIndexChannel")
+	def buildPairsAndTriplesWithEleIndexChannel(self, rcut_pairs=5.0, rcut_triples=5.0, ele=None, elep=None):
+		"""
+		generate sorted pairs and triples with index of correspoding ele or elepair append to it.
+		sorted order: mol, i (center atom), l (ele or elepair index), j (connected atom 1), k (connected atom 2 for triples)
+
+		Args:
+			rcut_: a cutoff parameter.
+			ele: element
+			elep: element pairs
+		Returns:
+			(nnzero pairs X 4 pair tensor) (mol, I, J, L)
+			(nnzero triples X 5 triple tensor) (mol, I, J, K, L)
+		"""
+		trpE_sorted, trtE_sorted, mil_jk, jk_max = self.buildPairsAndTriplesWithEleIndex(rcut_pairs, rcut_triples, ele, elep)
+		mil_j = np.zeros((trpE_sorted.shape[0], 4))
+		pair_pair = np.zeros(trpE_sorted.shape[0])
+		if (len(trpE_sorted)==0):
+			return trpE_sorted, trtE_sorted, mil_j, mil_jk
+		prev_atom = trpE_sorted[0][1]
+		prev_mol = trpE_sorted[0][0]
+		pointer = 0
+		for i in range(0, trpE_sorted.shape[0]):
+			current_atom = trpE_sorted[i][1]
+			current_mol = trpE_sorted[i][0]
+			if  current_atom == prev_atom and current_mol == prev_mol:
+				pointer += 1
+				if i == trpE_sorted.shape[0]-1:
+					pair_pair[i-pointer+1:]=range(0, pointer)
+				else:
+					pass
+			else:
+				pair_pair[i-pointer:i]=range(0, pointer)
+				pointer = 1
+				prev_atom = current_atom
+				prev_mol = current_mol
+		mil_j[:,[0,1,2]] = trpE_sorted[:,[0,1,3]]
+		mil_j[:,3] = pair_pair
+		#print ("trpE_sorted, trtE_sorted",trpE_sorted.shape, trtE_sorted.shape)
+		return trpE_sorted, trtE_sorted, mil_j, mil_jk
 
 class NeighborListSetWithImages(NeighborListSet):
 	def __init__(self, x_, nnz_, nreal_,  DoTriples_=False, DoPerms_=False, ele_=None, alg_ = None, sort_ = False):
