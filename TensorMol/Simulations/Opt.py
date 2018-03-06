@@ -206,7 +206,7 @@ class MetaOptimizer(GeomOptimizer):
 		self.lastbumpstep = 0
 		# just put the atoms in a box the size of their max and min coordinates.
 		self.Box =  Box_=np.array((np.max(m.coords)+0.1)*np.eye(3))
-		self.BowlK = 0.01
+		self.BowlK = 0.00
 		#self.Bumper = TFForces.BumpHolder(self.natoms, self.MaxBumps, self.BowlK, h_=1.0, w_=1.2,Type_="MR")
 		self.Bumper = TFForces.BumpHolder(self.natoms, self.MaxBumps, self.BowlK, h_=0.5, w_=0.6,Type_="MR")
 		return
@@ -230,7 +230,7 @@ class MetaOptimizer(GeomOptimizer):
 		BE = 0.0
 		BF = np.zeros(x_.shape)
 		if (self.NBump > 0):
-			BE, BF = self.Bumper.Bump(self.BumpCoords.astype(np.float32), x_.astype(np.float32), self.NBump%self.MaxBumps)
+			BE, BF = self.Bumper.Bump(self.BumpCoords, x_, self.NBump%self.MaxBumps)
 			BF = JOULEPERHARTREE*BF[0]
 			if (self.OnlyHev):
 				for i in range(self.m.NAtoms()):
@@ -242,8 +242,7 @@ class MetaOptimizer(GeomOptimizer):
 			frc /= JOULEPERHARTREE
 			rmsgrad = np.sum(np.linalg.norm(PF,axis=1))/PF.shape[0]
 			rmsgradb = np.sum(np.linalg.norm(BF,axis=1))/PF.shape[0]
-			print(rmsgradb,rmsgrad)
-
+#			print(rmsgradb,rmsgrad)
 			return BE+PE+BxE,frc
 		else:
 			return BE+PE+BxE
@@ -332,7 +331,7 @@ class MetaOptimizer(GeomOptimizer):
 				frc += self.momentum*old_frc
 				m.coords = m.coords + self.fscale*frc
 				rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/m.coords.shape[0]
-				LOGGER.info(filename+"step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
+				LOGGER.info(filename+" step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
 				mol_hist.append(prev_m)
 				prev_m.WriteXYZfile("./results/", filename)
 				step+=1
@@ -341,7 +340,7 @@ class MetaOptimizer(GeomOptimizer):
 			if ((BM != prev_m.BondMatrix()).any() or SearchConfs_):
 				d = self.OptGD(prev_m,"Dive"+str(ndives))
 				BM = prev_m.BondMatrix()
-				self.AppendIfNew( d )
+				self.AppendIfNew(d)
 				self.Bump(d.coords)
 				ndives += 1
 			rmsdisp = 10.0

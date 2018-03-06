@@ -37,8 +37,8 @@ def TFDistance(A):
 	r = tf.reshape(r, [-1, 1]) # For the later broadcast.
 	# Tensorflow can only reverse mode grad the sqrt if all these elements
 	# are nonzero
-	D = r - 2*tf.matmul(A, tf.transpose(A)) + tf.transpose(r) + tf.cast(1e-26,tf.float64)
-	return tf.sqrt(D)
+	D = r - 2*tf.matmul(A, tf.transpose(A)) + tf.transpose(r)
+	return tf.sqrt(tf.clip_by_value(D,1e-36,1e36))
 
 def TFDistances(r_):
 	"""
@@ -55,8 +55,8 @@ def TFDistances(r_):
 	rmtt = tf.transpose(rmt,perm=[0,2,1])
 	# Tensorflow can only reverse mode grad of sqrt if all these elements
 	# are nonzero
-	D = rmt - 2*tf.einsum('ijk,ilk->ijl',r_,r_) + rmtt + tf.cast(1e-28,tf.float64)
-	return tf.sqrt(D)
+	D = rmt - 2*tf.einsum('ijk,ilk->ijl',r_,r_) + rmtt
+	return tf.sqrt(tf.clip_by_value(D,1e-36,1e36))
 
 def TFDistanceLinear(B,NZP):
 	"""
@@ -71,8 +71,8 @@ def TFDistanceLinear(B,NZP):
 	Ij = tf.slice(NZP,[0,1],[-1,1])
 	Ri = tf.gather_nd(B,Ii)
 	Rj = tf.gather_nd(B,Ij)
-	A = Ri - Rj + 1e-26
-	return tf.sqrt(tf.reduce_sum(A*A, 1))
+	A = Ri - Rj
+	return tf.sqrt(tf.clip_by_value(tf.reduce_sum(A*A, 1),1e-36,1e36))
 
 def TFDistancesLinear(B,NZP):
 	"""
@@ -90,10 +90,9 @@ def TFDistancesLinear(B,NZP):
 	Ij = tf.concat([tf.slice(NZP,[0,0],[-1,1]),tf.slice(NZP,[0,2],[-1,1])],1)
 	Ri = tf.gather_nd(B,Ii)
 	Rj = tf.gather_nd(B,Ij)
-	A = Ri - Rj + 1e-26
-	D = tf.sqrt(tf.reduce_sum(A*A, 1))
+	A = Ri - Rj
+	D = tf.sqrt(tf.clip_by_value(tf.reduce_sum(A*A, 1),1e-36,1e36))
 	return D
-
 
 def AllTriples(rng):
 	"""Returns all possible triples of an input list.
@@ -206,3 +205,33 @@ def DifferenceVectorsLinear(B, NZP):
 	Rj = tf.gather_nd(B,Ij)
 	A = Ri - Rj
 	return A
+
+def TF_RandomRotationBatch(sz_,max_dist=1.0):
+	"""
+	Returns a batch of uniform rotation matrices,
+	and the angles of each. Finds random unit vector
+	and then random angle around it.
+
+	Args:
+		sz_: number of rotation matrices
+		max_dist: maximum rotation in units of 2*Pi
+	"""
+	Pi = 3.14159265359
+	thetas = tf.acos(2.0*tf.random_uniform(sz_,dtype=tf.float64)-1)
+	phis = tf.random_uniform(sz_,dtype=tf.float64)*2*Pi
+	axes = tf.zeros(shape=sz_+[3])
+	axes = tf.stack([tf.sin(thetas)*tf.cos(phis), tf.sin(thetas)*tf.sin(phis), tf.cos(thetas)],axis=-1)
+	psis = tf.random_uniform(sz_,dtype=tf.float64)*2*Pi*max_dist
+	ct = tf.cos(psis)
+	st = tf.sin(psis)
+	omct = 1.0-ct
+	matrices = tf.reshape(tf.stack([ct+axes[:,0]*axes[:,0]*omct,
+	axes[:,0]*axes[:,1]*omct - axes[:,2]*st,
+	axes[:,0]*axes[:,2]*omct + axes[:,1]*st,
+	axes[:,1]*axes[:,0]*omct + axes[:,2]*st,
+	ct+axes[:,1]*axes[:,1]*omct,
+	axes[:,1]*axes[:,2]*omct - axes[:,0]*st,
+	axes[:,2]*axes[:,0]*omct - axes[:,1]*st,
+	axes[:,2]*axes[:,1]*omct + axes[:,0]*st,
+	ct + axes[:,2]*axes[:,2]*omct],axis = -1),sz_+[3,3])
+	return matrices, tf.stack([thetas,phis,psis],axis=-1)

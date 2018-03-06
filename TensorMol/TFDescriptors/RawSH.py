@@ -437,6 +437,14 @@ def tf_spherical_harmonics_8(dxyzs, inv_dist_tensor):
 		return tf.concat([lower_order_harmonics, l8_harmonics], axis=-1)
 
 def tf_spherical_harmonics(dxyzs, dist_tensor, max_l):
+	"""
+	Args:
+		dxyzs: (...) X MaxNAtom X 3
+		dist_tensor: just tf.norm of the above.
+		max_l : integer, maximum angular momentum.
+	Returns:
+		(...) X MaxNAtom X NSH = (max_l+1)^2
+	"""
 	inv_dist_tensor = tf.where(tf.greater(dist_tensor, 1.e-9), tf.reciprocal(dist_tensor), tf.zeros_like(dist_tensor))
 	if max_l == 8:
 		harmonics = tf_spherical_harmonics_8(dxyzs, inv_dist_tensor)
@@ -459,6 +467,30 @@ def tf_spherical_harmonics(dxyzs, dist_tensor, max_l):
 	else:
 		raise Exception("Spherical Harmonics only implemented up to l=8. Choose a lower order")
 	return harmonics
+
+#
+# JOHN: we should write the following routines.
+# this will just require cooking up the overlap matrix.
+# which is a simple integral.
+#
+
+def gaussian_spherical_harmonic_fwd(xyzs_,lmax=5):
+	"""
+	embed delta functions at xyz into GauSH representation.
+	"""
+	return
+
+def gaussian_spherical_harmonic_S(gauss_params,lmax=5):
+	"""
+	Makes an overlap matrix of the gaussian spherical functions
+	"""
+	return
+
+def gaussian_spherical_harmonic_rev(vec_,samps_,lmax=5):
+	"""
+	Reverses the embedding of a gauSH vector onto a sampling grid.
+	"""
+	return
 
 def tf_gaussian_spherical_harmonics(xyzs, Zs, elements, gauss_params, atomic_embed_factors, l_max):
 	"""

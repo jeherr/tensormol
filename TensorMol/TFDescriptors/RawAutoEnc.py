@@ -1,6 +1,8 @@
 """
 Unlike a symmetry function, an encoder embedding doesn't encode atomic numbers into channels
-Ie: it doesn't have pair or triples element channels. Instead it maps every atom onto some basis of vectors unsupervised channels which arise, for example from an autoencoder. These channels are then used in a traditional geometric descriptor (GauSH or SF).
+Ie: it doesn't have pair or triples element channels. Instead it maps every atom onto some basis of
+vectors unsupervised channels which arise, for example from an autoencoder. These channels are then
+used in a traditional geometric descriptor (GauSH or SF).
 They can also be used to fuse atoms together, finding classes for substructures.
 They must be trained alongside a neural network model.
 
@@ -26,7 +28,9 @@ from __future__ import division
 from __future__ import print_function
 from ..ForceModifiers.Neighbors import *
 from ..Math.TFMath import * # Why is this imported here?
+from ..Math.LinearOperations import *
 from ..ElementData import *
+from .RawSH import *
 from tensorflow.python.client import timeline
 if (HAS_TF):
 	import tensorflow as tf
@@ -39,6 +43,8 @@ class VariationalAutoencoder(object):
 	TODO: Choose intelligent Initializers.
 	"""
 	def __init__(self):
+		self.batch_size = 750
+		self.learning_rate = 0.002
 		self.n_latent = 5
 		self.act_fcn = tf.nn.selu
 		return
@@ -91,6 +97,11 @@ class VariationalAutoencoder(object):
 		with tf.name_scope("KL_divergence"):
 			# = -0.5 * (1 + log(sigma**2) - mu**2 - sigma**2)
 			return -0.5 * tf.reduce_sum(1 + 2 * log_sigma - mu**2 -tf.exp(2 * log_sigma), 1)
+	def composeAE(in_):
+		"""
+		Build a non-bayesian Autoencoder. This one might allow collapse.
+		"""
+		return
 	def composeVAE(in_):
 		"""
 		Put together the autoencoder, encoder is a tensor which depends on the input.
@@ -115,6 +126,124 @@ class VariationalAutoencoder(object):
 			train_op = optimizer.apply_gradients(clipped, global_step=global_step,
 				name="minimize_cost")
 			return (encoded,decoded,loss,global_step)
+
+class CapsuleNetwork(VariationalAutoencoder):
+	"""
+		A transforming autoencoder.
+		This one learns a decoder which can rotate, and a
+		probabilistic encoding of its input which should be
+		rotationally invariant.
+
+		Args:
+			xyzs_ : NMol X MaxNAtom X 3 tensor of coordinates.
+	"""
+	def __init__(self):
+		VariationalAutoencoder.__init__(self)
+		self.lmax = 4
+		self.MaxNAtom = 7
+		self.n_capsules = 42
+		self.t_dim = 3 # Dimension of Transformation
+		self.r_dim = 20 # Recognizer dimension.
+		self.g_dim = 10 # Generator dimension.
+		self.n_rot = 40 # Number of rotations
+		self.sess = None
+		self.Prepare()
+		return
+	def Capsule(self,in_,ts_):
+		"""
+		A Hintonian Capsule for a 3-d transformation.
+
+		Args:
+			in_: the input to be reconstructed.
+			ts_: transformation input (extra_input)
+		"""
+		act_fcn = tf.nn.relu
+		R1 = tf.layers.dense(inputs=in_, units=128, activation=act_fcn, use_bias=True)
+		R2 = tf.layers.dense(inputs=in_, units=128, activation=act_fcn, use_bias=True)
+		T1 = tf.layers.dense(inputs=R2, units=128, activation=act_fcn, use_bias=True)
+		T2 = tf.layers.dense(inputs=T1, units=self.t_dim, activation=None, use_bias=True)
+		Prob = tf.layers.dense(inputs=R2, units=1, activation=tf.nn.relu, use_bias=True)
+		Gin = T2 + ts_
+		G1 = tf.layers.dense(inputs=Gin, units=128, activation=act_fcn, use_bias=True)
+		G2 = tf.layers.dense(inputs=G1, units=128, activation=act_fcn, use_bias=True)
+		Out = tf.layers.dense(inputs=G2, units=(self.lmax+1)**2, activation=None, use_bias=True)
+		return Prob, T2, Out*Prob
+	def GetBatch(self,max_dist = 0.0):
+		xyzs = np.random.random(size=(self.batch_size,self.MaxNAtom,3))*7.0
+		#xyzs -= xyzs[:,0,:][:,np.newaxis,:]
+		# print(xyzs[:3])
+		# Rotate these xyzs about their first atom
+		# This is a random uniform rotation.
+		#matrices,t_ = RandomRotationBatch(self.batch_size,max_dist)
+ 		#xyzs_t = np.einsum('ijk,ikl->ijl',xyzs,matrices)
+		return xyzs
+	def Train(self):
+		step=0
+		while(True):
+			xyzs  = self.GetBatch()
+			# Check that the rotations are a reversible transformation.
+			feed_dict = {self.xyzs:xyzs,self.frac_sphere:min(1.0,step/10000.)}
+			_, train_loss, step = self.sess.run([self.train_op, self.loss, self.global_step], feed_dict=feed_dict)
+			print("Step: ", step, " ", train_loss)
+			print("XXX", self.sess.run([tf.gradients(X[0],ts_in)[0] for X in self.Capsules], feed_dict=feed_dict))
+			print("XXX", XXX)
+			if (step%100==0):
+				xyzs = self.GetBatch()
+				feed_dict = {self.xyzs:xyzs,self.frac_sphere:min(1.0,step/10000.)}
+				emb,real,cap = self.sess.run([self.Embedded, self.Embedded_t, self.Output], feed_dict=feed_dict)
+				print("t_ 0 ", t_[0])
+				print("emb 0 ", emb[0])
+				print("Real 0 ", real[0])
+				print("Cap 0 ", cap[0])
+	def Prepare(self):
+		"""
+		Build the required graph.
+		Also build evaluations.
+		"""
+		with tf.name_scope("Capsules"):
+			self.xyzs = tf.placeholder(dtype=tf.float64, shape=(self.batch_size,self.MaxNAtom,3))
+			self.frac_sphere = tf.placeholder(dtype=tf.float64)
+			#self.xyzs_t = tf.placeholder(dtype=tf.float64, shape=(self.batch_size,self.MaxNAtom,3))
+			#self.ts_in = tf.placeholder(dtype=tf.float64, shape=(self.batch_size,3))
+
+			matrices, ts_in = TF_RandomRotationBatch([self.batch_size],self.frac_sphere)
+			self.xyzs -= self.xyzs[:,0,:][:,tf.newaxis,:]
+			self.xyzs_t = tf.einsum('ijk,ikl->ijl', self.xyzs, matrices)
+			# Transform the XYZ's
+			# The transformation is only WRT the first atom
+			# both orig. and transformed system get embedded.
+
+			# Each atom in xyzs gets transformed by ts_in to make t_xyzs
+			dxyzs = tf.expand_dims(self.xyzs, axis=2) - tf.expand_dims(self.xyzs, axis=1)
+			dxyzs_t = tf.expand_dims(self.xyzs_t, axis=2) - tf.expand_dims(self.xyzs_t, axis=1)
+			dist_tensor = tf.norm(dxyzs+1.e-16,axis=3)
+			dist_tensor_t = tf.norm(dxyzs_t+1.e-16,axis=3)
+			self.Embedded = tf.reshape(tf.reduce_sum(tf_spherical_harmonics(dxyzs, dist_tensor, self.lmax),axis = 2)[:,0,:],[self.batch_size,(self.lmax+1)**2])
+			self.Embedded_t = tf.reshape(tf.reduce_sum(tf_spherical_harmonics(dxyzs_t, dist_tensor_t, self.lmax),axis = 2)[:,0,:],[self.batch_size,(self.lmax+1)**2])
+
+			self.EmbeddedShp = tf.shape(self.Embedded)[-1]
+			self.Capsules = [self.Capsule(self.Embedded,ts_in) for i in range(self.n_capsules)]
+
+			self.Outs = [X[2] for X in self.Capsules]
+			#self.dPdts = [tf.gradients(X[0],ts_in)[0] for X in self.Capsules]
+			self.Output = tf.add_n(self.Outs)
+
+			self.loss = tf.losses.mean_squared_error(self.Embedded_t, self.Output)
+			tf.add_to_collection('losses', self.loss)
+
+		with tf.name_scope("Adam_optimizer"):
+			self.global_step = tf.Variable(0, trainable=False)
+			optimizer = tf.train.AdamOptimizer(self.learning_rate)
+			tvars = tf.trainable_variables()
+			grads_and_vars = optimizer.compute_gradients(self.loss, tvars)
+			#clipped = [(tf.clip_by_value(grad, -5, 5), tvar) for grad, tvar in grads_and_vars]
+			self.train_op = optimizer.apply_gradients(grads_and_vars, global_step=self.global_step, name="minimize_cost")
+		init = tf.global_variables_initializer()
+		self.saver = tf.train.Saver(max_to_keep = 10000)
+		self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+		self.sess.run(init)
+		self.summary_writer =  tf.summary.FileWriter("./networks/", self.sess.graph)
+		return
 
 class Coder:
 	"""
