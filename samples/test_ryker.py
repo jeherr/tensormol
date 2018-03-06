@@ -6,7 +6,7 @@ import time
 def train_AE_GauSH(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_LMAX"] = 3
-	PARAMS["train_rotation"] = False
+	PARAMS["train_rotation"] = True
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [1024]
 	PARAMS["learning_rate"] = 0.00005
