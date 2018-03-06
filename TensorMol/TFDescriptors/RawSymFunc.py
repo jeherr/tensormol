@@ -1233,11 +1233,11 @@ def TFSymASet_Linear_WithEle_Channel3(R, Zs, eleps_, SFPs_, zeta, eta, R_cut, An
 	#to_reduce4 = tomult*to_reduce3
 	#return tf.reduce_sum(to_reduce4, axis=2)
 
-	tomult = tf.reshape(tf.gather_nd(channel_eleps, tf.reshape(mil_jk2[:,2],[-1,1])),[-1,1])
-	Gm2_mult = tf.cast(tomult, dtype=tf.float64)*Gm2
+	tomult = tf.reshape(tf.gather_nd(channel_eleps, tf.reshape(mil_jk2[:,2],[-1,1])),[nnzt,-1])
+	Gm2_mult = tf.reshape(tf.expand_dims(tomult, 1)*tf.expand_dims(Gm2, 2), [nnzt, -1])
 
 	mi_jk2 =  tf.concat([mil_jk2[:,:2],tf.reshape(mil_jk2[:,3],[-1,1])], axis=-1)
-	to_reduce2 = tf.scatter_nd(mi_jk2, Gm2_mult, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(jk_max, tf.int32), nsym], dtype=tf.int64))
+	to_reduce2 = tf.scatter_nd(mi_jk2, Gm2_mult, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(jk_max, tf.int32), nsym*tf.shape(channel_eleps)[1]], dtype=tf.int64))
 	return tf.reduce_sum(to_reduce2, axis=2)
 
 def TFSymASet_Linear_WithEle_UsingList(R, Zs, eleps_, SFPs_, zeta, eta, R_cut, AngtriEle, mil_jk2, prec=tf.float64):
@@ -2261,12 +2261,12 @@ def TFSymRSet_Linear_WithEle_Channel3(R, Zs, eles_, SFPs_, eta, R_cut, RadpairEl
 	## Finally scatter out the symmetry functions where they belong.
 	j_max = tf.reduce_max(tf.slice(mil_j, [0,3], [nnz, 1])) + 1
 
-	tomul = tf.reshape(tf.gather_nd(channels, tf.reshape(mil_j[:,2],[-1,1])),[-1,1])
-	Gm2_mult = tf.cast(tomul, dtype=tf.float64)*Gm2
-
+	tomul = tf.reshape(tf.gather_nd(channels, tf.reshape(mil_j[:,2],[-1,1])),[nnz, -1])
+	Gm2_mult = tf.reshape(tf.expand_dims(tomul, 1)*tf.expand_dims(Gm2, 2),[nnz, -1])
+	
 	
 	mi_j =  tf.concat([mil_j[:,:2],tf.reshape(mil_j[:,3],[-1,1])], axis=-1)
-	to_reduce2 = tf.scatter_nd(mi_j, Gm2_mult, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(j_max, tf.int32), nr], dtype=tf.int64))
+	to_reduce2 = tf.scatter_nd(mi_j, Gm2_mult, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(j_max, tf.int32), nr*tf.shape(channels)[1]], dtype=tf.int64))
 
 	return tf.reduce_sum(to_reduce2, axis=2)
 
@@ -2865,7 +2865,7 @@ def TFSymSet_Scattered_Linear_WithEle_Channel2(R, Zs, eles_, SFPsR_, Rr_cut,  el
 		IndexList.append(tf.concat([mol_index, atom_index], axis = -1))
 	return SymList, IndexList
 
-def TFSymSet_Scattered_Linear_WithEle_Channel3(R, Zs, eles_, SFPsR_, Rr_cut,  eleps_, SFPsA_, zeta, eta, Ra_cut, RadpEle, AngtEle, mil_j, mil_jk):
+def TFSymSet_Scattered_Linear_WithEle_Channel3(R, Zs, eles_, SFPsR_, Rr_cut,  eleps_, SFPsA_, zeta, eta, Ra_cut, RadpEle, AngtEle, mil_j, mil_jk, channel_eles, channel_eleps):
 	"""
 	A tensorflow implementation of the AN1 symmetry function for a set of molecule.
 	Args:
@@ -2886,8 +2886,8 @@ def TFSymSet_Scattered_Linear_WithEle_Channel3(R, Zs, eles_, SFPsR_, Rr_cut,  el
 	nele = tf.shape(eles_)[0]
 	nelep = tf.shape(eleps_)[0]
 
-	channel_eles = tf.reshape(eles_, [nele])
-	channel_eleps = tf.reshape((eleps_[:,0] +eleps_[:,1])/(eleps_[:,0]*eleps_[:,1]),[nelep])
+	#channel_eles = tf.reshape(eles_, [nele])
+	#channel_eleps = tf.reshape((eleps_[:,0] +eleps_[:,1])/(eleps_[:,0]*eleps_[:,1]),[nelep])
 	
 	GMR = tf.reshape(TFSymRSet_Linear_WithEle_Channel3(R, Zs, eles_, SFPsR_, eta, Rr_cut, RadpEle, mil_j, channel_eles),[nmol, natom,-1], name="FinishGMR")
 	GMA = tf.reshape(TFSymASet_Linear_WithEle_Channel3(R, Zs, eleps_, SFPsA_, zeta,  eta, Ra_cut,  AngtEle, mil_jk, channel_eleps),[nmol, natom,-1], name="FinishGMA")
