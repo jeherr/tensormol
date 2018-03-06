@@ -163,7 +163,6 @@ class Mol:
 	def Distort(self,disp=0.38,movechance=.20):
 		''' Randomly distort my coords, but save eq. coords first '''
 		self.BuildDistanceMatrix()
-		e0= self.GoEnergy(self.coords)
 		for i in range(0, self.atoms.shape[0]):
 			for j in range(0, 3):
 				if (random.uniform(0, 1)<movechance):

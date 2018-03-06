@@ -80,7 +80,7 @@ def BandForce(xs_,ks_,F_):
 	"""
 	return
 
-class ForceHolder:
+class ForceHolder(object):
 	def __init__(self,natom_):
 		"""
 		Base Force holder for an aperiodic force.
@@ -169,7 +169,6 @@ class BumpHolder(ForceHolder):
 			self.h = tf.Variable(self.h_a,dtype = tf.float64)
 			self.w = tf.Variable(self.w_a,dtype = tf.float64)
 			self.BowlKv = tf.Variable(self.BowlK,dtype = tf.float64)
-			init = tf.global_variables_initializer()
 			if (self.Type=="LR"):
 				self.BE = -1.0*BumpEnergy(self.h, self.w, self.xyzs_pl, self.x_pl, self.nb_pl)
 				self.BF = tf.gradients(BumpEnergy(self.h, self.w, self.xyzs_pl, self.x_pl, self.nb_pl), self.x_pl)
@@ -180,6 +179,7 @@ class BumpHolder(ForceHolder):
 			self.BowlF = tf.gradients(BowlEnergy(self.BowlKv, self.x_pl), self.x_pl)
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			#self.summary_writer = tf.summary.FileWriter(self.train_dir, self.sess.graph)
+			init = tf.global_variables_initializer()
 			self.sess.run(init)
 		return
 

@@ -43,8 +43,8 @@ class VariationalAutoencoder(object):
 	TODO: Choose intelligent Initializers.
 	"""
 	def __init__(self):
-		self.batch_size = 500
-		self.learning_rate = 0.0001
+		self.batch_size = 750
+		self.learning_rate = 0.002
 		self.n_latent = 5
 		self.act_fcn = tf.nn.selu
 		return
@@ -140,8 +140,8 @@ class CapsuleNetwork(VariationalAutoencoder):
 	def __init__(self):
 		VariationalAutoencoder.__init__(self)
 		self.lmax = 4
-		self.MaxNAtom = 10
- 		self.n_capsules = 40
+		self.MaxNAtom = 7
+		self.n_capsules = 42
 		self.t_dim = 3 # Dimension of Transformation
 		self.r_dim = 20 # Recognizer dimension.
 		self.g_dim = 10 # Generator dimension.
@@ -151,43 +151,48 @@ class CapsuleNetwork(VariationalAutoencoder):
 		return
 	def Capsule(self,in_,ts_):
 		"""
-		A Hintonian Capsule for a 3-d tranformation.
+		A Hintonian Capsule for a 3-d transformation.
 
 		Args:
 			in_: the input to be reconstructed.
 			ts_: transformation input (extra_input)
 		"""
 		act_fcn = tf.nn.relu
-		R1 = tf.layers.dense(inputs=in_, units=32, activation=act_fcn, use_bias=True)
-		R2 = tf.layers.dense(inputs=in_, units=32, activation=act_fcn, use_bias=True)
-		T1 = tf.layers.dense(inputs=R2, units=32, activation=act_fcn, use_bias=True)
+		R1 = tf.layers.dense(inputs=in_, units=128, activation=act_fcn, use_bias=True)
+		R2 = tf.layers.dense(inputs=in_, units=128, activation=act_fcn, use_bias=True)
+		T1 = tf.layers.dense(inputs=R2, units=128, activation=act_fcn, use_bias=True)
 		T2 = tf.layers.dense(inputs=T1, units=self.t_dim, activation=None, use_bias=True)
 		Prob = tf.layers.dense(inputs=R2, units=1, activation=tf.nn.relu, use_bias=True)
 		Gin = T2 + ts_
-		G1 = tf.layers.dense(inputs=Gin, units=32, activation=act_fcn, use_bias=True)
-		G2 = tf.layers.dense(inputs=G1, units=32, activation=act_fcn, use_bias=True)
+		G1 = tf.layers.dense(inputs=Gin, units=128, activation=act_fcn, use_bias=True)
+		G2 = tf.layers.dense(inputs=G1, units=128, activation=act_fcn, use_bias=True)
 		Out = tf.layers.dense(inputs=G2, units=(self.lmax+1)**2, activation=None, use_bias=True)
 		return Prob, T2, Out*Prob
-	def GetBatch(self):
-		xyzs = np.random.random(size=(self.batch_size,self.MaxNAtom,3))*10.0
-		xyzs -= xyzs[:,0,:][:,np.newaxis,:]
+	def GetBatch(self,max_dist = 0.0):
+		xyzs = np.random.random(size=(self.batch_size,self.MaxNAtom,3))*7.0
+		#xyzs -= xyzs[:,0,:][:,np.newaxis,:]
 		# print(xyzs[:3])
 		# Rotate these xyzs about their first atom
 		# This is a random uniform rotation.
-		matrices,t_ = RandomRotationBatch(self.batch_size)
- 		xyzs_t = np.einsum('ijk,ikl->ijl',xyzs,matrices)
-		# print(xyzs_t[:3])
-		return xyzs, xyzs_t, t_
+		#matrices,t_ = RandomRotationBatch(self.batch_size,max_dist)
+ 		#xyzs_t = np.einsum('ijk,ikl->ijl',xyzs,matrices)
+		return xyzs
 	def Train(self):
+		step=0
 		while(True):
-			xyzs, xyzs_t, t_  = self.GetBatch()
-			feed_dict = {self.xyzs:xyzs,self.xyzs_t:xyzs_t,self.ts_in:t_}
-			_,train_loss,step = self.sess.run([self.train_op, self.loss,self.global_step], feed_dict=feed_dict)
+			xyzs  = self.GetBatch()
+			# Check that the rotations are a reversible transformation.
+			feed_dict = {self.xyzs:xyzs,self.frac_sphere:min(1.0,step/10000.)}
+			_, train_loss, step = self.sess.run([self.train_op, self.loss, self.global_step], feed_dict=feed_dict)
 			print("Step: ", step, " ", train_loss)
+			print("XXX", self.sess.run([tf.gradients(X[0],ts_in)[0] for X in self.Capsules], feed_dict=feed_dict))
+			print("XXX", XXX)
 			if (step%100==0):
-				xyzs, xyzs_t, t_  = self.GetBatch()
-				feed_dict = {self.xyzs:xyzs,self.xyzs_t:xyzs_t,self.ts_in:t_}
-				real,cap = self.sess.run([self.Embedded_t, self.Output], feed_dict=feed_dict)
+				xyzs = self.GetBatch()
+				feed_dict = {self.xyzs:xyzs,self.frac_sphere:min(1.0,step/10000.)}
+				emb,real,cap = self.sess.run([self.Embedded, self.Embedded_t, self.Output], feed_dict=feed_dict)
+				print("t_ 0 ", t_[0])
+				print("emb 0 ", emb[0])
 				print("Real 0 ", real[0])
 				print("Cap 0 ", cap[0])
 	def Prepare(self):
@@ -197,8 +202,14 @@ class CapsuleNetwork(VariationalAutoencoder):
 		"""
 		with tf.name_scope("Capsules"):
 			self.xyzs = tf.placeholder(dtype=tf.float64, shape=(self.batch_size,self.MaxNAtom,3))
-			self.xyzs_t = tf.placeholder(dtype=tf.float64, shape=(self.batch_size,self.MaxNAtom,3))
-			self.ts_in = tf.placeholder(dtype=tf.float64, shape=(self.batch_size,3))
+			self.frac_sphere = tf.placeholder(dtype=tf.float64)
+			#self.xyzs_t = tf.placeholder(dtype=tf.float64, shape=(self.batch_size,self.MaxNAtom,3))
+			#self.ts_in = tf.placeholder(dtype=tf.float64, shape=(self.batch_size,3))
+
+			matrices, ts_in = TF_RandomRotationBatch([self.batch_size],self.frac_sphere)
+			self.xyzs -= self.xyzs[:,0,:][:,tf.newaxis,:]
+			self.xyzs_t = tf.einsum('ijk,ikl->ijl', self.xyzs, matrices)
+			# Transform the XYZ's
 			# The transformation is only WRT the first atom
 			# both orig. and transformed system get embedded.
 
@@ -209,15 +220,17 @@ class CapsuleNetwork(VariationalAutoencoder):
 			dist_tensor_t = tf.norm(dxyzs_t+1.e-16,axis=3)
 			self.Embedded = tf.reshape(tf.reduce_sum(tf_spherical_harmonics(dxyzs, dist_tensor, self.lmax),axis = 2)[:,0,:],[self.batch_size,(self.lmax+1)**2])
 			self.Embedded_t = tf.reshape(tf.reduce_sum(tf_spherical_harmonics(dxyzs_t, dist_tensor_t, self.lmax),axis = 2)[:,0,:],[self.batch_size,(self.lmax+1)**2])
-			self.EmbeddedShp = tf.shape(self.Embedded)[-1]
 
-			self.Capsules = [self.Capsule(self.Embedded,self.ts_in) for i in range(self.n_capsules)]
+			self.EmbeddedShp = tf.shape(self.Embedded)[-1]
+			self.Capsules = [self.Capsule(self.Embedded,ts_in) for i in range(self.n_capsules)]
+
 			self.Outs = [X[2] for X in self.Capsules]
+			#self.dPdts = [tf.gradients(X[0],ts_in)[0] for X in self.Capsules]
 			self.Output = tf.add_n(self.Outs)
 
 			self.loss = tf.losses.mean_squared_error(self.Embedded_t, self.Output)
-
 			tf.add_to_collection('losses', self.loss)
+
 		with tf.name_scope("Adam_optimizer"):
 			self.global_step = tf.Variable(0, trainable=False)
 			optimizer = tf.train.AdamOptimizer(self.learning_rate)
