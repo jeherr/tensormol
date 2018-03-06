@@ -457,10 +457,7 @@ def tf_spherical_harmonics_8(dxyzs, inv_dist_tensor, invariant=False):
 	else:
 		return tf.concat([lower_order_harmonics, l8_harmonics], axis=-1)
 
-<<<<<<< HEAD
 def tf_spherical_harmonics(dxyzs, dist_tensor, max_l, invariant=False):
-=======
-def tf_spherical_harmonics(dxyzs, dist_tensor, max_l):
 	"""
 	Args:
 		dxyzs: (...) X MaxNAtom X 3
@@ -469,7 +466,6 @@ def tf_spherical_harmonics(dxyzs, dist_tensor, max_l):
 	Returns:
 		(...) X MaxNAtom X NSH = (max_l+1)^2
 	"""
->>>>>>> f7a52268507ccabae115570eba7d534ee5defc89
 	inv_dist_tensor = tf.where(tf.greater(dist_tensor, 1.e-9), tf.reciprocal(dist_tensor), tf.zeros_like(dist_tensor))
 	if max_l == 8:
 		harmonics = tf_spherical_harmonics_8(dxyzs, inv_dist_tensor, invariant)
