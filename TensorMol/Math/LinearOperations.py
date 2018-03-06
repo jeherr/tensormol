@@ -14,7 +14,10 @@ def MovingAverage(a, n=3) :
     return ret[n - 1:] / n
 
 def PseudoInverse(mat_):
-	U, s, V = np.linalg.svd(mat_) #M=u * np.diag(s) * v,
+	try:
+		U, s, V = np.linalg.svd(mat_) #M=u * np.diag(s) * v,
+	except Exception as Ex:
+		return np.eye(mat_.shape[0])
 	for i in range(len(s)):
 		if (s[i]!=0.0 and abs(s[i])>0.0000001):
 			s[i]=1.0/s[i]
@@ -129,6 +132,68 @@ def RotationMatrix(axis, theta):
 	return np.array([[aa+bb-cc-dd, 2*(bc+ad), 2*(bd-ac)],
 					 [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
 					 [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
+
+def RandomRotationBatch(sz_,max_dist=1.0):
+	"""
+	Returns a batch of uniform rotation matrices,
+	and the angles of each. Finds random unit vector
+	and then random angle around it.
+
+	Args:
+		sz_: number of rotation matrices
+		max_dist: maximum rotation in units of 2*Pi
+	"""
+	thetas = np.arccos(2.0*np.random.random(size=(sz_))-1)
+	phis = np.random.random(size=(sz_))*2*Pi
+	matrices = np.zeros(shape=(sz_,3,3))
+	axes = np.zeros(shape=(sz_,3))
+	axes[:,0] = np.sin(thetas)*np.cos(phis)
+	axes[:,1] = np.sin(thetas)*np.sin(phis)
+	axes[:,2] = np.cos(thetas)
+	psis = np.random.random(size=(sz_))*2*Pi*max_dist
+	ct = np.cos(psis)
+	st = np.sin(psis)
+	omct = 1.0-np.cos(psis)
+	matrices[:,0,0] = ct+axes[:,0]*axes[:,0]*omct
+	matrices[:,0,1] = axes[:,0]*axes[:,1]*omct - axes[:,2]*st
+	matrices[:,0,2] = axes[:,0]*axes[:,2]*omct + axes[:,1]*st
+	matrices[:,1,0] = axes[:,1]*axes[:,0]*omct + axes[:,2]*st
+	matrices[:,1,1] = ct+axes[:,1]*axes[:,1]*omct
+	matrices[:,1,2] = axes[:,1]*axes[:,2]*omct - axes[:,0]*st
+	matrices[:,2,0] = axes[:,2]*axes[:,0]*omct - axes[:,1]*st
+	matrices[:,2,1] = axes[:,2]*axes[:,1]*omct + axes[:,0]*st
+	matrices[:,2,2] = ct + axes[:,2]*axes[:,2]*omct
+	axes[:,0] = thetas
+	axes[:,1] = phis
+	axes[:,2] = psis
+	return matrices, axes
+
+def RotationBatch(t_):
+	"""
+	Given a tensor of angles return matrices.
+	"""
+	sz_ = t_.shape[0]
+	thetas = t_[:,0]
+	phis = t_[:,1]
+	psis = t_[:,2]
+	matrices = np.zeros(shape=(sz_,3,3))
+	axes = np.zeros(shape=(sz_,3))
+	axes[:,0] = np.sin(thetas)*np.cos(phis)
+	axes[:,1] = np.sin(thetas)*np.sin(phis)
+	axes[:,2] = np.cos(thetas)
+	ct = np.cos(psis)
+	st = np.sin(psis)
+	omct = 1.0-np.cos(psis)
+	matrices[:,0,0] = ct+axes[:,0]*axes[:,0]*omct
+	matrices[:,0,1] = axes[:,0]*axes[:,1]*omct - axes[:,2]*st
+	matrices[:,0,2] = axes[:,0]*axes[:,2]*omct + axes[:,1]*st
+	matrices[:,1,0] = axes[:,1]*axes[:,0]*omct + axes[:,2]*st
+	matrices[:,1,1] = ct+axes[:,1]*axes[:,1]*omct
+	matrices[:,1,2] = axes[:,1]*axes[:,2]*omct - axes[:,0]*st
+	matrices[:,2,0] = axes[:,2]*axes[:,0]*omct - axes[:,1]*st
+	matrices[:,2,1] = axes[:,2]*axes[:,1]*omct + axes[:,0]*st
+	matrices[:,2,2] = ct + axes[:,2]*axes[:,2]*omct
+	return matrices
 
 def RotationMatrix_v2(randnums=None, deflection=1.0):
 	"""
