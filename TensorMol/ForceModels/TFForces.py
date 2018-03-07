@@ -200,6 +200,80 @@ class BumpHolder(ForceHolder):
 		"""
 		return self.sess.run([self.BowlE,self.BowlF], feed_dict = {self.x_pl:x_})
 
+class TopologyBumper(ForceHolder):
+	def __init__(self,m_,maxbump_=500):
+		"""
+		Basin-Filling for bond distances, angles, and torsions
+		The idea is to hold bonds together, while perturbing angles and torsions.
+		So actually a constraint potential is added to bond lengths,
+		while the others get perturbations.
+		"""
+		natom_ = m_.NAtoms()
+		self.natom = natom_
+		self.dubs, self.trips, self.quads = m_.Topology()
+		self.NDoub = self.dubs.shape[0]
+		self.NTrip = self.trips.shape[0]
+		self.NQuad = self.quads.shape[0]
+		ForceHolder.__init__(self, natom_)
+		self.maxbump = maxbump_
+		self.nbump = 0
+		self.dbumps = np.zeros((self.maxbump,self.NDoub),dtype=np.float64)
+		self.tbumps = np.zeros((self.maxbump,self.NTrip),dtype=np.float64)
+		self.qbumps = np.zeros((self.maxbump,self.NQuad),dtype=np.float64)
+		self.Prepare()
+		return
+	def Prepare(self):
+		with tf.Graph().as_default():
+			self.x_pl=tf.placeholder(tf.float64, shape=tuple([self.natom,3]))
+
+			self.db_pl=tf.placeholder(tf.float64, shape=tuple([self.maxbump,self.NDoub]))
+			self.tb_pl=tf.placeholder(tf.float64, shape=tuple([self.maxbump,self.NTrip]))
+			self.qb_pl=tf.placeholder(tf.float64, shape=tuple([self.maxbump,self.NQuad]))
+
+			self.d_pl=tf.placeholder(tf.int32, shape=tuple([self.NDoub,2]))
+			self.t_pl=tf.placeholder(tf.int32, shape=tuple([self.NTrip,3]))
+			self.q_pl=tf.placeholder(tf.int32, shape=tuple([self.NQuad,4]))
+
+			self.nb_pl=tf.placeholder(tf.int32)
+
+			self.grad_out = tf.Variable(np.zeros([self.natom,3]),dtype=tf.float64)
+			self.zero_grad = tf.assign(self.grad_out,tf.zeros_like(self.grad_out))
+
+			self.Bonds = tf.norm(tf.gather(self.x_pl,self.d_pl[...,0],axis=0)-tf.gather(self.x_pl,self.d_pl[...,1],axis=0),axis=-1)
+			self.Bends = TFBend(self.x_pl,self.t_pl)
+			self.Torsions = TFTorsion(self.x_pl,self.q_pl)
+
+			self.bd_BE = 1.0*BondBump(self.x_pl, self.db_pl, self.d_pl, 0) # Bonds are constrained to orig values!!
+			self.bnd_BE = -1.0*BendBump(self.x_pl, self.tb_pl, self.t_pl, self.nb_pl)
+			self.t_BE = -1.0*TorsionBump(self.x_pl, self.qb_pl, self.q_pl, self.nb_pl)
+
+			self.BE = self.bd_BE + self.bnd_BE + self.t_BE
+
+			self.SparseGrad = tf.gradients(self.BE,self.x_pl)[0]
+			with tf.control_dependencies([self.zero_grad]):
+				# The above will be IndexedSlices and can be converted out as follows:
+				self.BF = tf.clip_by_value(-1.0*tf.scatter_add(self.grad_out,self.SparseGrad.indices,self.SparseGrad.values),-2.0,2.0)
+
+			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+			#self.summary_writer = tf.summary.FileWriter(self.train_dir, self.sess.graph)
+			init = tf.global_variables_initializer()
+			self.sess.run(init)
+		return
+	def AddBump(self,x_):
+		self.dbumps[self.nbump%self.maxbump],self.tbumps[self.nbump%self.maxbump],self.qbumps[self.nbump%self.maxbump] = self.sess.run([self.Bonds,self.Bends,self.Torsions],feed_dict={self.x_pl:x_,self.d_pl:self.dubs,self.t_pl:self.trips,self.q_pl:self.quads})
+		self.nbump += 1
+		return
+	def Bump(self,x_):
+		"""
+		Returns the Bump energy, force.
+		"""
+		if (self.nbump < 1):
+			return 0.0, np.zeros(x_.shape)
+		feed_dict={self.x_pl:x_,self.x_pl:x_,self.d_pl:self.dubs,self.t_pl:self.trips,self.q_pl:self.quads,self.nb_pl:self.nbump,
+					self.db_pl:self.dbumps,self.tb_pl:self.tbumps,self.qb_pl:self.qbumps}
+		BE,BF = self.sess.run([self.BE,self.BF],feed_dict=feed_dict)
+		return BE,BF
+
 class MolInstance_DirectForce(MolInstance_fc_sqdiff_BP):
 	"""
 	An instance which can evaluate and optimize some model force field.

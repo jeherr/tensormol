@@ -610,25 +610,25 @@ class GauSHEncoderv2(GauSHEncoder):
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
 			dist_tensor = tf.norm(centered_xyzs+1.e-16,axis=-1)
-			embed = tf_gaush_element_channelv2(centered_xyzs, self.Zs_pl, elements, self.gaussian_params, self.l_max)
+			self.embed = tf_gaush_element_channelv2(centered_xyzs, self.Zs_pl, elements, self.gaussian_params, self.l_max)
 			rotation_params = tf.gather_nd(rotation_params, padding_mask)
 			rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
 			dist_tensor = tf.norm(rotated_xyzs+1.e-16,axis=-1)
 			self.rot_embed = tf_gaush_element_channelv2(rotated_xyzs, self.Zs_pl, elements, self.gaussian_params, self.l_max)
-			latent_vector = self.encoder(embed)
+			latent_vector = self.encoder(self.rot_embed)
 			latent_embed = latent_vector[...,:-3]
 			latent_angles = latent_vector[...,-3:]
-			latent_shift_angles = latent_angles + rotation_params
+			latent_shift_angles = latent_angles - rotation_params
 			shift_latent_vector = tf.concat([latent_embed, latent_shift_angles], axis=1)
 			self.decoded_embed = self.decoder(shift_latent_vector)
-			# rot_grad = tf.gradients(latent_embed, rotation_params)
-			self.embed_loss = self.loss_op(self.decoded_embed - self.rot_embed)
+			rot_grad = tf.gradients(latent_embed, rotation_params)
+			self.embed_loss = self.loss_op(self.decoded_embed - self.embed)
 			tf.summary.scalar("embed_loss", self.embed_loss)
 			tf.add_to_collection('embed_losses', self.embed_loss)
-			# self.rotation_loss = self.loss_op(rot_grad)
-			# if self.train_rotation:
-			# 	tf.add_to_collection('embed_losses', self.rotation_loss)
-			# 	tf.summary.scalar("rotation_loss", self.rotation_loss)
+			self.rotation_loss = self.loss_op(rot_grad)
+			if self.train_rotation:
+				tf.add_to_collection('embed_losses', self.rotation_loss)
+				tf.summary.scalar("rotation_loss", self.rotation_loss)
 
 			self.embed_losses = tf.add_n(tf.get_collection('embed_losses'))
 			tf.summary.scalar("embed_losses", self.embed_losses)
@@ -739,12 +739,12 @@ class GauSHEncoderv2(GauSHEncoder):
 		for ministep in range (0, int(Ncase_test/self.batch_size)):
 			batch_data = self.get_test_batch(self.batch_size)
 			feed_dict = self.fill_feed_dict(batch_data)
-			total_loss, embed_loss, rot_embed, decoded_embed = self.sess.run([self.embed_losses, self.embed_loss,
-						self.rot_embed, self.decoded_embed], feed_dict=feed_dict)
+			total_loss, embed_loss, embed, decoded_embed = self.sess.run([self.embed_losses, self.embed_loss,
+						self.embed, self.decoded_embed], feed_dict=feed_dict)
 			test_loss += total_loss
 			test_embed_loss += embed_loss
 			# test_rotation_loss += rotation_loss
-			test_epoch_errors.append(rot_embed - decoded_embed)
+			test_epoch_errors.append(embed - decoded_embed)
 			num_atoms += np.sum(batch_data[2]) * self.max_num_atoms
 		test_epoch_errors = np.concatenate(test_epoch_errors)
 		test_mse = np.mean(test_epoch_errors)

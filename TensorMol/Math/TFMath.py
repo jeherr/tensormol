@@ -1,7 +1,17 @@
 """
-Routines which do elementary math in Tensorflow which is for whatever reason missing in the Tensorflow API.
+Routines which do elementary math in Tensorflow which is for whatever reason
+missing in the Tensorflow API.
 """
 import tensorflow as tf
+
+def TFFactorial(x_):
+	return tf.exp(tf.lgamma(x_ + 1))
+
+def TFBinomial(x_,y_):
+	"""
+	x choose y
+	"""
+	return TFFactorial(x_)/TFFactorial(y_)/TFFactorial(x_-y_)
 
 def TFMatrixPower(mat_,exp_):
 	"""
@@ -93,6 +103,48 @@ def TFDistancesLinear(B,NZP):
 	A = Ri - Rj
 	D = tf.sqrt(tf.clip_by_value(tf.reduce_sum(A*A, 1),1e-36,1e36))
 	return D
+
+def TFBend(xyz,trips):
+	"""
+	you feed in an xyz.
+	this computes all the torsions defined in quartets.
+	weighted by distances.
+
+	Args:
+	    xyz: Natom X 3 molecule
+	    trips: Ntrips X 4
+	Returns:
+	    ntrips X 1 bend tensor.
+	"""
+	b1 = tf.gather(xyz,trips[...,0],axis=0)-tf.gather(xyz,trips[...,1],axis=0)
+	b2 = tf.gather(xyz,trips[...,1],axis=0)-tf.gather(xyz,trips[...,2],axis=0)
+	CosTheta = tf.reduce_sum(b1*b2,axis=-1)/(tf.norm(b1,axis=1)*tf.norm(b2,axis=1))
+	return tf.acos(CosTheta)
+
+def TFTorsion(xyz,quartets):
+	"""
+	you feed in an xyz.
+	this computes all the torsions defined in quartets.
+	weighted by distances.
+
+	Args:
+	    xyz: Natom X 3 molecule
+	    quartets: Nquartet X 4
+	Returns:
+	    nquartet X 1 torsional tensor.
+	"""
+	b1 = tf.gather(xyz,quartets[...,0],axis=0)-tf.gather(xyz,quartets[...,1],axis=0)
+	b2 = tf.gather(xyz,quartets[...,1],axis=0)-tf.gather(xyz,quartets[...,2],axis=0)
+	b3 = tf.gather(xyz,quartets[...,2],axis=0)-tf.gather(xyz,quartets[...,3],axis=0)
+	b1 /= tf.norm(b1,axis=1)[...,tf.newaxis]
+	b2 /= tf.norm(b2,axis=1)[...,tf.newaxis]
+	b3 /= tf.norm(b3,axis=1)[...,tf.newaxis]
+	n1 = tf.cross(b1,b2)
+	n2 = tf.cross(b2,b3)
+	m = tf.cross(n1,b2)
+	x = tf.reduce_sum(n1*n2,axis=1)
+	y = tf.reduce_sum(m*n2,axis=1)
+	return tf.atan2(y,x)
 
 def AllTriples(rng):
 	"""Returns all possible triples of an input list.
