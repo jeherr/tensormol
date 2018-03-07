@@ -1341,7 +1341,6 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 		if self.train_sparse:
 			pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
 		gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
-		embed_factor = tf.Variable(self.embed_factor, trainable=False, dtype=self.tf_precision)
 		elements = tf.constant(self.elements, dtype = tf.int32)
 
 		rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
@@ -1416,21 +1415,23 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			if self.train_sparse:
 				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
-			embed_factor = tf.Variable(self.embed_factor, trainable=False, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
 			embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
 			embed_stddev = tf.Variable(self.embed_stddev, trainable=False, dtype = self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 
-			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-							np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-							tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+			# rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+			# 				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+			# 				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+			rotation_axis = tf.random_normal([self.batch_size, self.max_num_atoms, 3])
+			rotation_angle = tf.random_uniform([self.batch_size, self.max_num_atoms, 1], maxval=2.0)
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
-			rotation_params = tf.gather_nd(rotation_params, padding_mask)
-			rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
-			self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
+			rotation_axis = tf.gather_nd(rotation_axis, padding_mask)
+			rotation_angle = tf.gather_nd(rotation_angle, padding_mask)
+			rotated_xyzs = tf_random_rotatev2(centered_xyzs, rotation_axis, rotation_angle)
+			# self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
 			if self.train_sparse:
 				embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, self.Zs_pl,
 											self.pairs_pl, elements, self.gaussian_params, self.l_max)
@@ -1457,7 +1458,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				self.dipole_train_op = self.optimizer(self.dipole_losses, self.learning_rate, self.momentum, dipole_variables)
 			else:
 				self.total_energy = self.bp_energy
-			xyz_grad, rot_grad = tf.gradients(self.total_energy, [self.xyzs_pl, rotation_params])
+			xyz_grad, rot_grad = tf.gradients(self.total_energy, [self.xyzs_pl, rotation_angle])
 			self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 			self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
 			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
@@ -1489,7 +1490,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				self.run_metadata = tf.RunMetadata()
 		return
 
-class BehlerParinelloGauSHConv(BehlerParinelloNetwork):
+class BehlerParinelloGauSHConv(BehlerParinelloGauSH):
 	"""
 	Behler-Parinello network using symmetry function embedding from RawEmbeddings.py
 	also has sparse evaluation using an updated version of the
@@ -1522,7 +1523,6 @@ class BehlerParinelloGauSHConv(BehlerParinelloNetwork):
 		if self.train_sparse:
 			pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
 		gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
-		embed_factor = tf.Variable(self.embed_factor, trainable=False, dtype=self.tf_precision)
 		elements = tf.constant(self.elements, dtype = tf.int32)
 
 		rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
@@ -1596,23 +1596,25 @@ class BehlerParinelloGauSHConv(BehlerParinelloNetwork):
 				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
 
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=True, dtype=self.tf_precision)
-			embed_factor = tf.Variable(self.embed_factor, trainable=False, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
 			embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
 			embed_stddev = tf.Variable(self.embed_stddev, trainable=False, dtype = self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 
-			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-					np.pi * tf.random_uniform([self.batch_size], maxval=2.0, dtype=self.tf_precision),
-					tf.random_uniform([self.batch_size], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
-			rotated_xyzs, rotated_gradients = tf_random_rotate(self.xyzs_pl, rotation_params, self.gradients_pl)
+			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
+			centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
+			rotation_params = tf.gather_nd(rotation_params, padding_mask)
+			rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
 			self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
 			if self.train_sparse:
 				embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, self.Zs_pl,
 											self.pairs_pl, elements, self.gaussian_params, self.l_max)
 			else:
-				embed, mol_idx = tf_gaush_element_channel(rotated_xyzs, self.Zs_pl,
+				embed, mol_idx = tf_gaush_element_channelv3(rotated_xyzs, self.Zs_pl,
 											elements, self.gaussian_params, self.l_max)
 			for element in range(len(self.elements)):
 				embed[element] -= embed_mean[element]
@@ -1634,16 +1636,14 @@ class BehlerParinelloGauSHConv(BehlerParinelloNetwork):
 				self.dipole_train_op = self.optimizer(self.dipole_losses, self.learning_rate, self.momentum, dipole_variables)
 			else:
 				self.total_energy = self.bp_energy
-
-			xyz_grad, rot_grad = tf.gradients(self.total_energy, [rotated_xyzs, rotation_params])
-			self.gradients = tf.gather_nd(xyz_grad, tf.where(tf.not_equal(self.Zs_pl, 0)))
-			self.gradient_labels = tf.gather_nd(rotated_gradients, tf.where(tf.not_equal(self.Zs_pl, 0)))
-
+			xyz_grad, rot_grad = tf.gradients(self.total_energy, [self.xyzs_pl, rotation_params])
+			self.gradients = tf.gather_nd(xyz_grad, padding_mask)
+			self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
 			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
 			tf.summary.scalar("energy loss", self.energy_loss)
 			tf.add_to_collection('energy_losses', self.energy_loss)
 			self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
-			self.rotation_loss = self.loss_op(rot_grad) / 500.0
+			self.rotation_loss = 0.02 * self.loss_op(rot_grad)
 			if self.train_gradients:
 				tf.add_to_collection('energy_losses', self.gradient_loss)
 				tf.summary.scalar("gradient loss", self.gradient_loss)
@@ -1689,7 +1689,7 @@ class BehlerParinelloGauSHConv(BehlerParinelloNetwork):
 				for i in range(len(self.filters)):
 					if i == 0:
 						with tf.name_scope(str(self.elements[e])+'_conv1'):
-							conv = tf.layers.conv1d(inputs, filters=self.filters[i], kernel_size=self.kernel_size[i],
+							conv = tf.layers.conv1d(tf.expand_dims(inputs, axis=-1), filters=self.filters[i], kernel_size=self.kernel_size[i],
 								strides=self.strides[i], padding="valid", activation=self.activation_function)
 							branches[-1].append(conv)
 					else:
