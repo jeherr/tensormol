@@ -16,6 +16,21 @@ from TensorMol.Util import *
 if (HAS_TF):
 	import tensorflow as tf
 
+def TorsionBump(x,bs,quads,nbump):
+	"""
+	Args:
+		x: (natom X 3) tensor representing the point at which the energy is sampled.
+		bs: a nbump X NQuad tensor of bump centers.
+		quads: NQuad X 4 array of quadruples.
+		nbump: an integer determining the number of nonzero bumps.
+	"""
+	Dx = TFTorsion(x,quads)
+	w2 = 0.2*0.2
+	rij = (bs[:nbump,...] - Dx[tf.newaxis,...])
+	ToExp = tf.reduce_sum(rij*rij,axis=-1)
+	ToSum = -1.0*0.2*tf.exp(-0.5*ToExp/w2)
+	return tf.reduce_sum(ToSum)
+
 def BumpEnergy(h,w,xyz,x,nbump):
 	"""
 	A -1*potential energy which is just the sum of gaussians
@@ -60,8 +75,8 @@ def BumpEnergyMR(h,w,xyz,x,nbump):
 	xshp = tf.shape(x)
 	nx = xshp[0]
 	Nzxyz = tf.slice(xyz,[0,0,0],[nbump,nx,3])
-	Ds = TFDistances(Nzxyz) + 1e-15# nbump X MaxNAtom X MaxNAtom Distance tensor.
-	Dx = TFDistance(x) + 1e-15 # MaxNAtom X MaxNAtom Distance tensor.	#sqrt2pi = tf.constant(2.50662827463100,dtype = tf.float64)
+	Ds = tf.clip_by_value(TFDistances(Nzxyz),1e-36,1e36)# nbump X MaxNAtom X MaxNAtom Distance tensor.
+	Dx = tf.clip_by_value(TFDistance(x),1e-36,1e36) # MaxNAtom X MaxNAtom Distance tensor.	#sqrt2pi = tf.constant(2.50662827463100,dtype = tf.float64)
 	w2 = w*w
 	rij = Ds - Dx[tf.newaxis,:,:]
 	ToExp = rij*rij

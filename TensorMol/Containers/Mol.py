@@ -426,6 +426,55 @@ class Mol:
 		tmp = (mdm-odm)
 		return np.sqrt(np.sum(tmp*tmp)/(mdm.shape[0]*mdm.shape[0]))
 
+	def Topology(self,tol_=1.5,nreal_=-1):
+		"""
+		Returns:
+			Bonds: (NBond X 2) array of bonds (uniquely sorted.)
+			Bends: (NBend X 3) array of bends (uniquely sorted.)
+			Torsions: (NBend X 4) array of torsions (bends which share bonds) (uniquely sorted.)
+		"""
+		todo = nreal_
+		if (nreal_==-1):
+			todo = self.NAtoms()
+		tore = np.zeros((self.NAtoms(),3))
+		NL = MolEmb.Make_NListNaive(self.coords, tol_, todo, True)
+		# Determine bonds
+		bonds = []
+		for i,js in enumerate(NL):
+			if (len(js)>0):
+				for j in js:
+					if (i<j):
+						bonds.append([i,j])
+		bends = []
+		for i,b1 in enumerate(bonds):
+			for b2 in bonds[i+1:]:
+				if (b1[0] == b2[0]):
+					if (b1[1] < b2[1]):
+						bends.append([b1[1],b1[0],b2[1]])
+					elif (b1[1] > b2[1]):
+						bends.append([b2[1],b1[0],b1[1]])
+				elif (b1[0] == b2[1]):
+					if (b1[1] < b2[0]):
+						bends.append([b1[1],b1[0],b2[0]])
+					elif (b1[1] > b2[0]):
+						bends.append([b2[0],b1[0],b1[1]])
+				elif (b1[1] == b2[0]):
+					if (b1[0] < b2[1]):
+						bends.append([b1[0],b1[1],b2[1]])
+					elif (b1[0] > b2[1]):
+						bends.append([b2[1],b1[1],b1[0]])
+				elif (b1[1] == b2[1]):
+					if (b1[0] < b2[0]):
+						bends.append([b1[0],b1[1],b2[0]])
+					elif (b1[0] > b2[0]):
+						bends.append([b2[0],b1[1],b1[0]])
+		torsions = []
+		for b1 in bends:
+			for b2 in bends:
+				if b1[1] == b2[0] and b1[2] == b2[1]:
+					torsions.append([b1[0],b1[1],b1[2],b2[2]])
+		return np.array(bonds,dtype=np.int32),np.array(bends,dtype=np.int32),np.array(torsions,dtype=np.int32)
+
 	def HybMatrix(self,tol_=2.2,nreal_ = -1):
 		"""
 		This is a predictor of an atom's hybridization for each atom
@@ -439,7 +488,7 @@ class Mol:
 		if (nreal_==-1):
 			todo = self.NAtoms()
 		tore = np.zeros((self.NAtoms(),3))
-		NL = MolEmb.Make_NListLinear(self.coords, tol_+1.5, todo, True)
+		NL = MolEmb.Make_NListNaive(self.coords, tol_+1.5, todo, True)
 		for i,js in enumerate(NL):
 			Rijs = np.zeros(len(js))
 			for k,j in enumerate(js):

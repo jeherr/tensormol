@@ -200,6 +200,59 @@ class BumpHolder(ForceHolder):
 		"""
 		return self.sess.run([self.BowlE,self.BowlF], feed_dict = {self.x_pl:x_})
 
+class TopologyBumper(ForceHolder):
+	def __init__(self,m_,maxbump_=500):
+		"""
+		Basin-Filling for bond distances, angles, and torsions.
+		"""
+		natom_ = m_.NAtoms()
+		self.natom = natom_
+		self.dubs, self.trips, self.quads = m_.Topology()
+		self.NQuad = self.quads.shape[0]
+		ForceHolder.__init__(self, natom_)
+		self.maxbump = maxbump_
+		self.nbump = 0
+		self.tbumps = np.zeros((self.maxbump,self.NQuad),dtype=np.float64)
+		self.Prepare()
+		return
+	def Prepare(self):
+		with tf.Graph().as_default():
+			self.bs_pl=tf.placeholder(tf.float64, shape=tuple([self.maxbump,self.NQuad]))
+			self.x_pl=tf.placeholder(tf.float64, shape=tuple([self.natom,3]))
+			self.q_pl=tf.placeholder(tf.int32, shape=tuple([self.NQuad,4]))
+			self.nb_pl=tf.placeholder(tf.int32)
+
+			self.grad_out = tf.Variable(np.zeros([self.natom,3]),dtype=tf.float64)
+			self.zero_grad = tf.assign(self.grad_out,tf.zeros_like(self.grad_out))
+
+			self.Torsions = TFTorsion(self.x_pl,self.q_pl)
+			self.BE = -1.0*TorsionBump(self.x_pl,self.bs_pl,self.q_pl,self.nb_pl)
+
+			self.BF_is = tf.gradients(TorsionBump(self.x_pl,self.bs_pl,self.q_pl,self.nb_pl),self.x_pl)[0]
+			with tf.control_dependencies([self.zero_grad]):
+				# The above will be IndexedSlices and can be converted out as follows:
+				self.BF = tf.scatter_add(self.grad_out,self.BF_is.indices,self.BF_is.values)
+
+			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+			#self.summary_writer = tf.summary.FileWriter(self.train_dir, self.sess.graph)
+			init = tf.global_variables_initializer()
+			self.sess.run(init)
+		return
+	def AddBump(self,x_):
+		self.tbumps[self.nbump%self.maxbump] = self.sess.run(self.Torsions,feed_dict={self.x_pl:x_,self.q_pl:self.quads})
+		self.nbump += 1
+		return
+	def Bump(self,x_):
+		"""
+		Returns the Bump energy force.
+		"""
+		if (self.nbump < 1):
+			return 0.0, np.zeros(x_.shape)
+		BE,BF = self.sess.run([self.BE,self.BF],feed_dict={self.x_pl:x_,self.q_pl:self.quads,self.nb_pl:self.nbump,self.bs_pl:self.tbumps})
+		print("BF",BF)
+		print(x_.shape,BF.shape)
+		return BE,BF
+
 class MolInstance_DirectForce(MolInstance_fc_sqdiff_BP):
 	"""
 	An instance which can evaluate and optimize some model force field.
