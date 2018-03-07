@@ -104,6 +104,23 @@ def TFDistancesLinear(B,NZP):
 	D = tf.sqrt(tf.clip_by_value(tf.reduce_sum(A*A, 1),1e-36,1e36))
 	return D
 
+def TFBend(xyz,trips):
+	"""
+	you feed in an xyz.
+	this computes all the torsions defined in quartets.
+	weighted by distances.
+
+	Args:
+	    xyz: Natom X 3 molecule
+	    trips: Ntrips X 4
+	Returns:
+	    ntrips X 1 bend tensor.
+	"""
+	b1 = tf.gather(xyz,trips[...,0],axis=0)-tf.gather(xyz,trips[...,1],axis=0)
+	b2 = tf.gather(xyz,trips[...,1],axis=0)-tf.gather(xyz,trips[...,2],axis=0)
+	CosTheta = tf.reduce_sum(b1*b2,axis=-1)/(tf.norm(b1,axis=1)*tf.norm(b2,axis=1))
+	return tf.acos(CosTheta)
+
 def TFTorsion(xyz,quartets):
 	"""
 	you feed in an xyz.

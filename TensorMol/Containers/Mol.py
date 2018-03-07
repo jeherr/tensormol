@@ -471,8 +471,15 @@ class Mol:
 		torsions = []
 		for b1 in bends:
 			for b2 in bends:
-				if b1[1] == b2[0] and b1[2] == b2[1]:
-					torsions.append([b1[0],b1[1],b1[2],b2[2]])
+				if (b1[1]==b2[0] and b1[2]==b2[1]):
+					torsions.append(b1+[b2[2]])
+				if (b1[0]==b2[1] and b1[1]==b2[2]):
+					torsions.append(b2+[b1[2]])
+				if (b1[1]==b2[0] and b1[0]==b2[1]):
+					torsions.append(b1[::-1]+[b2[2]])
+				if (b1[2]==b2[1] and b1[1]==b2[2]):
+					torsions.append(b2+[b1[0]])
+				# Note the central bend atom cannot be the center of both in a torsion.
 		return np.array(bonds,dtype=np.int32),np.array(bends,dtype=np.int32),np.array(torsions,dtype=np.int32)
 
 	def HybMatrix(self,tol_=2.2,nreal_ = -1):

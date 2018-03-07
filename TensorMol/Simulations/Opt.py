@@ -43,7 +43,7 @@ class GeomOptimizer:
 			energy = self.EnergyAndForce(x_,False)
 			return energy
 
-	def Opt(self,m_, filename="OptLog",Debug=False):
+	def Opt(self,m_, filename="OptLog",Debug=False,FileOutput=True):
 		"""
 		Optimize using An EnergyAndForce Function with conjugate gradients.
 
@@ -68,7 +68,8 @@ class GeomOptimizer:
 			mol_hist.append(prev_m)
 			prev_m.properties["Step"] = step
 			prev_m.properties["Energy"] = energy
-			prev_m.WriteXYZfile("./results/", filename,'a',True)
+			if (FileOutput):
+				prev_m.WriteXYZfile("./results/", filename,'a',True)
 			step+=1
 		# Checks stability in each cartesian direction.
 		print("Final Energy:", self.EnergyAndForce(prev_m.coords,False))
@@ -95,7 +96,7 @@ class GeomOptimizer:
 		LOGGER.info("Bump added!")
 		return
 
-	def Opt_LS(self,m, filename="OptLog",Debug=False):
+	def Opt_LS(self,m, filename="OptLog", Debug=False, FileOutput = True):
 		"""
 		Optimize with Steepest Descent + Line search using An EnergyAndForce Function.
 
@@ -124,14 +125,15 @@ class GeomOptimizer:
 			rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/veloc.shape[0]
 			print("step: ", step ," energy: ", energy, " rmsgrad ", rmsgrad, " rmsdisp ", rmsdisp)
 			mol_hist.append(prev_m)
-			prev_m.WriteXYZfile("./results/", filename)
+			if (FileOutput):
+				prev_m.WriteXYZfile("./results/", filename)
 			step+=1
 		# Checks stability in each cartesian direction.
 		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
 		print("Final Energy:", self.EnergyAndForce(prev_m.coords,False))
 		return prev_m
 
-	def OptGD(self,m_, filename="GDOptLog",Debug=False):
+	def OptGD(self,m_, filename="GDOptLog",Debug=False, FileOutput = True):
 		"""
 		Optimize using steepest descent  and an EnergyAndForce Function.
 
@@ -162,7 +164,8 @@ class GeomOptimizer:
 			rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/m.coords.shape[0]
 			LOGGER.info(filename+"step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
 			mol_hist.append(prev_m)
-			prev_m.WriteXYZfile("./results/", filename)
+			if (FileOutput):
+				prev_m.WriteXYZfile("./results/", filename)
 			step+=1
 		# Checks stability in each cartesian direction.
 		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
@@ -395,7 +398,7 @@ class ConformationSearch(GeomOptimizer):
 		self.StopAfter = StopAfter_
 		self.m = m
 		self.fscale = 0.3
-		self.momentum = 0.3
+		self.momentum = 0.1
 		self.thresh = 0.005
 		self.masses = np.array(map(lambda x: ATOMICMASSES[x-1], m.atoms))
 		self.natoms = m.NAtoms()
@@ -472,9 +475,9 @@ class ConformationSearch(GeomOptimizer):
 				prev_m.WriteXYZfile("./results/", filename)
 				step+=1
 			self.Bump(m.coords)
-			m.Distort(0.01)
+			m.Distort(0.001) # Just to knock it off the top of the gaussian.
 
-			d = self.OptGD(prev_m,"Dive"+str(ndives))
+			d = self.OptGD(prev_m,"Dive"+str(ndives),FileOutput=False)
 			BM = prev_m.BondMatrix()
 			self.AppendIfNew(d)
 			self.Bump(d.coords)
@@ -502,7 +505,7 @@ class ConformationSearch(GeomOptimizer):
 			odm = MolEmb.Make_DistMat(m.coords)
 			tmp = (mdm-odm)
 			overlaps.append(np.sqrt(np.sum(tmp*tmp)/(mdm.shape[0]*mdm.shape[0])))
-		if (min(overlaps) > self.thresh):
+		if (min(overlaps) > 0.06):
 			print("New Configuration!")
 			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
 			self.MinimaCoords[self.NMinima] = m.coords.copy()
