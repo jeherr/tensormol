@@ -2325,6 +2325,25 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		self.name = "Mol_"+self.TData.name+"_"+self.TData.dig.name+"_"+self.NetType+"_"+self.suffix
 		self.train_dir = PARAMS["networks_directory"]+self.name
 
+		if PARAMS["SymFChannel"] is None:
+			print ("set the atomic number to channel")
+			self.channels = self.eles_np.reshape((self.n_eles,1)).astype(np.float64)
+			self.channel_pairs = ((self.eles_pairs_np[:,0]*self.eles_pairs_np[:,1])/(self.eles_pairs_np[:,0]+self.eles_pairs_np[:,1])).astype(np.float64).reshape((-1,1))
+		else:
+			self.channels = PARAMS["SymFChannel"]
+			self.channel_pairs = []
+			for i in range (len(self.eles)):
+				for j in range(i, len(self.eles)):
+					self.channel_pairs.append([(self.channels[i]*self.channels[j])/(self.channels[i]+self.channels[j])])
+			self.channel_pairs = np.asarray(self.channel_pairs).reshape((-1, self.channels.shape[1]))
+			
+		#print ("self.channels:", self.channels, "\n  self.channel_pairs:", self.channel_pairs)			
+		self.inshape = self.inshape*self.channels.shape[1]
+		print ("self.channel_pairs:", self.channel_pairs.shape)
+		print ("self.inshape:", self.inshape)
+
+		 
+
 	def SetANI1Param(self, prec=np.float64):
 		"""
 		Generate ANI1 symmetry function parameter tensor.
@@ -2353,7 +2372,7 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		SFPr = np.concatenate([p1_R,p2_R],axis=2)
 		self.SFPr = np.transpose(SFPr, [2,0,1])
 		self.inshape = int(AN1_num_r_Rs + AN1_num_a_Rs*AN1_num_a_As)
-		self.inshape_withencode = int(self.inshape + AN1_num_r_Rs)
+		#self.inshape_withencode = int(self.inshape + AN1_num_r_Rs)
 		#self.inshape = int(len(self.eles)*AN1_num_r_Rs)
 		p1 = np.tile(np.reshape(thetas,[AN1_num_a_As,1,1]),[1,AN1_num_a_Rs,1])
 		p2 = np.tile(np.reshape(rs,[1,AN1_num_a_Rs,1]),[AN1_num_a_As,1,1])
@@ -2364,7 +2383,6 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		self.zeta = PARAMS["AN1_zeta"]
 		self.eta = PARAMS["AN1_eta"]
 		self.HasANI1PARAMS = True
-		print ("self.inshape:", self.inshape)
 
 	def TrainPrepare(self,  continue_training =False):
 		"""
@@ -2387,6 +2405,10 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			self.keep_prob_pl =  tf.placeholder(self.tf_prec, shape=tuple([self.nlayer+1]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
 			Elep = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int64)
+
+			Channels = tf.Variable(self.channels, trainable= False, dtype = self.tf_prec)
+			Channel_pairs = tf.Variable(self.channel_pairs, trainable= False, dtype = self.tf_prec)
+
 			SFPa2 = tf.Variable(self.SFPa2, trainable= False, dtype = self.tf_prec)
 			SFPr2 = tf.Variable(self.SFPr2, trainable= False, dtype = self.tf_prec)
 			Rr_cut = tf.Variable(self.Rr_cut, trainable=False, dtype = self.tf_prec)
@@ -2394,7 +2416,7 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_prec)
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_prec)
 			#self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
-			self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
+			self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
 			self.Etotal, self.Ebp, self.Ebp_atom = self.energy_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.keep_prob_pl)
 			self.gradient  = tf.gradients(self.Etotal, self.xyzs_pl, name="BPEGrad")
 			self.total_loss, self.loss, self.energy_loss, self.grads_loss = self.loss_op(self.Etotal, self.gradient, self.Elabel_pl, self.grads_pl, self.natom_pl)
