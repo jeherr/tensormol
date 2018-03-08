@@ -186,54 +186,6 @@ class GeomOptimizer:
 		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
 		return prev_m
 
-	def OptGDSet(self, mSet_, SetEF_, filename="GDOptLog",Debug=False, FileOutput = True, eff_thresh = None, eff_max_step = None):
-		"""
-		Steepest descent on a set of molecules.
-		To exploit maximum parallelism.
-
-		Args:
-		        mSet_: A Set of Molecules.
-				SetEF_
-		"""
-		# Sweeps one at a time
-		rmsdisp = 10.0
-		rmsgrad = 10.0
-		step=0
-		m = Mol(m_.atoms,m_.coords)
-		mol_hist = []
-		prev_m = Mol(m.atoms, m.coords)
-		#print("Orig Coords", m.coords)
-		if (eff_thresh == None):
-			thresh = self.thresh
-		else:
-			thresh = eff_thresh
-		if (eff_max_step == None):
-			max_step = self.max_opt_step
-		else:
-			max_step = eff_max_step
-		#print "Initial force", self.tfm.evaluate(m, i), "Real Force", m.properties["forces"][i]
-		energy, old_frc  = self.WrappedEForce(m.coords)
-		while( step < self.max_opt_step and rmsgrad > thresh):
-			prev_m = Mol(m.atoms, m.coords)
-			if step > 0:
-				old_frc = frc
-			energy, frc = self.WrappedEForce(m.coords)
-			if (np.sum(frc*old_frc)<0.0):
-				old_frc *= 0.0
-			rmsgrad = np.sum(np.linalg.norm(frc,axis=1))/frc.shape[0]
-			frc += self.momentum*old_frc
-			m.coords = m.coords + self.fscale*frc
-			rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/m.coords.shape[0]
-			LOGGER.info(filename+"step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
-			mol_hist.append(prev_m)
-			if (FileOutput):
-				prev_m.WriteXYZfile("./results/", filename)
-			step+=1
-		# Checks stability in each cartesian direction.
-		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
-		return prev_m
-
-
 class MetaOptimizer(GeomOptimizer):
 	def __init__(self,f_,m,StopAfter_=20,Box_=False,OnlyHev_=True):
 		"""
