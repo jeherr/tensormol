@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 from ..Util import *
 from ..Math import *
+from ..ElementData import *
 import MolEmb
 
 class Mol:
@@ -17,23 +18,42 @@ class Mol:
 		self.properties = {}
 		self.name=None
 		#things below here are sometimes populated if it is useful.
-		self.DistMatrix = None # a list of equilbrium distances, for GO-models.
+		self.DistMatrix = None # a list of equilbrium distances
 		return
 
-	def ToFragSet(self,frags):
+	def GenSummary(self):
 		"""
-		Divides this molecule into a set of molecules
-		based on fragments
+		Generates several sorts of properties which
+		might be useful in a database. Including hashes
+		for connectivity, geometry etc.
+		puts these in a summary dictionary which it returns.
+		"""
+		self.properties = {}
+		self.SortAtoms()
+		self.BuildDistanceMatrix()
+		d,t,q = self.Topology()
+		MW = self.MolecularWeight()
+		formula = self.Formula()
+		import hashlib
+		hasher = hashlib.md5()
+		hasher.update(formula.encode('utf-8'))
+		hasher.update(str(d).encode('utf-8'))
+		bondhash = hasher.hexdigest()
+		hasher.update(str(np.round(self.DistMatrix,decimals=6)).encode('utf-8'))
+		ghash = hasher.hexdigest()
+		return {"MW":MW, "formula":formula, "bond_hash":bondhash, "geom_hash":ghash}
 
-		Args:
-			frags: list of integer lists
-		Returns:
-			An MSet with many mols in it divided by frags.
-		"""
-		mset = MSet("Fset",PARAMS["sets_dir"],False)
-		for frag in frags:
-			mset.mols.append(Mol(self.atoms[frags],self.coords[frags]))
-		return mset
+	def MolecularWeight(self):
+		MW = 0.0
+		for atom in self.atoms:
+			MW += AtomData[atom][3]
+		return MW
+
+	def Formula(self):
+		tore = ""
+		for element in self.AtomTypes():
+			tore = tore + AtomData[element][0]+str(self.NumOfAtomsE(element))
+		return tore
 
 	def BuildElectronConfiguration(self,charge_=0,spin_=1):
 		"""
@@ -69,9 +89,15 @@ class Mol:
 		return self.atoms.shape[0]
 
 	def NumOfAtomsE(self, e):
+		"""
+		Number of atoms of a given Element
+		"""
 		return sum( [1 if at==e else 0 for at in self.atoms ] )
 
 	def CalculateAtomization(self):
+		"""
+		This routine needs to be revised and replaced.
+		"""
 		if ("roomT_H" in self.properties):
 			AE = self.properties["roomT_H"]
 			for i in range (0, self.atoms.shape[0]):
@@ -86,18 +112,6 @@ class Mol:
 			self.properties["atomization"] = AE
 		else:
 			raise Exception("Missing energy to calculate atomization... ")
-		return
-
-	def Calculate_vdw(self):
-		c = 0.38088
-		self.vdw = 0.0
-		s6 = S6['B3LYP']
-		self.properties["vdw"] = 0.0
-		for i in range (0, self.NAtoms()):
-			atom1 = self.atoms[i]
-			for j in range (i+1, self.NAtoms()):
-				atom2 = self.atoms[j]
-				self.properties["vdw"] += -s6*c*((C6_coff[atom1]*C6_coff[atom2])**0.5)/(self.DistMatrix[i][j])**6 * (1.0/(1.0+6.0*(self.DistMatrix[i][j]/(atomic_vdw_radius[atom1]+atomic_vdw_radius[atom2]))**-12))
 		return
 
 	def Rotate(self, axis, ang, origin=np.array([0.0, 0.0, 0.0])):
@@ -230,42 +244,6 @@ class Mol:
 			raise Ex
 		return
 
-	def ReadGDB9(self,path,filename):
-		try:
-			f=open(path,"r")
-			lines=f.readlines()
-			natoms=int(lines[0])
-			self.name = filename[0:-4]
-			self.atoms.resize((natoms))
-			self.coords.resize((natoms,3))
-			try:
-				self.properties["energy"] = float((lines[1].split())[12])
-				self.properties["roomT_H"] = float((lines[1].split())[14])
-			except:
-				pass
-			for i in range(natoms):
-				line = lines[i+2].split()
-				self.atoms[i]=AtomicNumber(line[0])
-				try:
-					self.coords[i,0]=float(line[1])
-				except:
-					self.coords[i,0]=scitodeci(line[1])
-				try:
-					self.coords[i,1]=float(line[2])
-				except:
-					self.coords[i,1]=scitodeci(line[2])
-				try:
-					self.coords[i,2]=float(line[3])
-				except:
-					self.coords[i,2]=scitodeci(line[3])
-			f.close()
-		except Exception as Ex:
-			print("Read Failed.", Ex)
-			raise Ex
-		if (("energy" in self.properties) or ("roomT_H" in self.properties)):
-			self.CalculateAtomization()
-		return
-
 	def Clean(self):
 		self.DistMatrix = None
 
@@ -363,18 +341,6 @@ class Mol:
 		with open(fpath+"/"+fname+".xyz", mode) as f:
 			for line in self.__str__(wprop).split("\n"):
 				f.write(line+"\n")
-
-	def WriteSmiles(self, fpath=".", fname="gdb9_smiles", mode = "a"):
-		if not os.path.exists(os.path.dirname(fpath+"/"+fname+".dat")):
-			try:
-				os.makedirs(os.path.dirname(fpath+"/"+fname+".dat"))
-			except OSError as exc:
-				if exc.errno != errno.EEXIST:
-					raise
-		with open(fpath+"/"+fname+".dat", mode) as f:
-			f.write(self.name+ "  "+ self.smiles+"\n")
-			f.close()
-		return
 
 	def XYZtoGridIndex(self, xyz, ngrids = 250,padding = 2.0):
 		Max = (self.coords).max() + padding
@@ -695,173 +661,6 @@ class Mol:
 	def BuildDistanceMatrix(self):
 		self.DistMatrix = MolEmb.Make_DistMat(self.coords)
 
-	def GoEnergy(self,x):
-		''' The GO potential enforces equilibrium bond lengths. This is the lennard jones soft version'''
-		if (self.DistMatrix is None):
-			print("Build DistMatrix")
-			raise Exception("dmat")
-		xmat = np.array(x).reshape(self.NAtoms(),3)
-		newd = MolEmb.Make_DistMat(xmat)
-		newd -= self.DistMatrix
-		newd = newd*newd
-		return PARAMS["GoK"]*np.sum(newd)
-
-	def GoForce(self, at_=-1, spherical = 0):
-		'''
-			The GO potential enforces equilibrium bond lengths, and this is the force of that potential.
-			Args: at_ an atom index, if at_ = -1 it returns an array for each atom.
-		'''
-		if (spherical):
-			rthph = MolEmb.Make_GoForce(self.coords,self.DistMatrix,at_,1)
-			rthph[:,0] = rthph[:,0]*PARAMS["GoK"]
-			return rthph
-		else:
-			return PARAMS["GoK"]*MolEmb.Make_GoForce(self.coords,self.DistMatrix,at_,0)
-
-	def GoForceLocal(self, at_=-1):
-		''' The GO potential enforces equilibrium bond lengths, and this is the force of that potential.
-			A MUCH FASTER VERSION OF THIS ROUTINE IS NOW AVAILABLE, see MolEmb::Make_Go
-		'''
-		return PARAMS["GoK"]*MolEmb.Make_GoForceLocal(self.coords,self.DistMatrix,at_)
-
-	def NumericGoHessian(self):
-		if (self.DistMatrix==None):
-			print("Build DistMatrix")
-			raise Exception("dmat")
-		disp=0.001
-		hess=np.zeros((self.NAtoms()*3,self.NAtoms()*3))
-		for i in range(self.NAtoms()):
-			for j in range(self.NAtoms()):
-				for ip in range(3):
-					for jp in range(3):
-						if (j*3+jp >= i*3+ip):
-							tmp = self.coords.flatten()
-							tmp[i*3+ip] += disp
-							tmp[j*3+jp] += disp
-							f1 = self.GoEnergy(tmp)
-							tmp = self.coords.flatten()
-							tmp[i*3+ip] += disp
-							tmp[j*3+jp] -= disp
-							f2 = self.GoEnergy(tmp)
-							tmp = self.coords.flatten()
-							tmp[i*3+ip] -= disp
-							tmp[j*3+jp] += disp
-							f3 = self.GoEnergy(tmp)
-							tmp = self.coords.flatten()
-							tmp[i*3+ip] -= disp
-							tmp[j*3+jp] -= disp
-							f4 = self.GoEnergy(tmp)
-							hess[i*3+ip,j*3+jp] = (f1-f2-f3+f4)/(4.0*disp*disp)
-		return (hess+hess.T-np.diag(np.diag(hess)))
-
-	def GoHessian(self):
-		return PARAMS["GoK"]*MolEmb.Make_GoHess(self.coords,self.DistMatrix)
-
-	def ScanNormalModes(self,npts=11,disp=0.2):
-		"These modes are normal"
-		self.BuildDistanceMatrix()
-		hess = self.GoHessian()
-		w,v = np.linalg.eig(hess)
-		thresh = pow(10.0,-6.0)
-		numincl = np.sum([1 if abs(w[i])>thresh else 0 for i in range(len(w))])
-		tore = np.zeros((numincl,npts,self.NAtoms(),3))
-		nout = 0
-		for a in range(self.NAtoms()):
-			for ap in range(3):
-				if (abs(w[a*3+ap])<thresh):
-					continue
-				tmp = v[:,a*3+ap]/np.linalg.norm(v[:,a*3+ap])
-				eigv = np.reshape(tmp,(self.NAtoms(),3))
-				for d in range(npts):
-					tore[nout,d,:,:] = (self.coords+disp*(self.NAtoms()*(d-npts/2.0+0.37)/npts)*eigv).real
-					#print disp*(self.NAtoms()*(d-npts/2.0+0.37)/npts)*eigv
-					#print d, self.GoEnergy(tore[nout,d,:,:].flatten())#, PARAMS["GoK"]*MolEmb.Make_GoForce(tore[nout,d,:,:],self.DistMatrix,-1)
-				nout = nout+1
-		return tore
-
-	def SoftCutGoForce(self, cutdist=6):
-		if (self.DistMatrix==None):
-			print("Build DistMatrix")
-			raise Exception("dmat")
-		forces = np.zeros((self.NAtoms(),3))
-		for i in range(len(self.coords)):
-			forces[i]=self.SoftCutGoForceOneAtom(i, cutdist)
-		return forces
-
-	def GoForce_Scan(self, maxstep, ngrid):
-		#scan near by regime and return the samllest force
-		forces = np.zeros((self.NAtoms(),3))
-		TmpForce = np.zeros((self.NAtoms(), ngrid*ngrid*ngrid,3),dtype=np.float)
-		for i in range (0, self.NAtoms()):
-			print("Atom: ", i)
-			save_i = self.coords[i].copy()
-			samps=MakeUniform(self.coords[i],maxstep,ngrid)
-			for m in range (0, samps.shape[0]):
-				self.coords[i] = samps[m].copy()
-				for j in range(len(self.coords)):
-					# compute force on i due to all j's
-					u = self.coords[j]-samps[m]
-					dij = np.linalg.norm(u)
-					if (dij != 0.0):
-						u = u/np.linalg.norm(u)
-					TmpForce[i][m] += 0.5*(dij-self.DistMatrix[i,j])*u
-			self.coords[i] = save_i.copy()
-			TmpAbsForce = (TmpForce[i,:,0]**2+TmpForce[i,:,1]**2+TmpForce[i,:,2]**2)**0.5
-			forces[i] = samps[np.argmin(TmpAbsForce)]
-		return forces
-
-	def EnergyAfterAtomMove(self,s,i,Type="GO"):
-		if (Type=="GO"):
-			out = np.zeros(s.shape[:-1])
-			MolEmb.Make_Go(s,self.DistMatrix,out,self.coords,i)
-			return out
-		else:
-			raise Exception("Unknown Energy")
-
-	#Most parameters are unneccesary.
-	def OverlapEmbeddings(self, d1, coords, d2 , d3 ,  d4 , d5, i, d6):#(self,coord,i):
-		return np.array([GRIDS.EmbedAtom(self,j,i) for j in coords])
-
-	def FitGoProb(self,ii,Print=False):
-		'''
-		Generates a Go-potential for atom i on a uniform grid of 4A with 50 pts/direction
-		And fits that go potential with the H@0 basis centered at the same point
-		In practice 9 (1A) gaussians separated on a 1A grid around the sensory point appears to work for moderate distortions.
-		'''
-		Ps = self.POfAtomMoves(GRIDS.MyGrid(),ii)
-		Pc = np.dot(GRIDS.MyGrid().T,Ps)
-		if (Print):
-			print("Desired Displacement", Pc)  # should equal the point for a Go-Model at equilibrium
-		V=GRIDS.Vectorize(Ps)#,True)
-		out = np.zeros(shape=(1,GRIDS.NGau3+3))
-		out[0,:GRIDS.NGau3]+=V
-		out[0,GRIDS.NGau3:]+=Pc
-		return out
-
-	def UseGoProb(self,ii,inputs):
-		'''
-		The opposite of the routine above. It takes the digested probability vectors and uses it to calculate desired new positions.
-		'''
-		pdisp=inputs[-3:]
-		return pdisp
-
-	def EnergiesOfAtomMoves(self,samps,i):
-		return np.array([self.energyAfterAtomMove(s,i) for s in samps])
-
-	def POfAtomMoves(self,samps,i):
-		''' Arguments are given relative to the coordinate of i'''
-		if (self.DistMatrix==None):
-			raise Exception("BuildDMat")
-		Es=np.zeros(samps.shape[0],dtype=np.float64)
-		MolEmb.Make_Go(samps+self.coords[i],self.DistMatrix,Es,self.coords,i)
-		Es=np.nan_to_num(Es)
-		Es=Es-np.min(Es)
-		Ps = np.exp(-1.0*Es/(0.25*np.std(Es)))
-		Ps=np.nan_to_num(Ps)
-		Z = np.sum(Ps)
-		Ps /= Z
-		return Ps
-
 	def MakeBonds(self):
 		self.BuildDistanceMatrix()
 		maxnb = 0
@@ -896,13 +695,6 @@ class Mol:
 			names.append(atoi.keys()[atoi.values().index(self.atoms[i])])
 		return names
 
-	def Set_Qchem_Data_Path(self):
-		self.qchem_data_path="./qchem"+"/"+self.properties["set_name"]+"/"+self.name
-		return
-
-	def Make_Spherical_Forces(self):
-		self.properties["sphere_forces"] = CartToSphereV(self.properties["forces"])
-
 	def MultipoleInputs(self):
 		"""
 			These are the quantities (in Atomic Units)
@@ -923,25 +715,3 @@ class Mol:
 		else:
 			raise Exception("Implement... ")
 		return tore
-
-class Frag_of_Mol(Mol):
-	def __init__(self, atoms_=None, coords_=None):
-		Mol.__init__(self, atoms_, coords_)
-		self.atom_nodes = None
-		self.undefined_bond_type =  None # whether the dangling bond can be connected  to H or not
-		self.undefined_bonds = None  # capture the undefined bonds of each atom
-
-	def FromXYZString(self,string, set_name = None):
-		Mol.FromXYZString(self,string)
-		self.properties["set_name"] = set_name
-		return
-
-	def Make_AtomNodes(self):
-		atom_nodes = []
-		for i in range (0, self.NAtoms()):
-			if i in self.undefined_bonds.keys():
-				atom_nodes.append(AtomNode(self.atoms[i], i,  self.undefined_bond_type, self.undefined_bonds[i]))
-			else:
-				atom_nodes.append(AtomNode(self.atoms[i], i, self.undefined_bond_type))
-		self.atom_nodes = atom_nodes
-		return

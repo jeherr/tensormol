@@ -338,12 +338,6 @@ class MSet:
 				s.mols.append(mol)
 		return s
 
-	def Calculate_vdw(self):
-		for mol in self.mols:
-			mol.Calculate_vdw()
-			print("atomization:", mol.atomization, " vdw:", mol.vdw)
-		return
-
 	def WriteSmiles(self):
 		for mol in self.mols:
 			mol.WriteSmiles()
@@ -354,9 +348,6 @@ class MSet:
 		for m in self.mols:
 			self.NBonds += m.MakeBonds()
 		self.BondTypes = np.unique(np.concatenate([m.bondtypes for m in self.mols],axis=0),axis=0)
-
-
-
 
 class FragableMSet(MSet):
 	def __init__(self, name_ ="NaClH2O", path_="./datasets/"):
@@ -450,13 +441,6 @@ class FragableMSet(MSet):
 		for mol in self.mols:
 			mol.Get_Permute_Frags(indis)
 		return
-
-	def Set_Qchem_Data_Path(self):
-		for mol in self.mols:
-			mol.Set_Qchem_Data_Path()
-		return
-
-
 
 class FragableMSetBF(FragableMSet):
 	def __init__(self, name_ ="NaClH2O", path_="./datasets/"):

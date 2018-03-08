@@ -453,6 +453,7 @@ class ScannedOptimization(GeomOptimizer):
 			m = Mol(m_.atoms,m_.coords)
 
 		m=self.OptGD(m,"Pre_opt",FileOutput=False)
+		self.AppendIfNew(m)
 		self.biasforce.PreConstraint(m.coords)
 		eq_quads = self.biasforce.qbumps.copy()
 		energy0,frc0  = self.WrappedBumpedEForce(m.coords)
