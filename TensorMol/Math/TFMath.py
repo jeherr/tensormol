@@ -287,3 +287,31 @@ def TF_RandomRotationBatch(sz_,max_dist=1.0):
 	axes[:,2]*axes[:,1]*omct + axes[:,0]*st,
 	ct + axes[:,2]*axes[:,2]*omct],axis = -1),sz_+[3,3])
 	return matrices, tf.stack([thetas,phis,psis],axis=-1)
+
+def TF_RotationBatch(thetas,phis,psis):
+	"""
+	Returns a batch of uniform rotation matrices,
+	and the angles of each. Finds random unit vector
+	and then random angle around it.
+
+	Args:
+		sz_: number of rotation matrices
+		max_dist: maximum rotation in units of 2*Pi
+	"""
+	Pi = 3.14159265359
+	sz_ = tf.shape(thetas)
+	axes = tf.zeros(shape=sz_+[3])
+	axes = tf.stack([tf.sin(thetas)*tf.cos(phis), tf.sin(thetas)*tf.sin(phis), tf.cos(thetas)],axis=-1)
+	ct = tf.cos(psis)
+	st = tf.sin(psis)
+	omct = 1.0-ct
+	matrices = tf.reshape(tf.stack([ct+axes[:,0]*axes[:,0]*omct,
+	axes[:,0]*axes[:,1]*omct - axes[:,2]*st,
+	axes[:,0]*axes[:,2]*omct + axes[:,1]*st,
+	axes[:,1]*axes[:,0]*omct + axes[:,2]*st,
+	ct+axes[:,1]*axes[:,1]*omct,
+	axes[:,1]*axes[:,2]*omct - axes[:,0]*st,
+	axes[:,2]*axes[:,0]*omct - axes[:,1]*st,
+	axes[:,2]*axes[:,1]*omct + axes[:,0]*st,
+	ct + axes[:,2]*axes[:,2]*omct],axis = -1),[sz_[0],3,3])
+	return matrices

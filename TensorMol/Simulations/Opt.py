@@ -451,7 +451,8 @@ class ScannedOptimization(GeomOptimizer):
 
 		TODO:
 		parallel version which would sow coordinates to dive on
-		then optimize them all at once as a MolSet.
+		then optimize them all at once as a MolSet using set-wise forces
+		which are 2x faster.
 
 		Args:
 			m: A distorted molecule to search for confs.
@@ -487,7 +488,7 @@ class ScannedOptimization(GeomOptimizer):
 				d,t,q = self.biasforce.CalcTop(curr_m.coords)
 				cons_tor = q[i]
 				last_dive = cons_tor
-				while( energy-energy0 < window and step<50 and abs(cons_tor-target_torsion)>0.1):
+				while( energy-energy0 < window and step<50 and abs(cons_tor-target_torsion)>0.1 and self.NMinima < self.StopAfter):
 					prev_m = Mol(curr_m.atoms, curr_m.coords)
 					if step > 0:
 						old_frc = frc
