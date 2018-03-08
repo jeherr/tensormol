@@ -766,6 +766,27 @@ def tf_random_rotate(xyzs, rot_params, labels = None, return_matrix = False):
 	else:
 		return new_xyzs
 
+def tf_random_rotatev2(xyzs, axis, angle, labels = None, return_matrix = False):
+	"""
+	Rotates molecules and optionally labels in a uniformly random fashion
+
+	Args:
+		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
+		labels (tf.float, optional): NMol x MaxNAtoms x label shape tensor of learning targets
+		return_matrix (bool): Returns rotation tensor if True
+
+	Returns:
+		new_xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor of randomly rotated molecules
+		new_labels (tf.float): NMol x MaxNAtoms x label shape tensor of randomly rotated learning targets
+	"""
+	axis = tf.tile(tf.expand_dims(axis / tf.norm(axis, axis=-1, keep_dims=True), axis=-2), [1, tf.shape(xyzs)[1], 1])
+	angle = tf.expand_dims(angle * np.pi, axis=-2)
+	term1 = xyzs * tf.cos(angle)
+	term2 = tf.cross(axis, xyzs) * tf.sin(angle)
+	term3 = axis * (1 - tf.cos(angle)) * tf.reduce_sum(axis * xyzs, axis=-1, keep_dims=True)
+	new_xyzs = term1 + term2 + term3
+	return new_xyzs
+
 def tf_symmetry_functions(xyzs, Zs, elements, element_pairs, radial_cutoff, angular_cutoff, radial_rs, angular_rs, theta_s, zeta, eta):
 	"""
 	Encodes atoms into the symmetry function embedding as implemented in the ANI-1 Neural Network (doi: 10.1039/C6SC05720A)
