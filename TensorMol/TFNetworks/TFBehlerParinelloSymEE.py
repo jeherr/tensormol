@@ -459,7 +459,7 @@ class MolInstance_DirectBP_EandG_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
 		#print ("self.activation_function:\n\n", self.activation_function)
-		if (batch_data[0].shape[1] != self.MaxNAtoms):
+		if (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != nmol):
 			self.MaxNAtoms = batch_data[0].shape[1]
 			self.batch_size = nmol
 			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
@@ -1433,7 +1433,7 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
 		#print ("self.activation_function:\n\n", self.activation_function)
-		if (batch_data[0].shape[1] != self.MaxNAtoms):
+		if (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != nmol):
 			self.MaxNAtoms = batch_data[0].shape[1]
 			self.batch_size = nmol
 			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
@@ -2118,7 +2118,6 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 		dipole = tf.reduce_sum(tf.multiply(xyzsInBohr, tf.reshape(charge,[self.batch_size,self.MaxNAtoms,1])), axis=1)
 		return  dipole, charge, E_sum
 
-
 	def loss_op(self, dipole, Dlabels, natom):
 		"""
 		losss function that includes dipole loss, energy loss and gradient loss.
@@ -2183,7 +2182,6 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.print_training(step, train_loss, num_of_mols, duration)
 		return
 
-
 	def test(self, step):
 		"""
 		Perform a single test step (complete processing of all input), using minibatches of size self.batch_size
@@ -2236,7 +2234,6 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 			LOGGER.info("step: %7d  duration: %.5f  dipole_loss: %.10f", step, duration,  (float(dipole_loss)/(Ncase)))
 		return
 
-
 	def evaluate(self, batch_data):
 		"""
 		Evaluate the energy, atom energies, and IfGrad = True the gradients
@@ -2247,7 +2244,7 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
 		#print ("self.activation_function:\n\n", self.activation_function)
-		if (batch_data[0].shape[1] != self.MaxNAtoms):
+		if (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != nmol):
 			self.MaxNAtoms = batch_data[0].shape[1]
 			self.batch_size = nmol
 			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
@@ -2336,13 +2333,13 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 				for j in range(i, len(self.eles)):
 					self.channel_pairs.append([(self.channels[i]*self.channels[j])/(self.channels[i]+self.channels[j])])
 			self.channel_pairs = np.asarray(self.channel_pairs).reshape((-1, self.channels.shape[1]))
-			
-		#print ("self.channels:", self.channels, "\n  self.channel_pairs:", self.channel_pairs)			
+
+		#print ("self.channels:", self.channels, "\n  self.channel_pairs:", self.channel_pairs)
 		self.inshape = self.inshape*self.channels.shape[1]
 		print ("self.channel_pairs:", self.channel_pairs.shape)
 		print ("self.inshape:", self.inshape)
 
-		 
+
 
 	def SetANI1Param(self, prec=np.float64):
 		"""
@@ -2538,15 +2535,15 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		#t = time.time()
 		#mil_j = batch_data[-4]
 		#mil_jk = batch_data[-3]
-		#npair = mil_j.shape[0]	
+		#npair = mil_j.shape[0]
 		#ntriple = mil_jk.shape[0]
-	
+
 		#mil_j_2 = np.copy(mil_j)
 		#mil_jk_2 = np.copy(mil_jk)
 
 		#prev_mol = mil_j[0][0]
 		#prev_atom =  mil_j[0][1]
-		#index = 0 
+		#index = 0
 		#for i in range(0, npair):
 		#	if mil_j[i][0] == prev_mol and  mil_j[i][1] == prev_atom:
 		#		mil_j_2[i][3] = index
@@ -2557,10 +2554,10 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		#		prev_mol = mil_j[i][0]
 		#		prev_atom = mil_j[i][1]
 		#		index += 1
-	
+
 		#prev_mol = mil_jk[0][0]
 		#prev_atom =  mil_jk[0][1]
-		#index = 0 
+		#index = 0
 		#for i in range(0, ntriple):
 		#	if mil_jk[i][0] == prev_mol and  mil_jk[i][1] == prev_atom:
 		#		mil_jk_2[i][3] = index

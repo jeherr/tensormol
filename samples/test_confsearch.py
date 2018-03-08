@@ -95,8 +95,8 @@ N                 -6.31166300   -0.16201000    0.57617900
 	m = Mol()
 	m.FromXYZString(sugarXYZ)
 
-	d,t,q = m.Topology()
-	print("Topology",d,t,q)
+	#d,t,q = m.Topology()
+	#print("Topology",d,t,q)
 
 	#from MolEmb import EmptyInterfacedFunction, Make_NListNaive, Make_NListLinear
 	#print("READ MOL XFOIUDOFIUDFO")
@@ -119,7 +119,34 @@ N                 -6.31166300   -0.16201000    0.57617900
 			else:
 				return energy
 		return EnAndForce
+
+	# This actually affords a 2x speedup on set evaluation.
+	def GetEnergyForceForSet(m,batch_size = 200):
+		s = MSet()
+		for i in range(batch_size):
+			s.mols.append(m)
+		manager = GetChemSpider12(s)
+		def EnAndForceSet(s_, DoForce=True):
+			Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient = manager.EvalBPDirectEEUpdateSet(s_, PARAMS["AN1_r_Rc"], PARAMS["AN1_a_Rc"], PARAMS["EECutoffOff"], True)
+			energy = Etotal[0]
+			force = gradient[0]
+			if DoForce:
+				return energy, force
+			else:
+				return energy
+		return EnAndForceSet
+
 	F = GetEnergyForceForMol(m)
+	if 0:
+		# Test the speed and accuracy of the set force evaluation.
+		for i in range(200):
+			F(m.coords)
+		Fs = GetEnergyForceForSet(m)
+		s = MSet()
+		for i in range(200):
+			s.mols.append(m)
+		Fs(s)
+		exit(0)
 
 	MOpt = ScannedOptimization(F,m)
 	m = MOpt.Search(m)

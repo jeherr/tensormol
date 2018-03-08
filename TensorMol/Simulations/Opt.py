@@ -43,13 +43,21 @@ class GeomOptimizer:
 			energy = self.EnergyAndForce(x_,False)
 			return energy
 
-	def Opt(self,m_, filename="OptLog",Debug=False,FileOutput=True):
+	def Opt(self,m_, filename="OptLog", Debug=False, FileOutput=True, eff_thresh = None, eff_max_step = None):
 		"""
 		Optimize using An EnergyAndForce Function with conjugate gradients.
 
 		Args:
 			m: A distorted molecule to optimize
 		"""
+		if (eff_thresh == None):
+			thresh = self.thresh
+		else:
+			thresh = eff_thresh
+		if (eff_max_step == None):
+			max_step = self.max_opt_step
+		else:
+			max_step = eff_max_step
 		m = Mol(m_.atoms,m_.coords)
 		self.m = m
 		rmsdisp = 10.0
@@ -57,7 +65,7 @@ class GeomOptimizer:
 		step=0
 		mol_hist = []
 		prev_m = Mol(m.atoms, m.coords)
-		print("Orig Mol:\n", m)
+#		print("Orig Mol:\n", m)
 		CG = ConjGradient(self.WrappedEForce, m.coords)
 		while( step < self.max_opt_step and rmsgrad > self.thresh and (rmsdisp > 0.000001 or step<5) ):
 			prev_m = Mol(m.atoms, m.coords)
@@ -177,6 +185,54 @@ class GeomOptimizer:
 		# Checks stability in each cartesian direction.
 		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
 		return prev_m
+
+	def OptGDSet(self, mSet_, SetEF_, filename="GDOptLog",Debug=False, FileOutput = True, eff_thresh = None, eff_max_step = None):
+		"""
+		Steepest descent on a set of molecules.
+		To exploit maximum parallelism.
+
+		Args:
+		        mSet_: A Set of Molecules.
+				SetEF_
+		"""
+		# Sweeps one at a time
+		rmsdisp = 10.0
+		rmsgrad = 10.0
+		step=0
+		m = Mol(m_.atoms,m_.coords)
+		mol_hist = []
+		prev_m = Mol(m.atoms, m.coords)
+		#print("Orig Coords", m.coords)
+		if (eff_thresh == None):
+			thresh = self.thresh
+		else:
+			thresh = eff_thresh
+		if (eff_max_step == None):
+			max_step = self.max_opt_step
+		else:
+			max_step = eff_max_step
+		#print "Initial force", self.tfm.evaluate(m, i), "Real Force", m.properties["forces"][i]
+		energy, old_frc  = self.WrappedEForce(m.coords)
+		while( step < self.max_opt_step and rmsgrad > thresh):
+			prev_m = Mol(m.atoms, m.coords)
+			if step > 0:
+				old_frc = frc
+			energy, frc = self.WrappedEForce(m.coords)
+			if (np.sum(frc*old_frc)<0.0):
+				old_frc *= 0.0
+			rmsgrad = np.sum(np.linalg.norm(frc,axis=1))/frc.shape[0]
+			frc += self.momentum*old_frc
+			m.coords = m.coords + self.fscale*frc
+			rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/m.coords.shape[0]
+			LOGGER.info(filename+"step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
+			mol_hist.append(prev_m)
+			if (FileOutput):
+				prev_m.WriteXYZfile("./results/", filename)
+			step+=1
+		# Checks stability in each cartesian direction.
+		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
+		return prev_m
+
 
 class MetaOptimizer(GeomOptimizer):
 	def __init__(self,f_,m,StopAfter_=20,Box_=False,OnlyHev_=True):
@@ -423,7 +479,7 @@ class ScannedOptimization(GeomOptimizer):
 				return PE
 		BE = 0.0
 		BF = np.zeros(x_.shape)
-		BE, BF = self.biasforce.Constraint(x_,qw=0.015)
+		BE, BF = self.biasforce.Constraint(x_,qw=0.03)
 		BF = JOULEPERHARTREE*BF
 		if (DoForce):
 			frc = PF+BF
@@ -435,13 +491,20 @@ class ScannedOptimization(GeomOptimizer):
 		else:
 			return PE
 
-	def Search(self,m_=None, filename="Scan", window = 0.3):
+	def Search(self,m_=None, filename="Scan", window = 0.2, interval = Pi/5.):
 		"""
-		Pin a torsion between -pi and pi. Perform dives every pi/6
+		Pin a torsion between -pi and pi. Perform dives every interval
 		Give up on this DOF if the energy goes more than window above minimum.
+		Increasing interval and window increase speed at the expense of care.
+
+		TODO:
+		parallel version which would sow coordinates to dive on
+		then optimize them all at once as a MolSet.
 
 		Args:
-		        m: A distorted molecule to search for confs.
+			m: A distorted molecule to search for confs.
+			window: max energy above minimum to continue scanning this DOF.
+			interval: torsion difference to initiate a dive.
 		"""
 		# Sweeps one at a time
 		rmsdisp = 10.0
@@ -452,7 +515,7 @@ class ScannedOptimization(GeomOptimizer):
 		if (m_ != None):
 			m = Mol(m_.atoms,m_.coords)
 
-		m=self.OptGD(m,"Pre_opt",FileOutput=False)
+		m=self.Opt(m,"Pre_opt",FileOutput=False,eff_thresh=0.0005)
 		self.AppendIfNew(m)
 		self.biasforce.PreConstraint(m.coords)
 		eq_quads = self.biasforce.qbumps.copy()
@@ -484,11 +547,13 @@ class ScannedOptimization(GeomOptimizer):
 					curr_m.coords = curr_m.coords + self.fscale*frc
 					d,t,q = self.biasforce.CalcTop(curr_m.coords)
 					cons_tor = q[i]
-					if (abs(cons_tor-last_dive) > Pi/5.):
-						d = self.OptGD(curr_m,"Dive"+str(ndives), FileOutput=False, eff_thresh=0.001, eff_max_step=100)
-						self.AppendIfNew(d)
+					if (abs(cons_tor-last_dive) > interval):
+						curr_m = self.OptGD(curr_m,"Dive"+str(ndives), FileOutput=False, eff_thresh=0.001, eff_max_step=100)
+						self.AppendIfNew(curr_m)
 						last_dive = cons_tor
 						ndives += 1
+						if (abs(last_dive-target_torsion)<interval):
+							break
 					rmsdisp = np.sum(np.linalg.norm(curr_m.coords-prev_m.coords,axis=1))/curr_m.coords.shape[0]
 					LOGGER.info(filename+" step: %i energy: %0.5f const_t: %i const: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, i, cons_tor, rmsgrad, rmsdisp)
 					prev_m.WriteXYZfile("./results/", filename)
