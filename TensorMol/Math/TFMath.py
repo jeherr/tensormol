@@ -131,7 +131,7 @@ def TFTorsion(xyz,quartets):
 	    xyz: Natom X 3 molecule
 	    quartets: Nquartet X 4
 	Returns:
-	    nquartet X 1 torsional tensor.
+	    nquartet X 1 torsional tensor, angles between -pi,pi
 	"""
 	b1 = tf.gather(xyz,quartets[...,0],axis=0)-tf.gather(xyz,quartets[...,1],axis=0)
 	b2 = tf.gather(xyz,quartets[...,1],axis=0)-tf.gather(xyz,quartets[...,2],axis=0)

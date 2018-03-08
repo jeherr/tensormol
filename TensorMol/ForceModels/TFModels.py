@@ -16,7 +16,6 @@ from . import *
 from tensorflow.python.client import timeline
 import threading
 
-
 class MorseModel(ForceHolder):
 	def __init__(self,natom_=3):
 		"""

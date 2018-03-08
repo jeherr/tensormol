@@ -426,7 +426,7 @@ class Mol:
 		tmp = (mdm-odm)
 		return np.sqrt(np.sum(tmp*tmp)/(mdm.shape[0]*mdm.shape[0]))
 
-	def Topology(self,tol_=1.5,nreal_=-1):
+	def Topology(self,tol_=1.65,nreal_=-1):
 		"""
 		Returns:
 			Bonds: (NBond X 2) array of bonds (uniquely sorted.)
@@ -469,8 +469,8 @@ class Mol:
 					elif (b1[0] > b2[0]):
 						bends.append([b2[0],b1[1],b1[0]])
 		torsions = []
-		for b1 in bends:
-			for b2 in bends:
+		for i,b1 in enumerate(bends):
+			for b2 in bends[i+1:]:
 				if (b1[1]==b2[0] and b1[2]==b2[1]):
 					torsions.append(b1+[b2[2]])
 				if (b1[0]==b2[1] and b1[1]==b2[2]):
