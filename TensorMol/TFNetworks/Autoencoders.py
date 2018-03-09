@@ -86,6 +86,16 @@ class GauSHEncoder(object):
 		self.gaussian_params = PARAMS["RBFS"]
 		return
 
+	def __getstate__(self):
+		state = self.__dict__.copy()
+		remove_vars = ["mol_set", "activation_function", "xyz_data", "Z_data"]
+		for var in remove_vars:
+			try:
+				del state[var]
+			except:
+				pass
+		return state
+
 	def assign_activation(self):
 		LOGGER.debug("Assigning Activation Function: %s", PARAMS["NeuronType"])
 		try:
@@ -123,7 +133,7 @@ class GauSHEncoder(object):
 	def start_training(self):
 		self.load_data_to_scratch()
 		self.compute_normalization()
-		# self.save_network()
+		self.save_network()
 		self.train_prepare()
 		self.train()
 
@@ -313,27 +323,34 @@ class GauSHEncoder(object):
 			The latent space vectors
 		"""
 		with tf.name_scope("encoder"):
-			for i in range(len(self.hidden_layers)):
-				if i == 0:
-					with tf.name_scope('encoder_hidden1'):
-						weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
-								stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
-						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-						hidden_output = self.activation_function(tf.matmul(inputs, weights) + biases)
-				else:
-					with tf.name_scope('encoder_hidden'+str(i+1)):
-						weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
-								stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
-						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-						hidden_output = self.activation_function(tf.matmul(hidden_output, weights) + biases)
-			with tf.name_scope('latent_space'):
-				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], self.latent_shape],
-						stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
-				biases = tf.Variable(tf.zeros([self.latent_shape], dtype=self.tf_precision), name='biases')
-				latent_vectors = tf.matmul(hidden_output, weights) + biases
+			if len(self.hidden_layers) == 0:
+				with tf.name_scope('encoder_hidden'):
+					weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.latent_shape],
+							stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+					biases = tf.Variable(tf.zeros([self.latent_shape], dtype=self.tf_precision), name='biases')
+					latent_vectors = self.activation_function(tf.matmul(inputs, weights) + biases)
+			else:
+				for i in range(len(self.hidden_layers)):
+					if i == 0:
+						with tf.name_scope('encoder_hidden1'):
+							weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
+									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+							hidden_output = self.activation_function(tf.matmul(inputs, weights) + biases)
+					else:
+						with tf.name_scope('encoder_hidden'+str(i+1)):
+							weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
+									stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
+							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+							hidden_output = self.activation_function(tf.matmul(hidden_output, weights) + biases)
+				with tf.name_scope('latent_space'):
+					weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], self.latent_shape],
+							stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
+					biases = tf.Variable(tf.zeros([self.latent_shape], dtype=self.tf_precision), name='biases')
+					latent_vectors = tf.matmul(hidden_output, weights) + biases
 		return latent_vectors
 
-	def decoder(self, inputs, rotation_params):
+	def decoder(self, latent_vector):
 		"""
 		Builds a decoder for the GauSH descriptor
 
@@ -342,26 +359,32 @@ class GauSHEncoder(object):
 		Returns:
 			The decoded GauSH descriptor
 		"""
-		inputs = tf.concat([inputs, rotation_params], axis=1)
 		with tf.name_scope("decoder"):
-			for i in range(len(self.hidden_layers)):
-				if i == 0:
-					with tf.name_scope('decoder_hidden1'):
-						weights = self.variable_with_weight_decay(shape=[self.latent_shape+3, self.hidden_layers[-1]],
-								stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
-						biases = tf.Variable(tf.zeros([self.hidden_layers[-1]], dtype=self.tf_precision), name='biases')
-						hidden_output = self.activation_function(tf.matmul(inputs, weights) + biases)
-				else:
-					with tf.name_scope('decoder_hidden'+str(i+1)):
-						weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-i], self.hidden_layers[-1-i]],
-								stddev=math.sqrt(2.0 / float(self.hidden_layers[-i])), weight_decay=self.weight_decay, name="weights")
-						biases = tf.Variable(tf.zeros([self.hidden_layers[-1-i]], dtype=self.tf_precision), name='biases')
-						hidden_output = self.activation_function(tf.matmul(hidden_output, weights) + biases)
-			with tf.name_scope('decoder_output'):
-				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[0], self.embed_shape],
-						stddev=math.sqrt(2.0 / float(self.hidden_layers[0])), weight_decay=self.weight_decay, name="weights")
-				biases = tf.Variable(tf.zeros([self.embed_shape], dtype=self.tf_precision), name='biases')
-				outputs = tf.matmul(hidden_output, weights) + biases
+			if len(self.hidden_layers) == 0:
+				with tf.name_scope('encoder_hidden'):
+					weights = self.variable_with_weight_decay(shape=[self.latent_shape, self.embed_shape],
+							stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+					biases = tf.Variable(tf.zeros([self.embed_shape], dtype=self.tf_precision), name='biases')
+					outputs = self.activation_function(tf.matmul(latent_vector, weights) + biases)
+			else:
+				for i in range(len(self.hidden_layers)):
+					if i == 0:
+						with tf.name_scope('decoder_hidden1'):
+							weights = self.variable_with_weight_decay(shape=[self.latent_shape, self.hidden_layers[-1]],
+									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+							biases = tf.Variable(tf.zeros([self.hidden_layers[-1]], dtype=self.tf_precision), name='biases')
+							hidden_output = self.activation_function(tf.matmul(latent_vector, weights) + biases)
+					else:
+						with tf.name_scope('decoder_hidden'+str(i+1)):
+							weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-i], self.hidden_layers[-1-i]],
+									stddev=math.sqrt(2.0 / float(self.hidden_layers[-i])), weight_decay=self.weight_decay, name="weights")
+							biases = tf.Variable(tf.zeros([self.hidden_layers[-1-i]], dtype=self.tf_precision), name='biases')
+							hidden_output = self.activation_function(tf.matmul(hidden_output, weights) + biases)
+				with tf.name_scope('decoder_output'):
+					weights = self.variable_with_weight_decay(shape=[self.hidden_layers[0], self.embed_shape],
+							stddev=math.sqrt(2.0 / float(self.hidden_layers[0])), weight_decay=self.weight_decay, name="weights")
+					biases = tf.Variable(tf.zeros([self.embed_shape], dtype=self.tf_precision), name='biases')
+					outputs = tf.matmul(hidden_output, weights) + biases
 		return outputs
 
 	def optimizer(self, loss, learning_rate, momentum):
@@ -389,40 +412,42 @@ class GauSHEncoder(object):
 		return loss
 
 	def compute_normalization(self):
-		xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
-		Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
-		if self.train_sparse:
-			pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
-		gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
-		elements = tf.constant(self.elements, dtype = tf.int32)
-
-		rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
-		embed, rot_embed, rotate_params = tf_gaush_element_channelv2(xyzs_pl, Zs_pl, elements,
-									gaussian_params, self.l_max, rotation_params)
-		combined_embed = tf.concat([embed, rot_embed], axis=0)
-
-		sess = tf.Session()
-		sess.run(tf.global_variables_initializer())
-		num_cases = 0
-		for ministep in range(int(0.5 * self.num_train_cases/self.batch_size)):
-			batch_data = self.get_train_batch(self.batch_size)
-			embedding = sess.run(combined_embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
-			if ministep == 0:
-				self.embed_stddev = np.var(embedding, axis=0)
-				self.embed_mean = np.mean(embedding, axis=0)
-			else:
-				self.embed_stddev = (((self.embed_stddev * num_cases + np.var(embedding, axis=0) * embedding.shape[0])
-									/ (num_cases + embedding.shape[0]))
-									+ (np.square(self.embed_mean - np.mean(embedding, axis=0)) * num_cases * embedding.shape[0]
-									/ ((num_cases + embedding.shape[0]) ** 2)))
-				self.embed_mean = ((self.embed_mean * num_cases + np.mean(embedding, axis=0) * embedding.shape[0])
-								/ (num_cases + embedding.shape[0]))
-			num_cases += embedding.shape[0]
-		sess.close()
-		self.train_pointer = 0
-		self.embed_shape = embedding.shape[1]
+		# xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
+		# Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
+		# if self.train_sparse:
+		# 	pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
+		# gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
+		# elements = tf.constant(self.elements, dtype = tf.int32)
+		#
+		# rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+		# 				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+		# 				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+		# padding_mask = tf.where(tf.not_equal(Zs_pl, 0))
+		# centered_xyzs = tf.expand_dims(tf.gather_nd(xyzs_pl, padding_mask), axis=1) - tf.gather(xyzs_pl, padding_mask[:,0])
+		# rotation_params = tf.gather_nd(rotation_params, padding_mask)
+		# rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
+		# embed = tf_gaush_element_channelv2(rotated_xyzs, Zs_pl, elements,
+		# 							gaussian_params, self.l_max)
+		# sess = tf.Session()
+		# sess.run(tf.global_variables_initializer())
+		# num_cases = 0
+		# for ministep in range(int(0.1 * self.num_train_cases/self.batch_size)):
+		# 	batch_data = self.get_train_batch(self.batch_size)
+		# 	embedding = sess.run(embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
+		# 	if ministep == 0:
+		# 		self.embed_stddev = np.var(embedding, axis=0)
+		# 		self.embed_mean = np.mean(embedding, axis=0)
+		# 	else:
+		# 		self.embed_stddev = (((self.embed_stddev * num_cases + np.var(embedding, axis=0) * embedding.shape[0])
+		# 							/ (num_cases + embedding.shape[0]))
+		# 							+ (np.square(self.embed_mean - np.mean(embedding, axis=0)) * num_cases * embedding.shape[0]
+		# 							/ ((num_cases + embedding.shape[0]) ** 2)))
+		# 		self.embed_mean = ((self.embed_mean * num_cases + np.mean(embedding, axis=0) * embedding.shape[0])
+		# 						/ (num_cases + embedding.shape[0]))
+		# 	num_cases += embedding.shape[0]
+		# sess.close()
+		# self.train_pointer = 0
+		self.embed_shape = self.elements.shape[0] * self.gaussian_params.shape[0] * (self.l_max + 1) ** 2
 		self.latent_shape = self.embed_shape - 3
 		return
 
@@ -443,21 +468,24 @@ class GauSHEncoder(object):
 
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
-			embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
-			embed_stddev = tf.Variable(self.embed_stddev, trainable=False, dtype = self.tf_precision)
-
 			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-					np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-					tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
-			self.embed, rotated_embed, rotate_params = tf_gaush_element_channelv2(self.xyzs_pl, self.Zs_pl,
-										elements, self.gaussian_params, self.l_max, rotation_params)
-			rotated_embed = (rotated_embed - embed_mean) / embed_stddev
-			latent_vector = self.encoder(rotated_embed)
-			norm_output = self.decoder(latent_vector, rotate_params)
-			self.embed_output = (norm_output * embed_stddev) + embed_mean
+							np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
+			centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
+			rotation_params = tf.gather_nd(rotation_params, padding_mask)
+			rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
+			dist_tensor = tf.norm(rotated_xyzs+1.e-16,axis=-1)
+			sph_harmonics = tf.reshape(tf_spherical_harmonics(rotated_xyzs, dist_tensor, self.l_max),
+						[(tf.shape(padding_mask)[0] * self.max_num_atoms), (self.l_max + 1) ** 2])
+			self.invar_sph_harmonics = tf.reshape(tf_spherical_harmonics(rotated_xyzs, dist_tensor, self.l_max, invariant=True),
+						[(tf.shape(padding_mask)[0] * self.max_num_atoms), (self.l_max + 1)])
+			latent_vector = self.encoder(sph_harmonics)
+			decoded_sph_harmonics = self.decoder(latent_vector)
+			self.invar_output = tf.stack([decoded_sph_harmonics[...,0], tf.norm(decoded_sph_harmonics[...,1:4], axis=-1),
+						tf.norm(decoded_sph_harmonics[...,4:9], axis=-1), tf.norm(decoded_sph_harmonics[...,9:], axis=-1)], axis=-1)
 			rot_grad = tf.gradients(latent_vector, rotation_params)
-
-			self.embed_loss = self.loss_op(self.embed_output - self.embed)
+			self.embed_loss = self.loss_op(self.invar_output - self.invar_sph_harmonics)
 			tf.summary.scalar("embed_loss", self.embed_loss)
 			tf.add_to_collection('embed_losses', self.embed_loss)
 			self.rotation_loss = self.loss_op(rot_grad)
@@ -540,13 +568,13 @@ class GauSHEncoder(object):
 		for ministep in range (0, int(Ncase_test/self.batch_size)):
 			batch_data = self.get_test_batch(self.batch_size)
 			feed_dict = self.fill_feed_dict(batch_data)
-			total_loss, embed_loss, rotation_loss, embed, embed_output = self.sess.run([self.embed_losses, self.embed_loss,
-													self.rotation_loss, self.embed, self.embed_output], feed_dict=feed_dict)
+			total_loss, embed_loss, rotation_loss, invar_sph_harmonics, invar_output = self.sess.run([self.embed_losses, self.embed_loss,
+													self.rotation_loss, self.invar_sph_harmonics, self.invar_output], feed_dict=feed_dict)
 			test_loss += total_loss
 			test_embed_loss += embed_loss
 			test_rotation_loss += rotation_loss
-			test_epoch_errors.append(embed_output - embed)
-			num_atoms += np.sum(batch_data[2])
+			test_epoch_errors.append(invar_output - invar_sph_harmonics)
+			num_atoms += np.sum(batch_data[2]) * self.max_num_atoms
 		test_epoch_errors = np.concatenate(test_epoch_errors)
 		test_mse = np.mean(test_epoch_errors)
 		test_mae = np.mean(np.abs(test_epoch_errors))
@@ -556,4 +584,287 @@ class GauSHEncoder(object):
 		LOGGER.info("RMSE: %11.8f", test_rmse)
 		duration = time.time() - start_time
 		self.print_epoch(step, duration, test_loss, test_embed_loss, test_rotation_loss, num_atoms, testing=True)
-		return
+		return test_loss
+
+class GauSHEncoderv2(GauSHEncoder):
+	def train_prepare(self, restart=False):
+		"""
+		Get placeholders, graph and losses in order to begin training.
+		Also assigns the desired padding.
+
+		Args:
+			continue_training: should read the graph variables from a saved checkpoint.
+		"""
+		with tf.Graph().as_default():
+			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
+			self.Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
+			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
+			if self.train_sparse:
+				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
+
+			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
+			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
+			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
+			centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
+			dist_tensor = tf.norm(centered_xyzs+1.e-16,axis=-1)
+			self.embed = tf_gaush_element_channelv2(centered_xyzs, self.Zs_pl, elements, self.gaussian_params, self.l_max)
+			rotation_params = tf.gather_nd(rotation_params, padding_mask)
+			rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
+			dist_tensor = tf.norm(rotated_xyzs+1.e-16,axis=-1)
+			self.rot_embed = tf_gaush_element_channelv2(rotated_xyzs, self.Zs_pl, elements, self.gaussian_params, self.l_max)
+			latent_vector = self.encoder(self.rot_embed)
+			latent_embed = latent_vector[...,:-3]
+			latent_angles = latent_vector[...,-3:]
+			latent_shift_angles = latent_angles - rotation_params
+			shift_latent_vector = tf.concat([latent_embed, latent_shift_angles], axis=1)
+			self.decoded_embed = self.decoder(shift_latent_vector)
+			rot_grad = tf.gradients(latent_embed, rotation_params)
+			self.embed_loss = self.loss_op(self.decoded_embed - self.embed)
+			tf.summary.scalar("embed_loss", self.embed_loss)
+			tf.add_to_collection('embed_losses', self.embed_loss)
+			self.rotation_loss = self.loss_op(rot_grad)
+			if self.train_rotation:
+				tf.add_to_collection('embed_losses', self.rotation_loss)
+				tf.summary.scalar("rotation_loss", self.rotation_loss)
+
+			self.embed_losses = tf.add_n(tf.get_collection('embed_losses'))
+			tf.summary.scalar("embed_losses", self.embed_losses)
+
+			self.train_op = self.optimizer(self.embed_losses, self.learning_rate, self.momentum)
+			self.summary_op = tf.summary.merge_all()
+			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
+			self.summary_writer = tf.summary.FileWriter(self.network_directory, self.sess.graph)
+			if restart:
+				self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
+			else:
+				init = tf.global_variables_initializer()
+				self.sess.run(init)
+			if self.profiling:
+				self.options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+				self.run_metadata = tf.RunMetadata()
+
+	def encoder(self, inputs):
+		"""
+		Builds an encoder for the GauSH descriptor
+
+		Args:
+			inputs (tf.float): NCase x Embed Shape of the embeddings to encode
+		Returns:
+			The latent space vectors
+		"""
+		with tf.name_scope("encoder"):
+			if len(self.hidden_layers) == 0:
+				with tf.name_scope('encoder_hidden'):
+					weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.embed_shape],
+							stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+					biases = tf.Variable(tf.zeros([self.embed_shape], dtype=self.tf_precision), name='biases')
+					latent_vectors = self.activation_function(tf.matmul(inputs, weights) + biases)
+			else:
+				for i in range(len(self.hidden_layers)):
+					if i == 0:
+						with tf.name_scope('encoder_hidden1'):
+							weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
+									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+							hidden_output = self.activation_function(tf.matmul(inputs, weights) + biases)
+					else:
+						with tf.name_scope('encoder_hidden'+str(i+1)):
+							weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
+									stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
+							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+							hidden_output = self.activation_function(tf.matmul(hidden_output, weights) + biases)
+				with tf.name_scope('latent_space'):
+					weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], self.embed_shape],
+							stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
+					biases = tf.Variable(tf.zeros([self.embed_shape], dtype=self.tf_precision), name='biases')
+					latent_vectors = tf.matmul(hidden_output, weights) + biases
+		return latent_vectors
+
+	def decoder(self, latent_vector):
+		"""
+		Builds a decoder for the GauSH descriptor
+
+		Args:
+			inputs (tf.float): NCase x latent vector shape tensor of the embedding cases
+		Returns:
+			The decoded GauSH descriptor
+		"""
+		with tf.name_scope("decoder"):
+			if len(self.hidden_layers) == 0:
+				with tf.name_scope('encoder_hidden'):
+					weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.embed_shape],
+							stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+					biases = tf.Variable(tf.zeros([self.embed_shape], dtype=self.tf_precision), name='biases')
+					outputs = self.activation_function(tf.matmul(latent_vector, weights) + biases)
+			else:
+				for i in range(len(self.hidden_layers)):
+					if i == 0:
+						with tf.name_scope('decoder_hidden1'):
+							weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[-1]],
+									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+							biases = tf.Variable(tf.zeros([self.hidden_layers[-1]], dtype=self.tf_precision), name='biases')
+							hidden_output = self.activation_function(tf.matmul(latent_vector, weights) + biases)
+					else:
+						with tf.name_scope('decoder_hidden'+str(i+1)):
+							weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-i], self.hidden_layers[-1-i]],
+									stddev=math.sqrt(2.0 / float(self.hidden_layers[-i])), weight_decay=self.weight_decay, name="weights")
+							biases = tf.Variable(tf.zeros([self.hidden_layers[-1-i]], dtype=self.tf_precision), name='biases')
+							hidden_output = self.activation_function(tf.matmul(hidden_output, weights) + biases)
+				with tf.name_scope('decoder_output'):
+					weights = self.variable_with_weight_decay(shape=[self.hidden_layers[0], self.embed_shape],
+							stddev=math.sqrt(2.0 / float(self.hidden_layers[0])), weight_decay=self.weight_decay, name="weights")
+					biases = tf.Variable(tf.zeros([self.embed_shape], dtype=self.tf_precision), name='biases')
+					outputs = tf.matmul(hidden_output, weights) + biases
+		return outputs
+
+	def test_step(self, step):
+		"""
+		Perform a single training step (complete processing of all input), using minibatches of size self.batch_size
+
+		Args:
+			step: the index of this step.
+		"""
+		print( "testing...")
+		Ncase_test = self.num_test_cases
+		start_time = time.time()
+		test_loss =  0.0
+		test_embed_loss = 0.0
+		test_rotation_loss = 0.0
+		num_atoms = 0
+		test_epoch_errors = []
+		for ministep in range (0, int(Ncase_test/self.batch_size)):
+			batch_data = self.get_test_batch(self.batch_size)
+			feed_dict = self.fill_feed_dict(batch_data)
+			total_loss, embed_loss, embed, decoded_embed = self.sess.run([self.embed_losses, self.embed_loss,
+						self.embed, self.decoded_embed], feed_dict=feed_dict)
+			test_loss += total_loss
+			test_embed_loss += embed_loss
+			# test_rotation_loss += rotation_loss
+			test_epoch_errors.append(embed - decoded_embed)
+			num_atoms += np.sum(batch_data[2]) * self.max_num_atoms
+		test_epoch_errors = np.concatenate(test_epoch_errors)
+		test_mse = np.mean(test_epoch_errors)
+		test_mae = np.mean(np.abs(test_epoch_errors))
+		test_rmse = np.sqrt(np.mean(np.square(test_epoch_errors)))
+		LOGGER.info("MAE : %11.8f", test_mae)
+		LOGGER.info("MSE : %11.8f", test_mse)
+		LOGGER.info("RMSE: %11.8f", test_rmse)
+		duration = time.time() - start_time
+		self.print_epoch(step, duration, test_loss, test_embed_loss, test_rotation_loss, num_atoms, testing=True)
+		return test_loss
+
+class GauSHTranscoder(GauSHEncoder):
+	"""
+	Class for training a transforming autoencoder on the
+	spherical harmonics.
+	"""
+	def train_prepare(self, restart=False):
+		"""
+		Get placeholders, graph and losses in order to begin training.
+		Also assigns the desired padding.
+
+		Args:
+			continue_training: should read the graph variables from a saved checkpoint.
+		"""
+		with tf.Graph().as_default():
+			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
+			self.Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
+			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
+			if self.train_sparse:
+				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
+
+			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
+			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
+			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
+			centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
+			rotation_params = tf.gather_nd(rotation_params, padding_mask)
+			rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
+			dist_tensor = tf.norm(rotated_xyzs+1.e-16,axis=-1)
+			sph_harmonics = tf.reshape(tf_spherical_harmonics(rotated_xyzs, dist_tensor, self.l_max),
+						[(tf.shape(padding_mask)[0] * self.max_num_atoms), (self.l_max + 1) ** 2])
+			self.invar_sph_harmonics = tf.reshape(tf_spherical_harmonics(rotated_xyzs, dist_tensor, self.l_max, invariant=True),
+						[(tf.shape(padding_mask)[0] * self.max_num_atoms), (self.l_max + 1)])
+			latent_vector = self.encoder(sph_harmonics)
+			latent_sh = latent_vector[...,:-3]
+			latent_rot_params = latent_vector[...,-3:]
+			decoded_sph_harmonics = self.decoder(latent_vector)
+			self.invar_output = tf.stack([decoded_sph_harmonics[...,0], tf.norm(decoded_sph_harmonics[...,1:4], axis=-1),
+						tf.norm(decoded_sph_harmonics[...,4:9], axis=-1), tf.norm(decoded_sph_harmonics[...,9:], axis=-1)], axis=-1)
+			rot_grad = tf.gradients(latent_vector, rotation_params)
+
+			self.embed_loss = self.loss_op(self.invar_output - self.invar_sph_harmonics)
+			tf.summary.scalar("embed_loss", self.embed_loss)
+			tf.add_to_collection('embed_losses', self.embed_loss)
+			self.rotation_loss = self.loss_op(rot_grad)
+			if self.train_rotation:
+				tf.add_to_collection('embed_losses', self.rotation_loss)
+				tf.summary.scalar("rotation_loss", self.rotation_loss)
+
+			self.embed_losses = tf.add_n(tf.get_collection('embed_losses'))
+			tf.summary.scalar("embed_losses", self.embed_losses)
+
+			self.train_op = self.optimizer(self.embed_losses, self.learning_rate, self.momentum)
+			self.summary_op = tf.summary.merge_all()
+			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
+			self.summary_writer = tf.summary.FileWriter(self.network_directory, self.sess.graph)
+			if restart:
+				self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
+			else:
+				init = tf.global_variables_initializer()
+				self.sess.run(init)
+			if self.profiling:
+				self.options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+				self.run_metadata = tf.RunMetadata()
+
+	def capsule(self, input, extra_input):
+		with tf.name_scope('recognizer'):
+			weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[0]],
+					stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+			biases = tf.Variable(tf.zeros([self.hidden_layers[0]], dtype=self.tf_precision), name='biases')
+			recognition = self.activation_function(tf.matmul(inputs, weights) + biases)
+		with tf.name_scope('probability'):
+			weights = self.variable_with_weight_decay(shape=[self.hidden_layers[0], 1],
+					stddev=math.sqrt(2.0 / float(self.hidden_layers[0])), weight_decay=self.weight_decay, name="weights")
+			biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
+			probability = self.activation_function(tf.matmul(recognition, weights) + biases)
+		with tf.name_scope('transformation'):
+			weights = self.variable_with_weight_decay(shape=[self.hidden_layers[0], 9],
+					stddev=math.sqrt(2.0 / float(self.hidden_layers[0])), weight_decay=self.weight_decay, name="weights")
+			biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
+			learned_rotation = tf.matmul(recognition, weights) + biases
+			dlearned_rotation = tf.matmul(learned_rotation, extra_input)
+		with tf.name_scope('generator'):
+			weights = self.variable_with_weight_decay(shape=[9, self.hidden_layers[1]],
+					stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+			biases = tf.Variable(tf.zeros([self.hidden_layers[0]], dtype=self.tf_precision), name='biases')
+			generation = self.activation_function(tf.matmul(dlearned_rotation, weights) + biases)
+		with tf.name_scope('output'):
+			weights = self.variable_with_weight_decay(shape=[9, self.hidden_layers[1]],
+					stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+			biases = tf.Variable(tf.zeros([self.hidden_layers[0]], dtype=self.tf_precision), name='biases')
+			output = tf.matmul(generation, weights) + biases
+			output *= probability
+		return output
+
+	def encoder(self, input, extra_input):
+		"""
+		Builds an encoder for the GauSH descriptor
+
+		Args:
+			inputs (tf.float): NCase x Embed Shape of the embeddings to encode
+		Returns:
+			The latent space vectors
+		"""
+		for i in range(self.num_capsules):
+			with tf.name_scope('capsule_'+str(i)):
+				self.capsules_outputs.append(self.capsule(inputs, extra_input))
+		reconstruct = tf.add_n(self.capsule_outputs)
+		return reconstruct

@@ -43,13 +43,21 @@ class GeomOptimizer:
 			energy = self.EnergyAndForce(x_,False)
 			return energy
 
-	def Opt(self,m_, filename="OptLog",Debug=False):
+	def Opt(self,m_, filename="OptLog", Debug=False, FileOutput=True, eff_thresh = None, eff_max_step = None):
 		"""
 		Optimize using An EnergyAndForce Function with conjugate gradients.
 
 		Args:
 			m: A distorted molecule to optimize
 		"""
+		if (eff_thresh == None):
+			thresh = self.thresh
+		else:
+			thresh = eff_thresh
+		if (eff_max_step == None):
+			max_step = self.max_opt_step
+		else:
+			max_step = eff_max_step
 		m = Mol(m_.atoms,m_.coords)
 		self.m = m
 		rmsdisp = 10.0
@@ -57,7 +65,7 @@ class GeomOptimizer:
 		step=0
 		mol_hist = []
 		prev_m = Mol(m.atoms, m.coords)
-		print("Orig Mol:\n", m)
+#		print("Orig Mol:\n", m)
 		CG = ConjGradient(self.WrappedEForce, m.coords)
 		while( step < self.max_opt_step and rmsgrad > self.thresh and (rmsdisp > 0.000001 or step<5) ):
 			prev_m = Mol(m.atoms, m.coords)
@@ -68,7 +76,8 @@ class GeomOptimizer:
 			mol_hist.append(prev_m)
 			prev_m.properties["Step"] = step
 			prev_m.properties["Energy"] = energy
-			prev_m.WriteXYZfile("./results/", filename,'a',True)
+			if (FileOutput):
+				prev_m.WriteXYZfile("./results/", filename,'a',True)
 			step+=1
 		# Checks stability in each cartesian direction.
 		print("Final Energy:", self.EnergyAndForce(prev_m.coords,False))
@@ -95,7 +104,7 @@ class GeomOptimizer:
 		LOGGER.info("Bump added!")
 		return
 
-	def Opt_LS(self,m, filename="OptLog",Debug=False):
+	def Opt_LS(self,m, filename="OptLog", Debug=False, FileOutput = True):
 		"""
 		Optimize with Steepest Descent + Line search using An EnergyAndForce Function.
 
@@ -124,14 +133,15 @@ class GeomOptimizer:
 			rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/veloc.shape[0]
 			print("step: ", step ," energy: ", energy, " rmsgrad ", rmsgrad, " rmsdisp ", rmsdisp)
 			mol_hist.append(prev_m)
-			prev_m.WriteXYZfile("./results/", filename)
+			if (FileOutput):
+				prev_m.WriteXYZfile("./results/", filename)
 			step+=1
 		# Checks stability in each cartesian direction.
 		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
 		print("Final Energy:", self.EnergyAndForce(prev_m.coords,False))
 		return prev_m
 
-	def OptGD(self,m_, filename="GDOptLog",Debug=False):
+	def OptGD(self,m_, filename="GDOptLog",Debug=False, FileOutput = True, eff_thresh = None, eff_max_step = None):
 		"""
 		Optimize using steepest descent  and an EnergyAndForce Function.
 
@@ -142,14 +152,21 @@ class GeomOptimizer:
 		rmsdisp = 10.0
 		rmsgrad = 10.0
 		step=0
-		ndives = 0
 		m = Mol(m_.atoms,m_.coords)
 		mol_hist = []
 		prev_m = Mol(m.atoms, m.coords)
-		print("Orig Coords", m.coords)
+		#print("Orig Coords", m.coords)
+		if (eff_thresh == None):
+			thresh = self.thresh
+		else:
+			thresh = eff_thresh
+		if (eff_max_step == None):
+			max_step = self.max_opt_step
+		else:
+			max_step = eff_max_step
 		#print "Initial force", self.tfm.evaluate(m, i), "Real Force", m.properties["forces"][i]
 		energy, old_frc  = self.WrappedEForce(m.coords)
-		while( step < self.max_opt_step and rmsgrad > self.thresh):
+		while( step < self.max_opt_step and rmsgrad > thresh):
 			prev_m = Mol(m.atoms, m.coords)
 			if step > 0:
 				old_frc = frc
@@ -162,7 +179,8 @@ class GeomOptimizer:
 			rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/m.coords.shape[0]
 			LOGGER.info(filename+"step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
 			mol_hist.append(prev_m)
-			prev_m.WriteXYZfile("./results/", filename)
+			if (FileOutput):
+				prev_m.WriteXYZfile("./results/", filename)
 			step+=1
 		# Checks stability in each cartesian direction.
 		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
@@ -206,9 +224,9 @@ class MetaOptimizer(GeomOptimizer):
 		self.lastbumpstep = 0
 		# just put the atoms in a box the size of their max and min coordinates.
 		self.Box =  Box_=np.array((np.max(m.coords)+0.1)*np.eye(3))
-		self.BowlK = 0.00
+		self.BowlK = 0.0002
 		#self.Bumper = TFForces.BumpHolder(self.natoms, self.MaxBumps, self.BowlK, h_=1.0, w_=1.2,Type_="MR")
-		self.Bumper = TFForces.BumpHolder(self.natoms, self.MaxBumps, self.BowlK, h_=0.5, w_=0.6,Type_="MR")
+		self.Bumper = TFForces.BumpHolder(self.natoms, self.MaxBumps, self.BowlK, h_=0.5, w_=0.6,Type_="LR")
 		return
 
 	def WrappedBumpedEForce(self, x_ ,DoForce = True, DoBump=True):
@@ -242,7 +260,6 @@ class MetaOptimizer(GeomOptimizer):
 			frc /= JOULEPERHARTREE
 			rmsgrad = np.sum(np.linalg.norm(PF,axis=1))/PF.shape[0]
 			rmsgradb = np.sum(np.linalg.norm(BF,axis=1))/PF.shape[0]
-#			print(rmsgradb,rmsgrad)
 			return BE+PE+BxE,frc
 		else:
 			return BE+PE+BxE
@@ -366,6 +383,288 @@ class MetaOptimizer(GeomOptimizer):
 			tmp = (mdm-odm)
 			overlaps.append(np.sqrt(np.sum(tmp*tmp)/(mdm.shape[0]*mdm.shape[0])))
 		if (min(overlaps) > self.thresh):
+			print("New Configuration!")
+			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
+			self.MinimaCoords[self.NMinima] = m.coords.copy()
+			self.NMinima += 1
+			self.Bump(m.coords)
+		else:
+			print("Overlaps", overlaps)
+		return
+
+
+class ScannedOptimization(GeomOptimizer):
+	def __init__(self,f_,m,StopAfter_=20):
+		"""
+		Scan Torsions. Initiate Geom Opts per torsion.
+		Append unique results.
+
+		Args:
+			f_: An EnergyForce routine
+			m: a molecules
+			StopAfter_: Look for this many nearby minima.
+		"""
+		GeomOptimizer.__init__(self,f_)
+		self.thresh = PARAMS["OptThresh"]*5.0
+		self.StopAfter = StopAfter_
+		self.m = m
+		self.fscale = 0.3
+		self.momentum = 0.1
+		self.thresh = 0.003
+		self.masses = np.array(map(lambda x: ATOMICMASSES[x-1], m.atoms))
+		self.natoms = m.NAtoms()
+		self.MaxBumps = 1 # think you want this to be >500k
+		self.MinimaCoords = np.zeros((self.StopAfter,self.natoms,3))
+		self.NMinima = 0
+		self.biasforce = TopologyBumper(m)
+		return
+
+	def WrappedBumpedEForce(self, x_ , DoForce = True, DoConstraint=False):
+		PE,PF = None, None
+		if (DoForce):
+			PE, PF = self.EnergyAndForce(x_, DoForce)
+			if (not DoConstraint):
+				return PE, PF/JOULEPERHARTREE
+		else:
+			PE = self.EnergyAndForce(x_, DoForce)
+			if (not DoConstraint):
+				return PE
+		BE = 0.0
+		BF = np.zeros(x_.shape)
+		BE, BF = self.biasforce.Constraint(x_,qw=0.03)
+		BF = JOULEPERHARTREE*BF
+		if (DoForce):
+			frc = PF+BF
+			frc = RemoveInvariantForce(x_, frc, self.m.atoms)
+			frc /= JOULEPERHARTREE
+			rmsgrad = np.sum(np.linalg.norm(PF,axis=1))/PF.shape[0]
+			rmsgradb = np.sum(np.linalg.norm(BF,axis=1))/PF.shape[0]
+			return PE,frc
+		else:
+			return PE
+
+	def Search(self,m_=None, filename="Scan", window = 0.2, interval = Pi/5.):
+		"""
+		Pin a torsion between -pi and pi. Perform dives every interval
+		Give up on this DOF if the energy goes more than window above minimum.
+		Increasing interval and window increase speed at the expense of care.
+
+		TODO:
+		parallel version which would sow coordinates to dive on
+		then optimize them all at once as a MolSet using set-wise forces
+		which are 2x faster.
+
+		Args:
+			m: A distorted molecule to search for confs.
+			window: max energy above minimum to continue scanning this DOF.
+			interval: torsion difference to initiate a dive.
+		"""
+		# Sweeps one at a time
+		rmsdisp = 10.0
+		rmsgrad = 10.0
+		step=0
+		ndives = 0
+		m = Mol(self.m.atoms,self.m.coords)
+		if (m_ != None):
+			m = Mol(m_.atoms,m_.coords)
+
+		m=self.Opt(m,"Pre_opt",FileOutput=False,eff_thresh=0.0005)
+		self.AppendIfNew(m)
+		self.biasforce.PreConstraint(m.coords)
+		eq_quads = self.biasforce.qbumps.copy()
+		energy0,frc0  = self.WrappedBumpedEForce(m.coords)
+
+		energy = energy0
+		old_frc = frc0.copy()
+
+		for i in range(self.biasforce.NQuad)[::-1]:
+			#First try to increase the dihedral up to Pi.
+			for target_torsion in [-Pi,Pi]:
+				curr_m = Mol(m.atoms,m.coords)
+				self.biasforce.qbumps = eq_quads.copy()
+				self.biasforce.qbumps[0,i] = target_torsion
+				energy = energy0
+				step=0
+				d,t,q = self.biasforce.CalcTop(curr_m.coords)
+				cons_tor = q[i]
+				last_dive = cons_tor
+				while( energy-energy0 < window and step<50 and abs(cons_tor-target_torsion)>0.1 and self.NMinima < self.StopAfter):
+					prev_m = Mol(curr_m.atoms, curr_m.coords)
+					if step > 0:
+						old_frc = frc
+					energy, frc = self.WrappedBumpedEForce(curr_m.coords,DoConstraint=True)
+					if (np.sum(frc*old_frc)<0.0):
+						old_frc *= 0.0
+					rmsgrad = np.sum(np.linalg.norm(frc,axis=1))/frc.shape[0]
+					frc += self.momentum*old_frc
+					curr_m.coords = curr_m.coords + self.fscale*frc
+					d,t,q = self.biasforce.CalcTop(curr_m.coords)
+					cons_tor = q[i]
+					if (abs(cons_tor-last_dive) > interval):
+						curr_m = self.OptGD(curr_m,"Dive"+str(ndives), FileOutput=False, eff_thresh=0.001, eff_max_step=100)
+						self.AppendIfNew(curr_m)
+						last_dive = cons_tor
+						ndives += 1
+						if (abs(last_dive-target_torsion)<interval):
+							break
+					rmsdisp = np.sum(np.linalg.norm(curr_m.coords-prev_m.coords,axis=1))/curr_m.coords.shape[0]
+					LOGGER.info(filename+" step: %i energy: %0.5f const_t: %i const: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, i, cons_tor, rmsgrad, rmsdisp)
+					prev_m.WriteXYZfile("./results/", filename)
+					step+=1
+		return self.MinimaCoords
+
+	def AppendIfNew(self,m):
+		overlaps = []
+		if (self.NMinima==0):
+			print("New Configuration!")
+			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
+			self.MinimaCoords[self.NMinima] = m.coords
+			self.NMinima += 1
+			return
+		for i in range(self.NMinima):
+			mdm = MolEmb.Make_DistMat(self.MinimaCoords[i])
+			odm = MolEmb.Make_DistMat(m.coords)
+			tmp = (mdm-odm)
+			overlaps.append(np.sqrt(np.sum(tmp*tmp)/(mdm.shape[0]*mdm.shape[0])))
+		if (min(overlaps) > 0.02):
+			print("New Configuration!")
+			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
+			self.MinimaCoords[self.NMinima] = m.coords.copy()
+			self.NMinima += 1
+		else:
+			print("Overlaps", overlaps)
+		return
+
+
+class TopologyMetaOpt(GeomOptimizer):
+	def __init__(self,f_,m,StopAfter_=20):
+		"""
+		A Meta-Optimizer performs nested optimization.
+		The outer loop has a bump potential to find new initial geometries.
+		the inner loop digs down to new minima.
+		it saves the record of minima it reaches.
+		The default parameters are tuned to find nearby reactions.
+		Conformational search should probably be done with internal coordinates
+		not distance matrices.
+
+		Args:
+			f_: An EnergyForce routine
+			m: a molecules
+			StopAfter_: Look for this many nearby minima.
+		"""
+		GeomOptimizer.__init__(self,f_)
+		self.thresh = PARAMS["OptThresh"]*5.0
+		self.StopAfter = StopAfter_
+		self.m = m
+		self.fscale = 0.3
+		self.momentum = 0.1
+		self.thresh = 0.003
+		self.masses = np.array(map(lambda x: ATOMICMASSES[x-1], m.atoms))
+		self.natoms = m.NAtoms()
+		self.MaxBumps = PARAMS["MetaMaxBumps"] # think you want this to be >500k
+		self.MinimaCoords = np.zeros((self.StopAfter,self.natoms,3))
+		self.NMinima = 0
+		self.biasforce = TopologyBumper(m)
+		return
+
+	def WrappedBumpedEForce(self, x_ ,DoForce = True, DoBump=True):
+		PE,PF = None, None
+		if (DoForce):
+			PE, PF = self.EnergyAndForce(x_, DoForce)
+			if (not DoBump):
+				return PE,PF
+		else:
+			PE = self.EnergyAndForce(x_, DoForce)
+			if (not DoBump):
+				return PE
+		BE = 0.0
+		BF = np.zeros(x_.shape)
+		BE, BF = self.biasforce.Bump(x_)
+		BF = JOULEPERHARTREE*BF
+		if (DoForce):
+			frc = PF+BF
+			frc = RemoveInvariantForce(x_, frc, self.m.atoms)
+			frc /= JOULEPERHARTREE
+			rmsgrad = np.sum(np.linalg.norm(PF,axis=1))/PF.shape[0]
+			rmsgradb = np.sum(np.linalg.norm(BF,axis=1))/PF.shape[0]
+			return BE+PE,frc
+		else:
+			return BE+PE
+
+	def Bump(self,x_):
+		self.biasforce.AddBump(x_)
+		LOGGER.info("Bump added!")
+		return
+
+	def Search(self,m_=None, filename="MetaOptLog",Debug=False, SearchConfs_=True):
+		"""
+		Optimize using steepest descent  and an EnergyAndForce Function.
+
+		Args:
+		        m: A distorted molecule to optimize
+		"""
+		# Sweeps one at a time
+		rmsdisp = 10.0
+		rmsgrad = 10.0
+		step=0
+		ndives = 0
+		m = Mol(self.m.atoms,self.m.coords)
+		if (m_ != None):
+			m = Mol(m_.atoms,m_.coords)
+		mol_hist = []
+		prev_m = Mol(m.atoms, m.coords)
+		print("Orig Coords", m.coords)
+		#print "Initial force", self.tfm.evaluate(m, i), "Real Force", m.properties["forces"][i]
+		energy, old_frc  = self.WrappedBumpedEForce(m.coords)
+		BM = m.BondMatrix()
+		while(self.NMinima < self.StopAfter):
+			while( step < self.max_opt_step and rmsgrad > self.thresh):
+				prev_m = Mol(m.atoms, m.coords)
+				if step > 0:
+					old_frc = frc
+				energy, frc = self.WrappedBumpedEForce(m.coords)
+				if (np.sum(frc*old_frc)<0.0):
+					old_frc *= 0.0
+				rmsgrad = np.sum(np.linalg.norm(frc,axis=1))/frc.shape[0]
+				frc += self.momentum*old_frc
+				m.coords = m.coords + self.fscale*frc
+				rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/m.coords.shape[0]
+				LOGGER.info(filename+" step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
+				mol_hist.append(prev_m)
+				prev_m.WriteXYZfile("./results/", filename)
+				step+=1
+			self.Bump(m.coords)
+			m.Distort(0.001) # Just to knock it off the top of the gaussian.
+
+			d = self.OptGD(prev_m,"Dive"+str(ndives),FileOutput=False)
+			BM = prev_m.BondMatrix()
+			self.AppendIfNew(d)
+			self.Bump(d.coords)
+			ndives += 1
+
+			rmsdisp = 10.0
+			rmsgrad = 10.0
+			step=0
+			PARAMS["GSSearchAlpha"]=0.1
+		# Checks stability in each cartesian direction.
+		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
+		return self.MinimaCoords
+
+	def AppendIfNew(self,m):
+		overlaps = []
+		if (self.NMinima==0):
+			print("New Configuration!")
+			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
+			self.MinimaCoords[self.NMinima] = m.coords
+			self.NMinima += 1
+			self.Bump(m.coords)
+			return
+		for i in range(self.NMinima):
+			mdm = MolEmb.Make_DistMat(self.MinimaCoords[i])
+			odm = MolEmb.Make_DistMat(m.coords)
+			tmp = (mdm-odm)
+			overlaps.append(np.sqrt(np.sum(tmp*tmp)/(mdm.shape[0]*mdm.shape[0])))
+		if (min(overlaps) > 0.06):
 			print("New Configuration!")
 			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
 			self.MinimaCoords[self.NMinima] = m.coords.copy()

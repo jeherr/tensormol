@@ -2347,7 +2347,6 @@ def TFSymSet_Hybrization(R, Zs, eles_, eleps_,  R_cut, RadpairEle, mil_j, Angtri
 	tmp = tf.expand_dims(avg_angle,2) - scatter_angle
 	std = tf.reduce_sum(tmp*tmp*scatter_weightab, axis=2)/weightab_sum
 
-
 	
 	return tf.reduce_sum(to_reduce2, axis=2)
 
