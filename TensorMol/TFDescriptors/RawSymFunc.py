@@ -2270,6 +2270,88 @@ def TFSymRSet_Linear_WithEle_Channel3(R, Zs, eles_, SFPs_, eta, R_cut, RadpairEl
 
 	return tf.reduce_sum(to_reduce2, axis=2)
 
+def TFSymSet_Hybrization(R, Zs, eles_, eleps_,  R_cut, RadpairEle, mil_j, AngtriEle, mil_jk, prec=tf.float64):
+	"""
+	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
+	Here j,k are all other atoms, but implicitly the output
+	is separated across elements as well. eleps_ is a list of element pairs
+	G = 2**(1-zeta) \sum_{j,k \neq i} (Angular triple) (radial triple) f_c(R_{ij}) f_c(R_{ik})
+	a-la MolEmb.cpp. Also depends on PARAMS for zeta, eta, theta_s r_s
+	This version appends the element type (by its index in eles_) in RadpairEle, and it is sorted by m,i,l,j
+
+	Args:
+		R: a nmol X maxnatom X 3 tensor of coordinates.
+		Zs : nmol X maxnatom X 1 tensor of atomic numbers.
+		eles_: a nelepairs X 1 tensor of elements present in the data.
+		SFP: A symmetry function parameter tensor having the number of elements
+		as the SF output. 2 X neta  X nRs.
+		R_cut: Radial Cutoff
+		RadpairEle: None zero pairs X 4 tensor (mol, i, j, l)
+		prec: a precision.
+	Returns:
+		Digested Mol. In the shape nmol X maxnatom X nelepairs X nZeta X nEta X nThetas X nRs
+	"""
+	inp_shp = tf.shape(R)
+	nmol = inp_shp[0]
+	natom = inp_shp[1]
+	natom2 = natom*natom
+	nele = tf.shape(eles_)[0]
+	num_ele, num_dim = eles_.get_shape().as_list()
+	infinitesimal = 0.000000000000000000000000001
+	nnz = tf.shape(RadpairEle)[0]
+	Rij = DifferenceVectorsLinear(R, tf.slice(RadpairEle,[0, 0],[nnz, 3]))
+	RijRij = tf.sqrt(tf.reduce_sum(Rij*Rij,axis=1)+infinitesimal)
+
+	weight = (1.0-np.tanh((RijRij - 2.0)*2.0*3.1415))/2.0
+	mi_j =  tf.concat([mil_j[:,:2],tf.reshape(mil_j[:,3],[-1,1])], axis=-1)
+	j_max = tf.reduce_max(tf.slice(mil_j, [0,3], [nnz, 1])) + 1
+
+	scatter_weight = tf.scatter_nd(mi_j, weight, [nmol, tf.cast(natom, tf.int32), tf.cast(j_max, tf.int32)])
+	coord = tf.reduce_sum(scatter_weight, axis=2)
+
+	
+	natom3 = natom*natom2
+	nelep = tf.shape(eleps_)[0]
+	num_elep, num_dim = eleps_.get_shape().as_list()
+	onescalar = 1.0 - 0.0000000000000001
+	nnzt = tf.shape(AngtriEle)[0]
+
+
+	Rij_inds = tf.slice(AngtriEle,[0,0],[nnzt,3])
+	Rik_inds = tf.concat([tf.slice(AngtriEle,[0,0],[nnzt,2]), tf.slice(AngtriEle,[0,3],[nnzt,1])],axis=-1)
+	Rjk_inds = tf.concat([tf.slice(AngtriEle,[0,0],[nnzt,1]), tf.slice(AngtriEle,[0,2],[nnzt,2])],axis=-1)
+
+	Rij = DifferenceVectorsLinear(R, Rij_inds)
+	RijRij2 = tf.sqrt(tf.reduce_sum(Rij*Rij,axis=1)+infinitesimal)
+	Rik = DifferenceVectorsLinear(R, Rik_inds)
+	RikRik2 = tf.sqrt(tf.reduce_sum(Rik*Rik,axis=1)+infinitesimal)
+	RijRik2 = tf.reduce_sum(Rij*Rik, axis=1)
+	denom = RijRij2*RikRik2
+	#Mask any troublesome entries.
+	ToACos = RijRik2/denom
+	ToACos = tf.where(tf.greater_equal(ToACos,1.0),tf.ones_like(ToACos, dtype=prec)*onescalar, ToACos)
+	ToACos = tf.where(tf.less_equal(ToACos,-1.0),-1.0*tf.ones_like(ToACos, dtype=prec)*onescalar, ToACos)
+	Thetaijk = tf.acos(ToACos)
+
+	weighta = (1.0-np.tanh((RijRij2 - 2.0)*2.0*3.1415))/2.0
+	weightb = (1.0-np.tanh((RikRik2 - 2.0)*2.0*3.1415))/2.0
+	weightab = weighta*weightb
+	
+	scatter_weightab = tf.scatter_nd(mi_jk2, weightab, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(jk_max, tf.int32)], dtype=tf.int64))
+	scatter_angle = tf.scatter_nd(mi_jk2, Thetaijk, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(jk_max, tf.int32)], dtype=tf.int64))
+	weightab_sum = tf.reduce_sum(scatter_weightab, axis=2)
+	scatter_angle_w= scatter_angle*scatter_weightab
+	scatter_angle_wsum = tf.reduce_sum(scatter_angle_w, axis=2)
+	avg_angle = scatter_angle_wsum/weightab_sum
+
+	tmp = tf.expand_dims(avg_angle,2) - scatter_angle
+	std = tf.reduce_sum(tmp*tmp*scatter_weightab, axis=2)/weightab_sum
+
+
+	
+	return tf.reduce_sum(to_reduce2, axis=2)
+
+
 def TFSymRSet_Linear_WithElePeriodic(R, Zs, eles_, SFPs_, eta, R_cut, RadpairEle, mil_j, nreal, prec=tf.float64):
 	"""
 	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.

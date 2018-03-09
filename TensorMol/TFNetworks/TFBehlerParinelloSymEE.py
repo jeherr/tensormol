@@ -2329,12 +2329,14 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			print ("set the atomic number to channel")
 			self.channels = self.eles_np.reshape((self.n_eles,1)).astype(np.float64)
 			self.channel_pairs = ((self.eles_pairs_np[:,0]*self.eles_pairs_np[:,1])/(self.eles_pairs_np[:,0]+self.eles_pairs_np[:,1])).astype(np.float64).reshape((-1,1))
+			#self.channel_pairs = ((self.eles_pairs_np[:,0]*self.eles_pairs_np[:,1])).astype(np.float64).reshape((-1,1))
 		else:
 			self.channels = PARAMS["SymFChannel"]
 			self.channel_pairs = []
 			for i in range (len(self.eles)):
 				for j in range(i, len(self.eles)):
-					self.channel_pairs.append([(self.channels[i]*self.channels[j])/(self.channels[i]+self.channels[j])])
+					self.channel_pairs.append([(self.channels[i]*self.channels[j])])
+					#self.channel_pairs.append([(self.channels[i]*self.channels[j])/(self.channels[i]+self.channels[j])])
 			self.channel_pairs = np.asarray(self.channel_pairs).reshape((-1, self.channels.shape[1]))
 			
 		#print ("self.channels:", self.channels, "\n  self.channel_pairs:", self.channel_pairs)			
@@ -2535,43 +2537,5 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		if (not np.all(np.isfinite(batch_data[2]),axis=(0))):
 			raise Exception("Please check your inputs")
 
-		#t = time.time()
-		#mil_j = batch_data[-4]
-		#mil_jk = batch_data[-3]
-		#npair = mil_j.shape[0]	
-		#ntriple = mil_jk.shape[0]
-	
-		#mil_j_2 = np.copy(mil_j)
-		#mil_jk_2 = np.copy(mil_jk)
-
-		#prev_mol = mil_j[0][0]
-		#prev_atom =  mil_j[0][1]
-		#index = 0 
-		#for i in range(0, npair):
-		#	if mil_j[i][0] == prev_mol and  mil_j[i][1] == prev_atom:
-		#		mil_j_2[i][3] = index
-		#		index += 1
-		#	else:
-		#		index = 0
-		#		mil_j_2[i][3] = index
-		#		prev_mol = mil_j[i][0]
-		#		prev_atom = mil_j[i][1]
-		#		index += 1
-	
-		#prev_mol = mil_jk[0][0]
-		#prev_atom =  mil_jk[0][1]
-		#index = 0 
-		#for i in range(0, ntriple):
-		#	if mil_jk[i][0] == prev_mol and  mil_jk[i][1] == prev_atom:
-		#		mil_jk_2[i][3] = index
-		#		index += 1
-		#	else:
-		#		index = 0
-		#		mil_jk_2[i][3] = index
-		#		prev_mol = mil_jk[i][0]
-		#		prev_atom = mil_jk[i][1]
-		#		index += 1
-		#batch_data[-4] = mil_j_2
-		#batch_data[-3] = mil_jk_2
 		feed_dict={i: d for i, d in zip([self.xyzs_pl]+[self.Zs_pl]+[self.Elabel_pl] + [self.grads_pl] + [self.Radp_Ele_pl] + [self.Angt_Elep_pl] + [self.mil_j_pl] + [self.mil_jk_pl] + [self.natom_pl] + [self.keep_prob_pl], batch_data)}
 		return feed_dict
