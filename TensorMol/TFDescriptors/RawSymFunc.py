@@ -1148,7 +1148,7 @@ def TFSymASet_Linear_WithEle_Channel2(R, Zs, eleps_, SFPs_, zeta, eta, R_cut, An
 		to_reduce2 = to_reduce2 + tmp
 	return tf.reduce_sum(to_reduce2, axis=2)
 
-def TFSymASet_Linear_WithEle_Channel3(R, Zs, eleps_, SFPs_, zeta, eta, R_cut, AngtriEle, mil_jk2, channel_eleps, prec=tf.float64):
+def TFSymASet_Linear_WithEle_Channel3(R, Zs, eleps_, SFPs_, zeta, eta, R_cut, AngtriEle, mil_jk2, channel_eleps, Hyb, prec=tf.float64):
 	"""
 	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
 	Here j,k are all other atoms, but implicitly the output
@@ -1234,10 +1234,19 @@ def TFSymASet_Linear_WithEle_Channel3(R, Zs, eleps_, SFPs_, zeta, eta, R_cut, An
 	#return tf.reduce_sum(to_reduce4, axis=2)
 
 	tomult = tf.reshape(tf.gather_nd(channel_eleps, tf.reshape(mil_jk2[:,2],[-1,1])),[nnzt,-1])
-	Gm2_mult = tf.reshape(tf.expand_dims(tomult, 1)*tf.expand_dims(Gm2, 2), [nnzt, -1])
+
+	mj_inds = tf.concat([AngtriEle[:,0], AngtriEle[:,2]],axis=-1)
+	mk_inds = tf.concat([AngtriEle[:,0], AngtriEle[:,3]],axis=-1)
+	hyb_channel_j  = tf.reshape(tf.gather_nd(Hyb, tf.reshape(mj_inds,[nnzt,2])),[nnzt,-1])
+	hyb_channel_k  = tf.reshape(tf.gather_nd(Hyb, tf.reshape(mk_inds,[nnzt,2])),[nnzt,-1])
+	hyb_channel  = hyb_channel_j*hyb_channel_k/(hyb_channel_j+hyb_channel_k)
+	hyb_channel_clean = tf.where(tf.is_nan(hyb_channel), tf.zeros_like(hyb_channel, dtype=prec), hyb_channel)	
+	
+	tomul_with_hyb = tf.concat([tomult, hyb_channel_clean],axis=-1)
+	Gm2_mult = tf.reshape(tf.expand_dims(tomul_with_hyb, 1)*tf.expand_dims(Gm2, 2), [nnzt, -1])
 
 	mi_jk2 =  tf.concat([mil_jk2[:,:2],tf.reshape(mil_jk2[:,3],[-1,1])], axis=-1)
-	to_reduce2 = tf.scatter_nd(mi_jk2, Gm2_mult, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(jk_max, tf.int32), nsym*tf.shape(channel_eleps)[1]], dtype=tf.int64))
+	to_reduce2 = tf.scatter_nd(mi_jk2, Gm2_mult, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(jk_max, tf.int32), nsym*(tf.shape(channel_eleps)[1]+tf.shape(Hyb)[2])], dtype=tf.int64))
 	return tf.reduce_sum(to_reduce2, axis=2)
 
 def TFSymASet_Linear_WithEle_UsingList(R, Zs, eleps_, SFPs_, zeta, eta, R_cut, AngtriEle, mil_jk2, prec=tf.float64):
@@ -2211,7 +2220,7 @@ def TFSymRSet_Linear_WithEle_Channel2(R, Zs, eles_, SFPs_, eta, R_cut, RadpairEl
 		to_reduce2 = to_reduce2 + tmp
 	return tf.reduce_sum(to_reduce2, axis=2)
 
-def TFSymRSet_Linear_WithEle_Channel3(R, Zs, eles_, SFPs_, eta, R_cut, RadpairEle, mil_j, channels, prec=tf.float64):
+def TFSymRSet_Linear_WithEle_Channel3(R, Zs, eles_, SFPs_, eta, R_cut, RadpairEle, mil_j, channels, Hyb, prec=tf.float64):
 	"""
 	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
 	Here j,k are all other atoms, but implicitly the output
@@ -2262,11 +2271,16 @@ def TFSymRSet_Linear_WithEle_Channel3(R, Zs, eles_, SFPs_, eta, R_cut, RadpairEl
 	j_max = tf.reduce_max(tf.slice(mil_j, [0,3], [nnz, 1])) + 1
 
 	tomul = tf.reshape(tf.gather_nd(channels, tf.reshape(mil_j[:,2],[-1,1])),[nnz, -1])
-	Gm2_mult = tf.reshape(tf.expand_dims(tomul, 1)*tf.expand_dims(Gm2, 2),[nnz, -1])
+
+	mj_inds = tf.concat([RadpairEle[:,0], RadpairEle[:,2]],axis=-1)
+	hyb_channel  = tf.gather_nd(Hyb, tf.reshape(mj_inds,[-1,2]))
+	tomul_with_hyb = tf.concat([tomul, hyb_channel],axis=-1)
+
+	Gm2_mult = tf.reshape(tf.expand_dims(tomul_with_hyb, 1)*tf.expand_dims(Gm2, 2),[nnz, -1])
 	
 	
 	mi_j =  tf.concat([mil_j[:,:2],tf.reshape(mil_j[:,3],[-1,1])], axis=-1)
-	to_reduce2 = tf.scatter_nd(mi_j, Gm2_mult, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(j_max, tf.int32), nr*tf.shape(channels)[1]], dtype=tf.int64))
+	to_reduce2 = tf.scatter_nd(mi_j, Gm2_mult, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(j_max, tf.int32), nr*(tf.shape(channels)[1]+tf.shape(Hyb)[2])], dtype=tf.int64))
 
 	return tf.reduce_sum(to_reduce2, axis=2)
 
@@ -2302,11 +2316,11 @@ def TFSymSet_Hybrization(R, Zs, eles_, eleps_,  R_cut, RadpairEle, mil_j, Angtri
 	Rij = DifferenceVectorsLinear(R, tf.slice(RadpairEle,[0, 0],[nnz, 3]))
 	RijRij = tf.sqrt(tf.reduce_sum(Rij*Rij,axis=1)+infinitesimal)
 
-	weight = (1.0-np.tanh((RijRij - 2.0)*2.0*3.1415))/2.0
+	weight = (1.0-tf.tanh((RijRij - R_cut)*2.0*3.1415))/2.0
 	mi_j =  tf.concat([mil_j[:,:2],tf.reshape(mil_j[:,3],[-1,1])], axis=-1)
 	j_max = tf.reduce_max(tf.slice(mil_j, [0,3], [nnz, 1])) + 1
 
-	scatter_weight = tf.scatter_nd(mi_j, weight, [nmol, tf.cast(natom, tf.int32), tf.cast(j_max, tf.int32)])
+	scatter_weight = tf.scatter_nd(mi_j, weight, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(j_max, tf.int32)], dtype=tf.int64))
 	coord = tf.reduce_sum(scatter_weight, axis=2)
 
 	
@@ -2333,10 +2347,12 @@ def TFSymSet_Hybrization(R, Zs, eles_, eleps_,  R_cut, RadpairEle, mil_j, Angtri
 	ToACos = tf.where(tf.less_equal(ToACos,-1.0),-1.0*tf.ones_like(ToACos, dtype=prec)*onescalar, ToACos)
 	Thetaijk = tf.acos(ToACos)
 
-	weighta = (1.0-np.tanh((RijRij2 - 2.0)*2.0*3.1415))/2.0
-	weightb = (1.0-np.tanh((RikRik2 - 2.0)*2.0*3.1415))/2.0
+	weighta = (1.0-tf.tanh((RijRij2 - R_cut)*2.0*3.1415))/2.0
+	weightb = (1.0-tf.tanh((RikRik2 - R_cut)*2.0*3.1415))/2.0
 	weightab = weighta*weightb
-	
+
+	mi_jk2 =  tf.concat([mil_jk[:,:2],tf.reshape(mil_jk[:,3],[-1,1])], axis=-1)
+	jk_max = tf.reduce_max(tf.slice(mil_jk,[0,3], [nnzt, 1])) + 1
 	scatter_weightab = tf.scatter_nd(mi_jk2, weightab, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(jk_max, tf.int32)], dtype=tf.int64))
 	scatter_angle = tf.scatter_nd(mi_jk2, Thetaijk, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(jk_max, tf.int32)], dtype=tf.int64))
 	weightab_sum = tf.reduce_sum(scatter_weightab, axis=2)
@@ -2346,10 +2362,9 @@ def TFSymSet_Hybrization(R, Zs, eles_, eleps_,  R_cut, RadpairEle, mil_j, Angtri
 
 	tmp = tf.expand_dims(avg_angle,2) - scatter_angle
 	std = tf.reduce_sum(tmp*tmp*scatter_weightab, axis=2)/weightab_sum
-
-	
-	return tf.reduce_sum(to_reduce2, axis=2)
-
+	output = tf.stack([coord, avg_angle, std], axis=2)
+	output_clean = tf.where(tf.is_nan(output), tf.zeros_like(output, dtype=prec), output)
+	return output_clean
 
 def TFSymRSet_Linear_WithElePeriodic(R, Zs, eles_, SFPs_, eta, R_cut, RadpairEle, mil_j, nreal, prec=tf.float64):
 	"""
@@ -2969,14 +2984,15 @@ def TFSymSet_Scattered_Linear_WithEle_Channel3(R, Zs, eles_, SFPsR_, Rr_cut,  el
 
 	#channel_eles = tf.reshape(eles_, [nele])
 	#channel_eleps = tf.reshape((eleps_[:,0] +eleps_[:,1])/(eleps_[:,0]*eleps_[:,1]),[nelep])
-	
-	GMR = tf.reshape(TFSymRSet_Linear_WithEle_Channel3(R, Zs, eles_, SFPsR_, eta, Rr_cut, RadpEle, mil_j, channel_eles),[nmol, natom,-1], name="FinishGMR")
-	GMA = tf.reshape(TFSymASet_Linear_WithEle_Channel3(R, Zs, eleps_, SFPsA_, zeta,  eta, Ra_cut,  AngtEle, mil_jk, channel_eleps),[nmol, natom,-1], name="FinishGMA")
+
+	GMH = tf.reshape(TFSymSet_Hybrization(R, Zs, eles_, eleps_,  2.0, RadpEle, mil_j, AngtEle, mil_jk), [nmol, natom,-1], name="FinishGMH")
+	GMA = tf.reshape(TFSymASet_Linear_WithEle_Channel3(R, Zs, eleps_, SFPsA_, zeta,  eta, Ra_cut,  AngtEle, mil_jk, channel_eleps, GMH),[nmol, natom,-1], name="FinishGMA")	
+	GMR = tf.reshape(TFSymRSet_Linear_WithEle_Channel3(R, Zs, eles_, SFPsR_, eta, Rr_cut, RadpEle, mil_j, channel_eles, GMH),[nmol, natom,-1], name="FinishGMR")
 	#return GMR, R_index, GMA, A_index
 	#GMR = tf.reshape(TFSymRSet_Linear_WithEle(R, Zs, eles_, SFPsR_, eta, Rr_cut, RadpEle),[nmol, natom,-1], name="FinishGMR")
 	#GMA = tf.reshape(TFSymASet_Linear_WithEle(R, Zs, eleps_, SFPsA_, zeta,  eta, Ra_cut,  AngtEle), [nmol, natom,-1], name="FinishGMA")
-	GM = tf.concat([GMR, GMA], axis=2, name="ConcatRadAng")
-	#GM = tf.identity(GMA)
+	GM = tf.concat([GMR, GMA], axis=2, name="ConcatRadAngHyb")
+	#GM = tf.identity(GMR)
 	num_ele, num_dim = eles_.get_shape().as_list()
 	MaskAll = tf.equal(tf.reshape(Zs,[nmol,natom,1]),tf.reshape(eles_,[1,1,nele]), name="FormEleMask")
 	ToMask1 = AllSinglesSet(tf.cast(tf.tile(tf.reshape(tf.range(natom),[1,natom]),[nmol,1]),dtype=tf.int64), prec=tf.int64)
@@ -2992,7 +3008,7 @@ def TFSymSet_Scattered_Linear_WithEle_Channel3(R, Zs, eles_, SFPsR_, Rr_cut,  el
 		mol_index = tf.reshape(tf.slice(GatherList[-1],[0,0],[NAtomOfEle,1]),[NAtomOfEle, 1])
 		atom_index = tf.reshape(tf.slice(GatherList[-1],[0,2],[NAtomOfEle,1]),[NAtomOfEle, 1])
 		IndexList.append(tf.concat([mol_index, atom_index], axis = -1))
-	return SymList, IndexList
+	return SymList, IndexList, GMH
 
 def TFSymSet_Scattered_Linear_WithEle_UsingList(R, Zs, eles_, SFPsR_, Rr_cut,  eleps_, SFPsA_, zeta, eta, Ra_cut, RadpEle, AngtEle, mil_jk):
 	"""
