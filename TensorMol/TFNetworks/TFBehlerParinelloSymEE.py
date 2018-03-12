@@ -2326,16 +2326,19 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			print ("set the atomic number to channel")
 			self.channels = self.eles_np.reshape((self.n_eles,1)).astype(np.float64)
 			self.channel_pairs = ((self.eles_pairs_np[:,0]*self.eles_pairs_np[:,1])/(self.eles_pairs_np[:,0]+self.eles_pairs_np[:,1])).astype(np.float64).reshape((-1,1))
+			#self.channel_pairs = ((self.eles_pairs_np[:,0]*self.eles_pairs_np[:,1])).astype(np.float64).reshape((-1,1))
 		else:
 			self.channels = PARAMS["SymFChannel"]
 			self.channel_pairs = []
 			for i in range (len(self.eles)):
 				for j in range(i, len(self.eles)):
-					self.channel_pairs.append([(self.channels[i]*self.channels[j])/(self.channels[i]+self.channels[j])])
+					self.channel_pairs.append([(self.channels[i]*self.channels[j])])
+					#self.channel_pairs.append([(self.channels[i]*self.channels[j])/(self.channels[i]+self.channels[j])])
 			self.channel_pairs = np.asarray(self.channel_pairs).reshape((-1, self.channels.shape[1]))
 
 		#print ("self.channels:", self.channels, "\n  self.channel_pairs:", self.channel_pairs)
-		self.inshape = self.inshape*self.channels.shape[1]
+		self.nhyb_channel = 3
+		self.inshape = self.inshape*(self.channels.shape[1]+self.nhyb_channel)
 		print ("self.channel_pairs:", self.channel_pairs.shape)
 		print ("self.inshape:", self.inshape)
 
@@ -2413,7 +2416,8 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_prec)
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_prec)
 			#self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
-			self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
+			self.Scatter_Sym, self.Sym_Index, self.Hyb  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
+			#self.Hybrization = TFSymSet_Hybrization(self.xyzs_pl, self.Zs_pl, Ele, Elep,  2.2, self.Radp_Ele_pl, self.mil_j_pl, self.Angt_Elep_pl, self.mil_jk_pl)
 			self.Etotal, self.Ebp, self.Ebp_atom = self.energy_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.keep_prob_pl)
 			self.gradient  = tf.gradients(self.Etotal, self.xyzs_pl, name="BPEGrad")
 			self.total_loss, self.loss, self.energy_loss, self.grads_loss = self.loss_op(self.Etotal, self.gradient, self.Elabel_pl, self.grads_pl, self.natom_pl)
@@ -2455,13 +2459,15 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			batch_data = self.TData.GetTrainBatch(self.batch_size) + [self.keep_prob]
 			actual_mols  = self.batch_size
 			t = time.time()
-			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal= self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal], feed_dict=self.fill_feed_dict(batch_data))
+			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal, Scatter_Sym, Hyb = self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal, self.Scatter_Sym, self.Hyb], feed_dict=self.fill_feed_dict(batch_data))
 			train_loss = train_loss + loss_value
 			train_energy_loss += energy_loss
 			train_grads_loss += grads_loss
 			duration = time.time() - start_time
 			num_of_mols += actual_mols
-			#print ("equal 1:", np.allclose(Scatter_Sym[0], Scatter_Sym_2[0]), np.allclose(Scatter_Sym[1], Scatter_Sym_2[1]))
+			print ("Hyb:", Hyb[0])
+			exit()
+			#print ("Scatter_Sym:", np.any(np.isnan(Scatter_Sym[1])),np.any(np.isnan(Scatter_Sym[2])),np.any(np.isnan(Scatter_Sym[0])), energy_loss, grads_loss)
 		self.print_training(step, train_loss, train_energy_loss, train_grads_loss, num_of_mols, duration)
 		return
 
@@ -2491,17 +2497,17 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 				for i in range(len(self.HiddenLayers)):
 					if i == 0:
 						with tf.name_scope(str(self.eles[e])+'_hidden1'):
-							weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.inshape, self.HiddenLayers[i]], var_stddev=1.0/(100+math.sqrt(float(self.inshape))), var_wd=0.001)
+							weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.inshape, self.HiddenLayers[i]], var_stddev=1.0/(500+math.sqrt(float(self.inshape))), var_wd=0.001)
 							biases = tf.Variable(tf.zeros([self.HiddenLayers[i]], dtype=self.tf_prec), name='biaseslayer'+str(i))
 							Ebranches[-1].append(self.activation_function(tf.matmul(tf.nn.dropout(inputs, keep_prob[i]), weights) + biases))
 					else:
 						with tf.name_scope(str(self.eles[e])+'_hidden'+str(i+1)):
-							weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.HiddenLayers[i-1], self.HiddenLayers[i]], var_stddev=1.0/(100+math.sqrt(float(self.HiddenLayers[i-1]))), var_wd=0.001)
+							weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.HiddenLayers[i-1], self.HiddenLayers[i]], var_stddev=1.0/(500+math.sqrt(float(self.HiddenLayers[i-1]))), var_wd=0.001)
 							biases = tf.Variable(tf.zeros([self.HiddenLayers[i]], dtype=self.tf_prec), name='biaseslayer'+str(i))
 							Ebranches[-1].append(self.activation_function(tf.matmul(tf.nn.dropout(Ebranches[-1][-1], keep_prob[i]), weights) + biases))
 				with tf.name_scope(str(self.eles[e])+'_regression_linear'):
 					shp = tf.shape(inputs)
-					weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.HiddenLayers[-1], 1], var_stddev=1.0/(100+math.sqrt(float(self.HiddenLayers[-1]))), var_wd=None)
+					weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.HiddenLayers[-1], 1], var_stddev=1.0/(500+math.sqrt(float(self.HiddenLayers[-1]))), var_wd=None)
 					biases = tf.Variable(tf.zeros([1], dtype=self.tf_prec), name='biases')
 					Ebranches[-1].append(tf.matmul(tf.nn.dropout(Ebranches[-1][-1], keep_prob[-1]), weights) + biases)
 					shp_out = tf.shape(Ebranches[-1][-1])
@@ -2532,43 +2538,5 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		if (not np.all(np.isfinite(batch_data[2]),axis=(0))):
 			raise Exception("Please check your inputs")
 
-		#t = time.time()
-		#mil_j = batch_data[-4]
-		#mil_jk = batch_data[-3]
-		#npair = mil_j.shape[0]
-		#ntriple = mil_jk.shape[0]
-
-		#mil_j_2 = np.copy(mil_j)
-		#mil_jk_2 = np.copy(mil_jk)
-
-		#prev_mol = mil_j[0][0]
-		#prev_atom =  mil_j[0][1]
-		#index = 0
-		#for i in range(0, npair):
-		#	if mil_j[i][0] == prev_mol and  mil_j[i][1] == prev_atom:
-		#		mil_j_2[i][3] = index
-		#		index += 1
-		#	else:
-		#		index = 0
-		#		mil_j_2[i][3] = index
-		#		prev_mol = mil_j[i][0]
-		#		prev_atom = mil_j[i][1]
-		#		index += 1
-
-		#prev_mol = mil_jk[0][0]
-		#prev_atom =  mil_jk[0][1]
-		#index = 0
-		#for i in range(0, ntriple):
-		#	if mil_jk[i][0] == prev_mol and  mil_jk[i][1] == prev_atom:
-		#		mil_jk_2[i][3] = index
-		#		index += 1
-		#	else:
-		#		index = 0
-		#		mil_jk_2[i][3] = index
-		#		prev_mol = mil_jk[i][0]
-		#		prev_atom = mil_jk[i][1]
-		#		index += 1
-		#batch_data[-4] = mil_j_2
-		#batch_data[-3] = mil_jk_2
 		feed_dict={i: d for i, d in zip([self.xyzs_pl]+[self.Zs_pl]+[self.Elabel_pl] + [self.grads_pl] + [self.Radp_Ele_pl] + [self.Angt_Elep_pl] + [self.mil_j_pl] + [self.mil_jk_pl] + [self.natom_pl] + [self.keep_prob_pl], batch_data)}
 		return feed_dict

@@ -483,11 +483,11 @@ class Mol:
 					angles.append(np.arccos(ToACos))
 					aweights.append(weights[ji]*weights[ki])
 			angles_a = np.array(angles)
-			print(angles_a)
 			weights_a = np.array(aweights)
 			tore[i,1] = np.sum(angles_a*weights_a)/np.sum(weights_a)
 			tmp = (angles_a-tore[i,1])
 			tore[i,2] = np.sum(tmp*tmp*weights_a)/np.sum(weights_a)
+		print ("tore:", tore)
 		return tore
 
 	def BondMatrix(self,tol_ = 1.6):

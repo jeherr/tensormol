@@ -483,9 +483,72 @@ class NeighborListSet:
 			(nnzero pairs X 4 pair tensor) (mol, I, J, L)
 			(nnzero triples X 5 triple tensor) (mol, I, J, K, L)
 		"""
-		trpE_sorted, trtE_sorted, mil_jk, jk_max = self.buildPairsAndTriplesWithEleIndex(rcut_pairs, rcut_triples, ele, elep)
+		if not self.sort:
+			print ("Warning! Triples need to be sorted")
+		# if self.ele == None:
+		# 	raise Exception("Element type of each atom is needed.")
+		#import time
+		t0 = time.time()
+		trp, trt = self.buildPairsAndTriples(rcut_pairs, rcut_triples)
+		#print ("trp, trt",trp.shape, trt.shape)
+		#print ("build P and T time:", time.time()-t0)
+		#print ("trp:", trp, "trt:", trt)
+		t_start = time.time()
+		eleps = np.hstack((elep, np.flip(elep, axis=1))).reshape((elep.shape[0], 2, -1))
+		Z = self.ele[trp[:, 0], trp[:, 2]]
+		pair_mask = np.equal(Z.reshape(trp.shape[0],1,1), ele.reshape(ele.shape[0],1))
+		pair_index = np.where(np.all(pair_mask, axis=-1))[1]
+		Z1 = self.ele[trt[:, 0], trt[:, 2]]
+		Z2 = self.ele[trt[:, 0], trt[:, 3]]
+		Z1Z2 = np.transpose(np.vstack((Z1, Z2)))
+		trip_mask = np.equal(Z1Z2.reshape((trt.shape[0],1,1,2)), eleps.reshape((eleps.shape[0],2,2)))
+		trip_index = np.where(np.any(np.all(trip_mask, axis=-1),axis=-1))[1]
+		trpE = np.concatenate((trp, pair_index.reshape((-1,1))), axis=-1)
+		trtE = np.concatenate((trt, trip_index.reshape((-1,1))), axis=-1)
+		sort_index = np.lexsort((trpE[:,2], trpE[:,3], trpE[:,1], trpE[:,0]))
+		trpE_sorted = trpE[sort_index]
+		sort_index = np.lexsort((trtE[:,2], trtE[:,3], trtE[:,4], trtE[:,1], trtE[:,0]))
+		trtE_sorted = trtE[sort_index]
+		#print ("numpy lexsorting time:", time.time() -t0)
+		#print ("time to append and sort element", time.time() - t_start)
+		valance_pair = np.zeros(trt.shape[0])
+		#ntriple = np.zeros(trt.shape[0])
+		pointer = 0
+		if (len(trtE_sorted)==0):
+			mil_jk = np.zeros((trt.shape[0],4))
+			jk_max = 0
+			return trpE_sorted, trtE_sorted, mil_jk, jk_max
+		prev_atom = trtE_sorted[0][1]
+		prev_mol = trtE_sorted[0][0]
+		for i in range(0, trt.shape[0]):
+			current_atom = trtE_sorted[i][1]
+			current_mol = trtE_sorted[i][0]
+			if  current_atom == prev_atom and current_mol == prev_mol:
+				pointer += 1
+				if i == trt.shape[0]-1:
+					valance_pair[i-pointer+1:]=range(0, pointer)
+					#ntriple[i-pointer+1:]=pointer
+				else:
+					pass
+			else:
+				valance_pair[i-pointer:i]=range(0, pointer)
+				#ntriple[i-pointer+1:]=pointer
+				pointer = 1
+				prev_atom = current_atom
+				prev_mol = current_mol
+		#print ("valance_pair:", valance_pair[:20])
+		#print ("trtE:", trtE_sorted[:20])
+		mil_jk = np.zeros((trt.shape[0],4))
+		mil_jk[:,[0,1,2]]= trtE_sorted[:,[0,1,4]]
+		mil_jk[:,3] = valance_pair
+		#print ("mil_jk", mil_jk)
+		jk_max = np.max(valance_pair)
+		#print (trpE_sorted, trtE_sorted, jk_max)
+		#return trpE_sorted, trtE_sorted, mil_jk, jk_max
+		#trpE_sorted, trtE_sorted, mil_jk, jk_max = self.buildPairsAndTriplesWithEleIndex(rcut_pairs, rcut_triples, ele, elep)
 		mil_j = np.zeros((trpE_sorted.shape[0], 4))
 		pair_pair = np.zeros(trpE_sorted.shape[0])
+		#npair = np.zeros(trpE.shape[0])
 		if (len(trpE_sorted)==0):
 			return trpE_sorted, trtE_sorted, mil_j, mil_jk
 		prev_atom = trpE_sorted[0][1]
@@ -498,17 +561,19 @@ class NeighborListSet:
 				pointer += 1
 				if i == trpE_sorted.shape[0]-1:
 					pair_pair[i-pointer+1:]=range(0, pointer)
+					#npair[i-pointer+1:]= pointer
 				else:
 					pass
 			else:
 				pair_pair[i-pointer:i]=range(0, pointer)
+				#npair[i-pointer+1:]= pointer
 				pointer = 1
 				prev_atom = current_atom
 				prev_mol = current_mol
 		mil_j[:,[0,1,2]] = trpE_sorted[:,[0,1,3]]
 		mil_j[:,3] = pair_pair
 		#print ("trpE_sorted, trtE_sorted",trpE_sorted.shape, trtE_sorted.shape)
-		return trpE_sorted, trtE_sorted, mil_j, mil_jk
+		return trpE_sorted, trtE_sorted, mil_j, mil_jk#, npair, ntriple
 
 class NeighborListSetWithImages(NeighborListSet):
 	def __init__(self, x_, nnz_, nreal_,  DoTriples_=False, DoPerms_=False, ele_=None, alg_ = None, sort_ = False):
