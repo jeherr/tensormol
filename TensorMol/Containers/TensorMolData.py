@@ -1871,9 +1871,9 @@ class TensorMolData_BP_Direct_EandG_Channel(TensorMolData_BP_Direct_Linear):
 		natom = self.natom[self.ScratchPointer-ncases:self.ScratchPointer]
 		NL = NeighborListSet(xyzs, natom, True, True, Zs, sort_=True)
 		rad_p_ele, ang_t_elep, mil_j, mil_jk = NL.buildPairsAndTriplesWithEleIndexChannel(self.Rr_cut, self.Ra_cut, self.ele, self.elep)
-		print ("xyzs:\n",xyzs[0],'\n Zs:\n', Zs[0])
-		m = Mol(Zs[0][:natom[0]], xyzs[0][:natom[0]])
-		m.WriteXYZfile("./datasets/", "hyb_test_case")
+		#print ("xyzs:\n",xyzs[0],'\n Zs:\n', Zs[0])
+		#m = Mol(Zs[0][:natom[0]], xyzs[0][:natom[0]])
+		#m.WriteXYZfile("./datasets/", "hyb_test_case")
 		if (self.HasGrad):
 			return [xyzs, Zs, Elabels, self.grads[self.ScratchPointer-ncases:self.ScratchPointer], rad_p_ele, ang_t_elep, mil_j, mil_jk, 1.0/natom]
 		else:

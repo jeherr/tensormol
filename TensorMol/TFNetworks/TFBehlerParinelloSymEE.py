@@ -2384,6 +2384,16 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		self.eta = PARAMS["AN1_eta"]
 		self.HasANI1PARAMS = True
 
+	def Clean(self):
+		"""
+		Clean Instance for pickle saving.
+		"""
+		MolInstance_DirectBP_EandG_SymFunction.Clean(self)
+		self.Hyb = None
+		#for key in self.__dict__.keys():
+		#	print ("key", key, self.__dict__[key])
+		return
+
 	def TrainPrepare(self,  continue_training =False):
 		"""
 		Define Tensorflow graph for training.
@@ -2438,6 +2448,26 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 				self.summary_writer.add_run_metadata(self.run_metadata, "init", global_step=None)
 			self.sess.graph.finalize()
 
+	def training(self, loss, learning_rate, momentum):
+		"""Sets up the training Ops.
+		Creates a summarizer to track the loss over time in TensorBoard.
+		Creates an optimizer and applies the gradients to all trainable variables.
+		The Op returned by this function is what must be passed to the
+		`sess.run()` call to cause the model to train.
+		Args:
+		loss: Loss tensor, from loss().
+		learning_rate: The learning rate to use for gradient descent.
+		Returns:
+		train_op: The Op for training.
+		"""
+		tf.summary.scalar(loss.op.name, loss)
+		optimizer = tf.train.AdamOptimizer(learning_rate)
+		grads_and_vars = optimizer.compute_gradients(loss)
+		capped_grads_and_vars = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in grads_and_vars]
+		global_step = tf.Variable(0, name='global_step', trainable=False)
+		train_op = optimizer.apply_gradients(capped_grads_and_vars)
+		return train_op
+
 
 
 	def train_step(self, step):
@@ -2465,8 +2495,8 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			train_grads_loss += grads_loss
 			duration = time.time() - start_time
 			num_of_mols += actual_mols
-			print ("Hyb:", Hyb[0])
-			exit()
+			#print ("Hyb:", Hyb[0])
+			#exit()
 			#print ("Scatter_Sym:", np.any(np.isnan(Scatter_Sym[1])),np.any(np.isnan(Scatter_Sym[2])),np.any(np.isnan(Scatter_Sym[0])), energy_loss, grads_loss)
 		self.print_training(step, train_loss, train_energy_loss, train_grads_loss, num_of_mols, duration)
 		return
