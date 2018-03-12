@@ -156,7 +156,7 @@ class CapsuleNetwork(VariationalAutoencoder):
 			in_: the input to be reconstructed.
 			ts_: transformation input (extra_input)
 		"""
-		act_fcn = tf.nn.relu
+		act_fcn = tf.nn.softplus
 		probs = []
 		outs = []
 		touts = []
@@ -164,8 +164,8 @@ class CapsuleNetwork(VariationalAutoencoder):
 			R1 = tf.layers.dense(inputs=in_, units=(self.lmax+1)**2, activation=act_fcn, use_bias=True)
 			R2 = tf.layers.dense(inputs=R1, units=(self.lmax+1)**2, activation=act_fcn, use_bias=True)
 			R3 = tf.layers.dense(inputs=R2, units=(self.lmax+1)**2, activation=act_fcn, use_bias=True)
-			Prob = tf.layers.dense(inputs=R3, units=1, activation=tf.nn.relu, use_bias=True)
-			T1 = tf.layers.dense(inputs=R3, units=128, activation=act_fcn, use_bias=True)
+			Prob = tf.layers.dense(inputs=R3, units=1, activation=tf.nn.softplus, use_bias=True)
+			T1 = tf.layers.dense(inputs=R3, units=(self.lmax+1)**2, activation=act_fcn, use_bias=True)
 			T2 = tf.layers.dense(inputs=T1, units=self.t_dim, activation=None, use_bias=True)
 			Gin = T2 + ts_
 			G1 = tf.layers.dense(inputs=Gin, units=(self.lmax+1)**2, activation=act_fcn, use_bias=True)

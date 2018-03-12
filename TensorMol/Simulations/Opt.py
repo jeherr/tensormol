@@ -43,7 +43,7 @@ class GeomOptimizer:
 			energy = self.EnergyAndForce(x_,False)
 			return energy
 
-	def Opt(self,m_, filename="OptLog", Debug=False, FileOutput=True, eff_thresh = None, eff_max_step = None):
+	def Opt(self,m_, filename="OptLog", Debug=False, FileOutput=True, eff_thresh = None, eff_max_step = None, callback=None):
 		"""
 		Optimize using An EnergyAndForce Function with conjugate gradients.
 
@@ -73,9 +73,11 @@ class GeomOptimizer:
 			rmsgrad = np.sum(np.linalg.norm(frc,axis=1))/m.coords.shape[0]
 			rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/m.coords.shape[0]
 			LOGGER.info(filename+"step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
+			prev_m.properties["OptStep"] = step
+			prev_m.properties["energy"] = energy
 			mol_hist.append(prev_m)
-			prev_m.properties["Step"] = step
-			prev_m.properties["Energy"] = energy
+			if (callback != None):
+				callback(mol_hist)
 			if (FileOutput):
 				prev_m.WriteXYZfile("./results/", filename,'a',True)
 			step+=1
@@ -138,7 +140,8 @@ class GeomOptimizer:
 			step+=1
 		# Checks stability in each cartesian direction.
 		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
-		print("Final Energy:", self.EnergyAndForce(prev_m.coords,False))
+		prev_m.properties['energy']=self.EnergyAndForce(prev_m.coords,False)
+		print("Final Energy:",prev_m.properties['energy'])
 		return prev_m
 
 	def OptGD(self,m_, filename="GDOptLog",Debug=False, FileOutput = True, eff_thresh = None, eff_max_step = None):
@@ -184,6 +187,7 @@ class GeomOptimizer:
 			step+=1
 		# Checks stability in each cartesian direction.
 		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
+		prev_m.properties['energy']=energy
 		return prev_m
 
 class MetaOptimizer(GeomOptimizer):
@@ -443,7 +447,7 @@ class ScannedOptimization(GeomOptimizer):
 		else:
 			return PE
 
-	def Search(self,m_=None, filename="Scan", window = 0.2, interval = Pi/5.):
+	def Search(self,m_=None, filename="Scan", window = 0.2, interval = Pi/5., callback=None):
 		"""
 		Pin a torsion between -pi and pi. Perform dives every interval
 		Give up on this DOF if the energy goes more than window above minimum.
@@ -467,6 +471,8 @@ class ScannedOptimization(GeomOptimizer):
 		m = Mol(self.m.atoms,self.m.coords)
 		if (m_ != None):
 			m = Mol(m_.atoms,m_.coords)
+
+		mol_hist = [m]
 
 		m=self.Opt(m,"Pre_opt",FileOutput=False,eff_thresh=0.0005)
 		self.AppendIfNew(m)
@@ -502,7 +508,10 @@ class ScannedOptimization(GeomOptimizer):
 					cons_tor = q[i]
 					if (abs(cons_tor-last_dive) > interval):
 						curr_m = self.OptGD(curr_m,"Dive"+str(ndives), FileOutput=False, eff_thresh=0.001, eff_max_step=100)
-						self.AppendIfNew(curr_m)
+						if (self.AppendIfNew(curr_m)):
+							mol_hist.append(curr_m)
+							if (callback != None):
+								callback(mol_hist)
 						last_dive = cons_tor
 						ndives += 1
 						if (abs(last_dive-target_torsion)<interval):
@@ -511,7 +520,7 @@ class ScannedOptimization(GeomOptimizer):
 					LOGGER.info(filename+" step: %i energy: %0.5f const_t: %i const: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, i, cons_tor, rmsgrad, rmsdisp)
 					prev_m.WriteXYZfile("./results/", filename)
 					step+=1
-		return self.MinimaCoords
+		return mol_hist
 
 	def AppendIfNew(self,m):
 		overlaps = []
@@ -520,7 +529,7 @@ class ScannedOptimization(GeomOptimizer):
 			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
 			self.MinimaCoords[self.NMinima] = m.coords
 			self.NMinima += 1
-			return
+			return True
 		for i in range(self.NMinima):
 			mdm = MolEmb.Make_DistMat(self.MinimaCoords[i])
 			odm = MolEmb.Make_DistMat(m.coords)
@@ -531,9 +540,10 @@ class ScannedOptimization(GeomOptimizer):
 			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
 			self.MinimaCoords[self.NMinima] = m.coords.copy()
 			self.NMinima += 1
+			return True
 		else:
 			print("Overlaps", overlaps)
-		return
+			return False
 
 
 class TopologyMetaOpt(GeomOptimizer):

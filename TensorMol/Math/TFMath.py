@@ -19,8 +19,18 @@ def TFMatrixPower(mat_,exp_):
 	This is NOT differentiable as of 1.2.
 	tf.matrix_inverse and tf.matrix_determinant are though.
 	"""
-	s,u,v = tf.svd(mat_,full_matrices=True,compute_uv=True)
-	return tf.transpose(tf.matmul(u,tf.matmul(tf.diag(tf.pow(s,exp_)),tf.transpose(v))))
+	w,v = tf.self_adjoint_eig(mat_)
+	return tf.matmul(v,tf.matmul(tf.diag(tf.pow(tf.abs(w),exp_)),tf.transpose(v)))
+
+def TFBatchedMatrixPower(mat_,exp_):
+	"""
+	General Matrix Power in Tensorflow.
+	This is NOT differentiable as of 1.2.
+	tf.matrix_inverse and tf.matrix_determinant are though.
+	"""
+	w,v = tf.self_adjoint_eig(mat_)
+	wv = tf.einsum('ij,ijk->ijk',tf.pow(w,exp_),tf.transpose(v,perm=[0,2,1]))
+	return tf.matmul(v,wv)
 
 def TFMatrixSqrt(mat_):
 	"""
