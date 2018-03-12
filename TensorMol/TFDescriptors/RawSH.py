@@ -460,7 +460,7 @@ def tf_spherical_harmonics_8(dxyzs, inv_dist_tensor, invariant=False):
 def tf_spherical_harmonics(dxyzs, dist_tensor, max_l, invariant=False):
 	"""
 	Args:
-		dxyzs: (...) X MaxNAtom X 3
+		dxyzs: (...) X MaxNAtom X 3 (differenced from center of embedding. )
 		dist_tensor: just tf.norm of the above.
 		max_l : integer, maximum angular momentum.
 	Returns:
