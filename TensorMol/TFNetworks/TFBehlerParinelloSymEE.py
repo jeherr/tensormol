@@ -2465,7 +2465,9 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			train_grads_loss += grads_loss
 			duration = time.time() - start_time
 			num_of_mols += actual_mols
-			print ("Scatter_Sym:", np.any(np.isnan(Scatter_Sym[1])),np.any(np.isnan(Scatter_Sym[2])),np.any(np.isnan(Scatter_Sym[0])), energy_loss, grads_loss)
+			print ("Hyb:", Hyb[0])
+			exit()
+			#print ("Scatter_Sym:", np.any(np.isnan(Scatter_Sym[1])),np.any(np.isnan(Scatter_Sym[2])),np.any(np.isnan(Scatter_Sym[0])), energy_loss, grads_loss)
 		self.print_training(step, train_loss, train_energy_loss, train_grads_loss, num_of_mols, duration)
 		return
 
@@ -2495,17 +2497,17 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 				for i in range(len(self.HiddenLayers)):
 					if i == 0:
 						with tf.name_scope(str(self.eles[e])+'_hidden1'):
-							weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.inshape, self.HiddenLayers[i]], var_stddev=1.0/(1000+math.sqrt(float(self.inshape))), var_wd=0.001)
+							weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.inshape, self.HiddenLayers[i]], var_stddev=1.0/(500+math.sqrt(float(self.inshape))), var_wd=0.001)
 							biases = tf.Variable(tf.zeros([self.HiddenLayers[i]], dtype=self.tf_prec), name='biaseslayer'+str(i))
 							Ebranches[-1].append(self.activation_function(tf.matmul(tf.nn.dropout(inputs, keep_prob[i]), weights) + biases))
 					else:
 						with tf.name_scope(str(self.eles[e])+'_hidden'+str(i+1)):
-							weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.HiddenLayers[i-1], self.HiddenLayers[i]], var_stddev=1.0/(1000+math.sqrt(float(self.HiddenLayers[i-1]))), var_wd=0.001)
+							weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.HiddenLayers[i-1], self.HiddenLayers[i]], var_stddev=1.0/(500+math.sqrt(float(self.HiddenLayers[i-1]))), var_wd=0.001)
 							biases = tf.Variable(tf.zeros([self.HiddenLayers[i]], dtype=self.tf_prec), name='biaseslayer'+str(i))
 							Ebranches[-1].append(self.activation_function(tf.matmul(tf.nn.dropout(Ebranches[-1][-1], keep_prob[i]), weights) + biases))
 				with tf.name_scope(str(self.eles[e])+'_regression_linear'):
 					shp = tf.shape(inputs)
-					weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.HiddenLayers[-1], 1], var_stddev=1.0/(1000+math.sqrt(float(self.HiddenLayers[-1]))), var_wd=None)
+					weights = self._variable_with_weight_decay(var_name='weights', var_shape=[self.HiddenLayers[-1], 1], var_stddev=1.0/(500+math.sqrt(float(self.HiddenLayers[-1]))), var_wd=None)
 					biases = tf.Variable(tf.zeros([1], dtype=self.tf_prec), name='biases')
 					Ebranches[-1].append(tf.matmul(tf.nn.dropout(Ebranches[-1][-1], keep_prob[-1]), weights) + biases)
 					shp_out = tf.shape(Ebranches[-1][-1])

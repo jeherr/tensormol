@@ -1237,12 +1237,12 @@ def TFSymASet_Linear_WithEle_Channel3(R, Zs, eleps_, SFPs_, zeta, eta, R_cut, An
 
 	mj_inds = tf.concat([AngtriEle[:,0], AngtriEle[:,2]],axis=-1)
 	mk_inds = tf.concat([AngtriEle[:,0], AngtriEle[:,3]],axis=-1)
-	hyb_channel_j  = tf.reshape(tf.gather_nd(Hyb, tf.reshape(mj_inds,[nnzt,2])),[nnzt,-1])
-	hyb_channel_k  = tf.reshape(tf.gather_nd(Hyb, tf.reshape(mk_inds,[nnzt,2])),[nnzt,-1])
+	hyb_channel_j  = tf.reshape(tf.gather_nd(Hyb, tf.reshape(mj_inds,[nnzt,2])),[nnzt,-1])+infinitesimal
+	hyb_channel_k  = tf.reshape(tf.gather_nd(Hyb, tf.reshape(mk_inds,[nnzt,2])),[nnzt,-1])+infinitesimal
 	hyb_channel  = hyb_channel_j*hyb_channel_k/(hyb_channel_j+hyb_channel_k)
-	hyb_channel_clean = tf.where(tf.is_nan(hyb_channel), tf.zeros_like(hyb_channel, dtype=prec), hyb_channel)	
+	#hyb_channel_clean = tf.where(tf.is_nan(hyb_channel), tf.zeros_like(hyb_channel, dtype=prec), hyb_channel)	
 	
-	tomul_with_hyb = tf.concat([tomult, hyb_channel_clean],axis=-1)
+	tomul_with_hyb = tf.concat([tomult, hyb_channel],axis=-1)
 	Gm2_mult = tf.reshape(tf.expand_dims(tomul_with_hyb, 1)*tf.expand_dims(Gm2, 2), [nnzt, -1])
 
 	mi_jk2 =  tf.concat([mil_jk2[:,:2],tf.reshape(mil_jk2[:,3],[-1,1])], axis=-1)
@@ -2358,13 +2358,13 @@ def TFSymSet_Hybrization(R, Zs, eles_, eleps_,  R_cut, RadpairEle, mil_j, Angtri
 	weightab_sum = tf.reduce_sum(scatter_weightab, axis=2)
 	scatter_angle_w= scatter_angle*scatter_weightab
 	scatter_angle_wsum = tf.reduce_sum(scatter_angle_w, axis=2)
-	avg_angle = scatter_angle_wsum/weightab_sum
+	avg_angle = scatter_angle_wsum/(weightab_sum+infinitesimal)
 
 	tmp = tf.expand_dims(avg_angle,2) - scatter_angle
-	std = tf.reduce_sum(tmp*tmp*scatter_weightab, axis=2)/weightab_sum
+	std = tf.reduce_sum(tmp*tmp*scatter_weightab, axis=2)/(weightab_sum+infinitesimal)
 	output = tf.stack([coord, avg_angle, std], axis=2)
-	output_clean = tf.where(tf.is_nan(output), tf.zeros_like(output, dtype=prec), output)
-	return output_clean
+	#output_clean = tf.where(tf.is_nan(output), tf.zeros_like(output, dtype=prec), output)
+	return output
 
 def TFSymRSet_Linear_WithElePeriodic(R, Zs, eles_, SFPs_, eta, R_cut, RadpairEle, mil_j, nreal, prec=tf.float64):
 	"""
