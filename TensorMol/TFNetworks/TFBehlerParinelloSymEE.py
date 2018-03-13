@@ -2337,8 +2337,12 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			self.channel_pairs = np.asarray(self.channel_pairs).reshape((-1, self.channels.shape[1]))
 
 		#print ("self.channels:", self.channels, "\n  self.channel_pairs:", self.channel_pairs)
-		self.nhyb_channel = 3
-		self.inshape = self.inshape*(self.channels.shape[1]+self.nhyb_channel)
+		self.with_hyb = PARAMS["HybChannel"]
+		if self.with_hyb:
+			self.nhyb_channel = 3
+			self.inshape = self.inshape*(self.channels.shape[1]+self.nhyb_channel)
+		else:
+			self.inshape = self.inshape*(self.channels.shape[1])
 		print ("self.channel_pairs:", self.channel_pairs.shape)
 		print ("self.inshape:", self.inshape)
 
@@ -2426,7 +2430,10 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_prec)
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_prec)
 			#self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
-			self.Scatter_Sym, self.Sym_Index, self.Hyb  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
+			if self.with_hyb:			
+				self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_ChannelHyb(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
+			else:
+				self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
 			#self.Hybrization = TFSymSet_Hybrization(self.xyzs_pl, self.Zs_pl, Ele, Elep,  2.2, self.Radp_Ele_pl, self.mil_j_pl, self.Angt_Elep_pl, self.mil_jk_pl)
 			self.Etotal, self.Ebp, self.Ebp_atom = self.energy_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.keep_prob_pl)
 			self.gradient  = tf.gradients(self.Etotal, self.xyzs_pl, name="BPEGrad")
@@ -2489,7 +2496,7 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			batch_data = self.TData.GetTrainBatch(self.batch_size) + [self.keep_prob]
 			actual_mols  = self.batch_size
 			t = time.time()
-			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal, Scatter_Sym, Hyb = self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal, self.Scatter_Sym, self.Hyb], feed_dict=self.fill_feed_dict(batch_data))
+			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal, Scatter_Sym = self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal, self.Scatter_Sym], feed_dict=self.fill_feed_dict(batch_data))
 			train_loss = train_loss + loss_value
 			train_energy_loss += energy_loss
 			train_grads_loss += grads_loss
