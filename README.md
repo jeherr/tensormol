@@ -22,6 +22,7 @@
 
 ## Simulation Types:
  - Optimizations
+ - Conformation Search. 
  - Molecular Dynamics (NVE,NVT Nose-Hoover)
  - Monte Carlo
  - Open/Periodic Boundary Conditions

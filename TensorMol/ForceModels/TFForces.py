@@ -203,7 +203,7 @@ class BumpHolder(ForceHolder):
 class TopologyBumper(ForceHolder):
 	def __init__(self,m_,maxbump_=500):
 		"""
-		Basin-Filling for bond distances, angles, and torsions
+		Constraint and Basin-Filling for bond distances, angles, and torsions
 		The idea is to hold bonds together, while perturbing angles and torsions.
 		So actually a constraint potential is added to bond lengths,
 		while the others get perturbations.
@@ -234,43 +234,85 @@ class TopologyBumper(ForceHolder):
 			self.t_pl=tf.placeholder(tf.int32, shape=tuple([self.NTrip,3]))
 			self.q_pl=tf.placeholder(tf.int32, shape=tuple([self.NQuad,4]))
 
+			self.dw_pl=tf.placeholder(tf.float64) # Weights
+			self.tw_pl=tf.placeholder(tf.float64)
+			self.qw_pl=tf.placeholder(tf.float64)
+
 			self.nb_pl=tf.placeholder(tf.int32)
 
 			self.grad_out = tf.Variable(np.zeros([self.natom,3]),dtype=tf.float64)
 			self.zero_grad = tf.assign(self.grad_out,tf.zeros_like(self.grad_out))
 
+			self.grad_outC = tf.Variable(np.zeros([self.natom,3]),dtype=tf.float64)
+			self.zero_gradC = tf.assign(self.grad_outC,tf.zeros_like(self.grad_out))
+
 			self.Bonds = tf.norm(tf.gather(self.x_pl,self.d_pl[...,0],axis=0)-tf.gather(self.x_pl,self.d_pl[...,1],axis=0),axis=-1)
 			self.Bends = TFBend(self.x_pl,self.t_pl)
 			self.Torsions = TFTorsion(self.x_pl,self.q_pl)
 
-			self.bd_BE = 1.0*BondBump(self.x_pl, self.db_pl, self.d_pl, 0) # Bonds are constrained to orig values!!
-			self.bnd_BE = -1.0*BendBump(self.x_pl, self.tb_pl, self.t_pl, self.nb_pl)
-			self.t_BE = -1.0*TorsionBump(self.x_pl, self.qb_pl, self.q_pl, self.nb_pl)
-
+			self.bd_BE = self.dw_pl*BondBump(self.x_pl, self.db_pl, self.d_pl, 0) # Bonds are constrained to orig values!!
+			self.bnd_BE = self.tw_pl*BendBump(self.x_pl, self.tb_pl, self.t_pl, self.nb_pl)
+			self.t_BE = self.qw_pl*TorsionBump(self.x_pl, self.qb_pl, self.q_pl, self.nb_pl)
 			self.BE = self.bd_BE + self.bnd_BE + self.t_BE
-
 			self.SparseGrad = tf.gradients(self.BE,self.x_pl)[0]
+
+			self.bd_CE = self.dw_pl*BondHarm(self.x_pl, self.db_pl, self.d_pl) # Bonds are constrained to orig values!!
+			self.bnd_CE = self.tw_pl*BendHarm(self.x_pl, self.tb_pl, self.t_pl)
+			self.t_CE = self.qw_pl*TorsionHarm(self.x_pl, self.qb_pl, self.q_pl)
+			self.CE = self.bd_CE + self.bnd_CE + self.t_CE
+			self.SparseConstraintGrad = tf.gradients(self.CE,self.x_pl)[0]
+
 			with tf.control_dependencies([self.zero_grad]):
 				# The above will be IndexedSlices and can be converted out as follows:
 				self.BF = tf.clip_by_value(-1.0*tf.scatter_add(self.grad_out,self.SparseGrad.indices,self.SparseGrad.values),-2.0,2.0)
+
+			with tf.control_dependencies([self.zero_gradC]):
+				self.CF = tf.clip_by_value(-1.0*tf.scatter_add(self.grad_outC,self.SparseConstraintGrad.indices,self.SparseConstraintGrad.values),-2.0,2.0)
 
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			#self.summary_writer = tf.summary.FileWriter(self.train_dir, self.sess.graph)
 			init = tf.global_variables_initializer()
 			self.sess.run(init)
 		return
-	def AddBump(self,x_):
+	def PreConstraint(self,x_):
+		"""
+		Populates Topology Matrices to Enforce a constraint if desired.
+		"""
+		self.nbump=0
 		self.dbumps[self.nbump%self.maxbump],self.tbumps[self.nbump%self.maxbump],self.qbumps[self.nbump%self.maxbump] = self.sess.run([self.Bonds,self.Bends,self.Torsions],feed_dict={self.x_pl:x_,self.d_pl:self.dubs,self.t_pl:self.trips,self.q_pl:self.quads})
 		self.nbump += 1
 		return
-	def Bump(self,x_):
+	def Constraint(self,x_,dw=0.0,tw=0.0,qw=0.001):
+		"""
+		Tries to keep things together while harmonically forcing a torsion
+		To adopt a certain value. Assumes that self.dbumps etc.
+		are filled with the desired quantities by PreConstraint
+		"""
+		feed_dict={self.x_pl:x_,self.x_pl:x_,self.d_pl:self.dubs,self.t_pl:self.trips,self.q_pl:self.quads,self.nb_pl:self.nbump,
+					self.db_pl:self.dbumps,self.tb_pl:self.tbumps,self.qb_pl:self.qbumps,
+					self.dw_pl:dw,self.tw_pl:tw,self.qw_pl:qw}
+		CE,CF = self.sess.run([self.CE,self.CF],feed_dict=feed_dict)
+		return CE,CF
+	def CalcTop(self,x_):
+		return self.sess.run([self.Bonds,self.Bends,self.Torsions],feed_dict={self.x_pl:x_,self.d_pl:self.dubs,self.t_pl:self.trips,self.q_pl:self.quads})
+	def AddBump(self,x_):
+		self.dbumps[self.nbump%self.maxbump],self.tbumps[self.nbump%self.maxbump],self.qbumps[self.nbump%self.maxbump] = self.CalcTop(x_)
+		self.nbump += 1
+		return
+	def Bump(self,x_,dw=1.0,tw=-1.0,qw=-1.0):
 		"""
 		Returns the Bump energy, force.
+		Bonds are constrained at initial lengths, angles and torsions are
+		repulsively bumped.
+
+		Args:
+			dw: weight of bond bump 1.0 = attractive. -1.0 = repulsive.
 		"""
 		if (self.nbump < 1):
 			return 0.0, np.zeros(x_.shape)
 		feed_dict={self.x_pl:x_,self.x_pl:x_,self.d_pl:self.dubs,self.t_pl:self.trips,self.q_pl:self.quads,self.nb_pl:self.nbump,
-					self.db_pl:self.dbumps,self.tb_pl:self.tbumps,self.qb_pl:self.qbumps}
+					self.db_pl:self.dbumps,self.tb_pl:self.tbumps,self.qb_pl:self.qbumps,
+					self.dw_pl:dw,self.tw_pl:tw,self.qw_pl:qw}
 		BE,BF = self.sess.run([self.BE,self.BF],feed_dict=feed_dict)
 		return BE,BF
 

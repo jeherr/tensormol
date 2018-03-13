@@ -19,8 +19,18 @@ def TFMatrixPower(mat_,exp_):
 	This is NOT differentiable as of 1.2.
 	tf.matrix_inverse and tf.matrix_determinant are though.
 	"""
-	s,u,v = tf.svd(mat_,full_matrices=True,compute_uv=True)
-	return tf.transpose(tf.matmul(u,tf.matmul(tf.diag(tf.pow(s,exp_)),tf.transpose(v))))
+	w,v = tf.self_adjoint_eig(mat_)
+	return tf.matmul(v,tf.matmul(tf.diag(tf.pow(tf.abs(w),exp_)),tf.transpose(v)))
+
+def TFBatchedMatrixPower(mat_,exp_):
+	"""
+	General Matrix Power in Tensorflow.
+	This is NOT differentiable as of 1.2.
+	tf.matrix_inverse and tf.matrix_determinant are though.
+	"""
+	w,v = tf.self_adjoint_eig(mat_)
+	wv = tf.einsum('ij,ijk->ijk',tf.pow(w,exp_),tf.transpose(v,perm=[0,2,1]))
+	return tf.matmul(v,wv)
 
 def TFMatrixSqrt(mat_):
 	"""
@@ -131,7 +141,7 @@ def TFTorsion(xyz,quartets):
 	    xyz: Natom X 3 molecule
 	    quartets: Nquartet X 4
 	Returns:
-	    nquartet X 1 torsional tensor.
+	    nquartet X 1 torsional tensor, angles between -pi,pi
 	"""
 	b1 = tf.gather(xyz,quartets[...,0],axis=0)-tf.gather(xyz,quartets[...,1],axis=0)
 	b2 = tf.gather(xyz,quartets[...,1],axis=0)-tf.gather(xyz,quartets[...,2],axis=0)
@@ -287,3 +297,31 @@ def TF_RandomRotationBatch(sz_,max_dist=1.0):
 	axes[:,2]*axes[:,1]*omct + axes[:,0]*st,
 	ct + axes[:,2]*axes[:,2]*omct],axis = -1),sz_+[3,3])
 	return matrices, tf.stack([thetas,phis,psis],axis=-1)
+
+def TF_RotationBatch(thetas,phis,psis):
+	"""
+	Returns a batch of uniform rotation matrices,
+	and the angles of each. Finds random unit vector
+	and then random angle around it.
+
+	Args:
+		sz_: number of rotation matrices
+		max_dist: maximum rotation in units of 2*Pi
+	"""
+	Pi = 3.14159265359
+	sz_ = tf.shape(thetas)
+	axes = tf.zeros(shape=sz_+[3])
+	axes = tf.stack([tf.sin(thetas)*tf.cos(phis), tf.sin(thetas)*tf.sin(phis), tf.cos(thetas)],axis=-1)
+	ct = tf.cos(psis)
+	st = tf.sin(psis)
+	omct = 1.0-ct
+	matrices = tf.reshape(tf.stack([ct+axes[:,0]*axes[:,0]*omct,
+	axes[:,0]*axes[:,1]*omct - axes[:,2]*st,
+	axes[:,0]*axes[:,2]*omct + axes[:,1]*st,
+	axes[:,1]*axes[:,0]*omct + axes[:,2]*st,
+	ct+axes[:,1]*axes[:,1]*omct,
+	axes[:,1]*axes[:,2]*omct - axes[:,0]*st,
+	axes[:,2]*axes[:,0]*omct - axes[:,1]*st,
+	axes[:,2]*axes[:,1]*omct + axes[:,0]*st,
+	ct + axes[:,2]*axes[:,2]*omct],axis = -1),[sz_[0],3,3])
+	return matrices

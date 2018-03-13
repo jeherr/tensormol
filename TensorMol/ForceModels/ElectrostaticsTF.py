@@ -16,8 +16,26 @@ from TensorMol.Util import *
 if (HAS_TF):
 	import tensorflow as tf
 
+def BondHarm(x,bs,dubs):
+	"""
+	Attractive Harmonic Constraint.
+
+	Args:
+		x: (natom X 3) tensor representing the point at which the energy is sampled.
+		bs: a nbump X NBond tensor of bump centers.
+		dubs: NQuad X 2 array of bonds.
+		nbump: an integer determining the number of nonzero bumps.
+	"""
+	b1 = tf.gather(x,dubs[...,0],axis=0)-tf.gather(x,dubs[...,1],axis=0)
+	Dx = tf.norm(b1,axis=-1)
+	rij = (bs[:1,...] - Dx[tf.newaxis,...])
+	# Non-Decaying. Constrain bonds.
+	return tf.reduce_sum(tf.abs(rij*rij))
+
 def BondBump(x,bs,dubs,nbump):
 	"""
+	Attractive Gaussian Bump.
+
 	Args:
 		x: (natom X 3) tensor representing the point at which the energy is sampled.
 		bs: a nbump X NBond tensor of bump centers.
@@ -29,13 +47,28 @@ def BondBump(x,bs,dubs,nbump):
 	w2 = 1.0*1.0
 	rij = (bs[:nbump,...] - Dx[tf.newaxis,...])
 	# Non-Decaying. Constrain bonds.
-	return tf.reduce_sum(2.0*rij*rij)
-	#ToExp = tf.reduce_sum(rij*rij,axis=-1)
-	#ToSum = -2.0*tf.exp(-0.5*ToExp/w2)
-	#return tf.reduce_sum(ToSum)
+	ToExp = tf.reduce_sum(rij*rij,axis=-1)
+	ToSum = -2.0*tf.exp(-0.5*ToExp/w2)
+	return tf.reduce_sum(ToSum)
+
+def BendHarm(x,bs,trips):
+	"""
+	Harmonic Angle Constraint.
+
+	Args:
+		x: (natom X 3) tensor representing the point at which the energy is sampled.
+		bs: a nbump X NQuad tensor of bump centers.
+		quads: NQuad X 4 array of quadruples.
+		nbump: an integer determining the number of nonzero bumps.
+	"""
+	Dx = TFBend(x,trips)
+	rij = (bs[:1,...] - Dx[tf.newaxis,...])
+	return tf.reduce_sum(tf.abs(rij*rij))
 
 def BendBump(x,bs,trips,nbump):
 	"""
+	Attractive Gaussian angle bump
+
 	Args:
 		x: (natom X 3) tensor representing the point at which the energy is sampled.
 		bs: a nbump X NQuad tensor of bump centers.
@@ -49,8 +82,18 @@ def BendBump(x,bs,trips,nbump):
 	ToSum = -0.01*tf.exp(-0.5*ToExp/w2)
 	return tf.reduce_sum(ToSum)
 
+def TorsionHarm(x,bs,quads):
+	"""
+	Harmonically constraint for torsions.
+	"""
+	Dx = TFTorsion(x,quads)
+	rij = (bs[:1,...] - Dx[tf.newaxis,...])
+	return tf.reduce_sum(tf.abs(rij*rij))
+
 def TorsionBump(x,bs,quads,nbump):
 	"""
+	Attractive Gaussian Torsion Bump
+
 	Args:
 		x: (natom X 3) tensor representing the point at which the energy is sampled.
 		bs: a nbump X NQuad tensor of bump centers.
@@ -58,10 +101,10 @@ def TorsionBump(x,bs,quads,nbump):
 		nbump: an integer determining the number of nonzero bumps.
 	"""
 	Dx = TFTorsion(x,quads)
-	w2 = 2.0*2.0
+	w2 = 0.3*0.3
 	rij = (bs[:nbump,...] - Dx[tf.newaxis,...])
 	ToExp = tf.reduce_sum(rij*rij,axis=-1)
-	ToSum = -0.1*tf.exp(-0.5*ToExp/w2)
+	ToSum = -0.5*tf.exp(-0.5*ToExp/w2)
 	return tf.reduce_sum(ToSum)
 
 def BumpEnergy(h,w,xyz,x,nbump):
