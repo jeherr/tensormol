@@ -326,7 +326,7 @@ def TF_RotationBatch(thetas,phis,psis):
 	ct + axes[:,2]*axes[:,2]*omct],axis = -1),[sz_[0],3,3])
 	return matrices
 
-def Canonicalize(dxyzs):
+def Canonicalize(dxyzs,ChiralInv=True):
 	"""
 	Perform a PCA to create invariant axes.
 	These axes are invariant to both rotation and reflection.
@@ -339,10 +339,12 @@ def Canonicalize(dxyzs):
 	Returns:
 	    Cdxyz: canonically oriented versions of the above coordinates.
 	"""
-	ap = dxyzs - tf.reduce_mean(dxyz,axis=-2,keepdims=True)
+	ap = dxyzs - tf.reduce_mean(dxyzs,axis=-2,keepdims=True)
 	C = tf.einsum('lmji,lmjk->lmik',ap,ap) # Covariance matrix.
 	w,v = tf.self_adjoint_eig(C)
 	tore = tf.matmul(dxyzs,v)
+	if (not ChiralInv):
+		return tore
 	signc = tf.sign(tf.reduce_mean(tore,axis=-2,keepdims=True))
 	# output axes only match up to a sign due to phase freedom of eigenvalues.
 	# Make a convention that mean axis is positive.
