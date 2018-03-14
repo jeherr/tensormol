@@ -339,7 +339,8 @@ def Canonicalize(dxyzs,ChiralInv=True):
 	Returns:
 	    Cdxyz: canonically oriented versions of the above coordinates.
 	"""
-	ap = dxyzs - tf.reduce_mean(dxyzs,axis=-2,keepdims=True)
+	decd = tf.reciprocal(dxyzs+1.0) 
+	ap = decd - tf.reduce_mean(decd,axis=-2,keepdims=True)
 	C = tf.einsum('lmji,lmjk->lmik',ap,ap) # Covariance matrix.
 	w,v = tf.self_adjoint_eig(C)
 	tore = tf.matmul(dxyzs,v)
