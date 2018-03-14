@@ -1365,7 +1365,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 
 		sess = tf.Session()
 		sess.run(tf.global_variables_initializer())
-		for ministep in range(int(0.1 * self.num_train_cases/self.batch_size)):
+		for ministep in range(int(self.num_train_cases/self.batch_size)):
 			batch_data = self.get_energy_train_batch(self.batch_size)
 			if self.train_sparse:
 				embedding = sess.run(embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1], pairs_pl:batch_data[5]})
@@ -1373,8 +1373,8 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				embedding = sess.run(embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
 			for element in range(len(self.elements)):
 				if ministep == 0:
-					self.embed_stddev.append(np.var(embedding[element], axis=0))
-					self.embed_mean.append(np.mean(embedding[element], axis=0))
+					self.embed_stddev.append(np.var(embedding[element]))
+					self.embed_mean.append(np.mean(embedding[element]))
 				else:
 					self.embed_stddev[element] = (((self.embed_stddev[element] * num_cases[element]
 												+ np.var(embedding[element], axis=0) * embedding[element].shape[0])
@@ -1393,8 +1393,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 		self.energy_stddev = np.std(self.energy_data)
 		self.train_pointer = 0
 
-		#Set the embedding and label shape
-		self.embed_shape = embedding[0].shape[1]
+		self.embed_shape = self.elements.shape[0] * self.gaussian_params.shape[0] * (self.l_max + 1) ** 2
 		self.label_shape = self.energy_mean.shape
 		return
 
