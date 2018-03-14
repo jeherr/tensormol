@@ -2337,8 +2337,12 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			self.channel_pairs = np.asarray(self.channel_pairs).reshape((-1, self.channels.shape[1]))
 
 		#print ("self.channels:", self.channels, "\n  self.channel_pairs:", self.channel_pairs)
-		self.nhyb_channel = 3
-		self.inshape = self.inshape*(self.channels.shape[1]+self.nhyb_channel)
+		self.with_hyb = PARAMS["HybChannel"]
+		if self.with_hyb:
+			self.nhyb_channel = 3
+			self.inshape = self.inshape*(self.channels.shape[1]+self.nhyb_channel)
+		else:
+			self.inshape = self.inshape*(self.channels.shape[1])
 		print ("self.channel_pairs:", self.channel_pairs.shape)
 		print ("self.inshape:", self.inshape)
 
@@ -2384,6 +2388,16 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		self.eta = PARAMS["AN1_eta"]
 		self.HasANI1PARAMS = True
 
+	def Clean(self):
+		"""
+		Clean Instance for pickle saving.
+		"""
+		MolInstance_DirectBP_EandG_SymFunction.Clean(self)
+		self.Hyb = None
+		#for key in self.__dict__.keys():
+		#	print ("key", key, self.__dict__[key])
+		return
+
 	def TrainPrepare(self,  continue_training =False):
 		"""
 		Define Tensorflow graph for training.
@@ -2416,7 +2430,10 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_prec)
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_prec)
 			#self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
-			self.Scatter_Sym, self.Sym_Index, self.Hyb  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
+			if self.with_hyb:			
+				self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_ChannelHyb(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
+			else:
+				self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
 			#self.Hybrization = TFSymSet_Hybrization(self.xyzs_pl, self.Zs_pl, Ele, Elep,  2.2, self.Radp_Ele_pl, self.mil_j_pl, self.Angt_Elep_pl, self.mil_jk_pl)
 			self.Etotal, self.Ebp, self.Ebp_atom = self.energy_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.keep_prob_pl)
 			self.gradient  = tf.gradients(self.Etotal, self.xyzs_pl, name="BPEGrad")
@@ -2437,6 +2454,26 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 				self.run_metadata = tf.RunMetadata()
 				self.summary_writer.add_run_metadata(self.run_metadata, "init", global_step=None)
 			self.sess.graph.finalize()
+
+	def training(self, loss, learning_rate, momentum):
+		"""Sets up the training Ops.
+		Creates a summarizer to track the loss over time in TensorBoard.
+		Creates an optimizer and applies the gradients to all trainable variables.
+		The Op returned by this function is what must be passed to the
+		`sess.run()` call to cause the model to train.
+		Args:
+		loss: Loss tensor, from loss().
+		learning_rate: The learning rate to use for gradient descent.
+		Returns:
+		train_op: The Op for training.
+		"""
+		tf.summary.scalar(loss.op.name, loss)
+		optimizer = tf.train.AdamOptimizer(learning_rate)
+		grads_and_vars = optimizer.compute_gradients(loss)
+		capped_grads_and_vars = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in grads_and_vars]
+		global_step = tf.Variable(0, name='global_step', trainable=False)
+		train_op = optimizer.apply_gradients(capped_grads_and_vars)
+		return train_op
 
 
 
@@ -2459,14 +2496,14 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			batch_data = self.TData.GetTrainBatch(self.batch_size) + [self.keep_prob]
 			actual_mols  = self.batch_size
 			t = time.time()
-			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal, Scatter_Sym, Hyb = self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal, self.Scatter_Sym, self.Hyb], feed_dict=self.fill_feed_dict(batch_data))
+			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal, Scatter_Sym = self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal, self.Scatter_Sym], feed_dict=self.fill_feed_dict(batch_data))
 			train_loss = train_loss + loss_value
 			train_energy_loss += energy_loss
 			train_grads_loss += grads_loss
 			duration = time.time() - start_time
 			num_of_mols += actual_mols
-			print ("Hyb:", Hyb[0])
-			exit()
+			#print ("Hyb:", Hyb[0])
+			#exit()
 			#print ("Scatter_Sym:", np.any(np.isnan(Scatter_Sym[1])),np.any(np.isnan(Scatter_Sym[2])),np.any(np.isnan(Scatter_Sym[0])), energy_loss, grads_loss)
 		self.print_training(step, train_loss, train_energy_loss, train_grads_loss, num_of_mols, duration)
 		return
