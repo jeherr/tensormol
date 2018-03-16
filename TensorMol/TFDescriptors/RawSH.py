@@ -460,11 +460,13 @@ def tf_spherical_harmonics_8(dxyzs, inv_dist_tensor, invariant=False):
 def tf_spherical_harmonics(dxyzs, dist_tensor, max_l, invariant=False):
 	"""
 	Args:
-		dxyzs: (...) X MaxNAtom X 3 (differenced from center of embedding. )
+		dxyzs: (...) X MaxNAtom X MaxNAtom X 3 (differenced from center of embedding
+				ie: ... X i X i = (0.,0.,0.))
 		dist_tensor: just tf.norm of the above.
 		max_l : integer, maximum angular momentum.
+		invariant: whether to return just total angular momentum of a given l.
 	Returns:
-		(...) X MaxNAtom X NSH = (max_l+1)^2
+		(...) X MaxNAtom X MaxNAtom X {NSH = (max_l+1)^2}
 	"""
 	inv_dist_tensor = tf.where(tf.greater(dist_tensor, 1.e-9), tf.reciprocal(dist_tensor), tf.zeros_like(dist_tensor))
 	if max_l == 8:
@@ -683,7 +685,18 @@ def tf_gaush_element_channelv2(xyzs, Zs, elements, gauss_params, l_max, invarian
 	num_mols = Zs.get_shape().as_list()[0]
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 
-	dist_tensor = tf.norm(xyzs+1.e-16,axis=-1)
+	centered_xyzs = tf.expand_dims(tf.gather_nd(xyzs, padding_mask), axis=1) - tf.gather(xyzs, padding_mask[:,0])
+	dist_tensor = tf.norm(centered_xyzs+1.e-16,axis=-1)
+	min_Zs = tf.gather(Zs, padding_mask[:,0])
+	min_dist_tensor = tf.where(tf.equal(min_Zs, 0), 20.0 * tf.ones_like(dist_tensor), dist_tensor)
+	_, min_idx = tf.nn.top_k(-min_dist_tensor, k=4)
+	min_z_idx = tf.stack([tf.cast(padding_mask[:,0], tf.int32), min_idx[:,1]], axis=-1)
+	min_x_idx = tf.stack([tf.cast(padding_mask[:,0], tf.int32), min_idx[:,2]], axis=-1)
+	min_y_idx = tf.stack([tf.cast(padding_mask[:,0], tf.int32), min_idx[:,3]], axis=-1)
+	z_midpoint = 0.5 * (tf.constant([0., 0., 1.], dtype=tf.float32)
+				+ tf.gather_nd(xyzs, min_z_idx) / tf.norm(tf.gather_nd(xyzs, min_z_idx), axis=-1, keep_dims=True))
+	z_orient_xyzs = tf_rotate(centered_xyzs, z_midpoint, np.pi * tf.ones([tf.shape(z_midpoint)[0]], dtype=tf.float32))
+	return z_orient_xyzs
 	gauss = tf_gauss(dist_tensor, gauss_params)
 	harmonics = tf_spherical_harmonics(xyzs, dist_tensor, l_max, invariant)
 	channel_scatter = tf.gather(tf.equal(tf.expand_dims(Zs, axis=-1), elements), padding_mask[:,0])
@@ -766,7 +779,7 @@ def tf_random_rotate(xyzs, rot_params, labels = None, return_matrix = False):
 	else:
 		return new_xyzs
 
-def tf_random_rotatev2(xyzs, axis, angle, labels = None, return_matrix = False):
+def tf_rotate(xyzs, axis, angle):
 	"""
 	Rotates molecules and optionally labels in a uniformly random fashion
 
@@ -780,7 +793,7 @@ def tf_random_rotatev2(xyzs, axis, angle, labels = None, return_matrix = False):
 		new_labels (tf.float): NMol x MaxNAtoms x label shape tensor of randomly rotated learning targets
 	"""
 	axis = tf.tile(tf.expand_dims(axis / tf.norm(axis, axis=-1, keep_dims=True), axis=-2), [1, tf.shape(xyzs)[1], 1])
-	angle = tf.expand_dims(angle * np.pi, axis=-2)
+	angle = tf.reshape(angle, [tf.shape(angle)[0], 1, 1])
 	term1 = xyzs * tf.cos(angle)
 	term2 = tf.cross(axis, xyzs) * tf.sin(angle)
 	term3 = axis * (1 - tf.cos(angle)) * tf.reduce_sum(axis * xyzs, axis=-1, keep_dims=True)

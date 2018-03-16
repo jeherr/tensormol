@@ -325,3 +325,28 @@ def TF_RotationBatch(thetas,phis,psis):
 	axes[:,2]*axes[:,1]*omct + axes[:,0]*st,
 	ct + axes[:,2]*axes[:,2]*omct],axis = -1),[sz_[0],3,3])
 	return matrices
+
+def Canonicalize(dxyzs,ChiralInv=True):
+	"""
+	Perform a PCA to create invariant axes.
+	These axes are invariant to both rotation and reflection.
+	MaxNAtom must be >= 4 otherwise this won't work.
+	I have tested the rotational invariance and differentiability of this routine
+
+	Args:
+	    dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
+				ie: ... X i X i = (0.,0.,0.))
+	Returns:
+	    Cdxyz: canonically oriented versions of the above coordinates.
+	"""
+	decd = tf.reciprocal(dxyzs+1.0) 
+	ap = decd - tf.reduce_mean(decd,axis=-2,keepdims=True)
+	C = tf.einsum('lmji,lmjk->lmik',ap,ap) # Covariance matrix.
+	w,v = tf.self_adjoint_eig(C)
+	tore = tf.matmul(dxyzs,v)
+	if (not ChiralInv):
+		return tore
+	signc = tf.sign(tf.reduce_mean(tore,axis=-2,keepdims=True))
+	# output axes only match up to a sign due to phase freedom of eigenvalues.
+	# Make a convention that mean axis is positive.
+	return tore*signc

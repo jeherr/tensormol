@@ -82,7 +82,9 @@ class GeomOptimizer:
 				prev_m.WriteXYZfile("./results/", filename,'a',True)
 			step+=1
 		# Checks stability in each cartesian direction.
-		print("Final Energy:", self.EnergyAndForce(prev_m.coords,False))
+		FinalE = self.EnergyAndForce(prev_m.coords,False)
+		print("Final Energy:", FinalE)
+		prev_m.properties['energy']=FinalE
 		return prev_m
 
 	def BumpForce(self,x_):
@@ -418,6 +420,7 @@ class ScannedOptimization(GeomOptimizer):
 		self.masses = np.array(map(lambda x: ATOMICMASSES[x-1], m.atoms))
 		self.natoms = m.NAtoms()
 		self.MaxBumps = 1 # think you want this to be >500k
+		self.StopAfter = StopAfter_
 		self.MinimaCoords = np.zeros((self.StopAfter,self.natoms,3))
 		self.NMinima = 0
 		self.biasforce = TopologyBumper(m)
@@ -472,14 +475,13 @@ class ScannedOptimization(GeomOptimizer):
 		if (m_ != None):
 			m = Mol(m_.atoms,m_.coords)
 
-		mol_hist = [m]
-
 		m=self.Opt(m,"Pre_opt",FileOutput=False,eff_thresh=0.0005)
 		self.AppendIfNew(m)
 		self.biasforce.PreConstraint(m.coords)
 		eq_quads = self.biasforce.qbumps.copy()
 		energy0,frc0  = self.WrappedBumpedEForce(m.coords)
 
+		mol_hist = [m]
 		energy = energy0
 		old_frc = frc0.copy()
 
@@ -517,7 +519,7 @@ class ScannedOptimization(GeomOptimizer):
 						if (abs(last_dive-target_torsion)<interval):
 							break
 					rmsdisp = np.sum(np.linalg.norm(curr_m.coords-prev_m.coords,axis=1))/curr_m.coords.shape[0]
-					LOGGER.info(filename+" step: %i energy: %0.5f const_t: %i const: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, i, cons_tor, rmsgrad, rmsdisp)
+					LOGGER.info(filename+"Found %i of %i step: %i energy: %0.5f const_t: %i const: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", self.NMinima,self.StopAfter, step , energy, i, cons_tor, rmsgrad, rmsdisp)
 					prev_m.WriteXYZfile("./results/", filename)
 					step+=1
 		return mol_hist

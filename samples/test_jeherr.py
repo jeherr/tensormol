@@ -299,11 +299,11 @@ def train_energy_GauSHv2(mset):
 	PARAMS["train_dipole"] = False
 	PARAMS["train_rotation"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [512, 512, 512]
-	PARAMS["learning_rate"] = 0.00005
+	PARAMS["HiddenLayers"] = [1024, 512, 512]
+	PARAMS["learning_rate"] = 0.0001
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 100
+	PARAMS["batch_size"] = 50
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
 	network = BehlerParinelloGauSHv2(mset)
@@ -316,7 +316,7 @@ def train_energy_GauSHConv(mset):
 	PARAMS["train_dipole"] = False
 	PARAMS["train_rotation"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["ConvFilter"] = [128]
+	PARAMS["ConvFilter"] = [256]
 	PARAMS["ConvKernelSize"] = [25]
 	PARAMS["ConvStrides"] = [25]
 	PARAMS["HiddenLayers"] = [512, 512]
@@ -332,7 +332,7 @@ def train_energy_GauSHConv(mset):
 def train_AE_GauSH(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_LMAX"] = 3
-	PARAMS["train_rotation"] = False
+	PARAMS["train_rotation"] = True
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512]
 	PARAMS["learning_rate"] = 0.00005
@@ -342,6 +342,24 @@ def train_AE_GauSH(mset):
 	PARAMS["NeuronType"] = "sigmoid"
 	PARAMS["tf_prec"] = "tf.float32"
 	network = GauSHEncoderv2(mset)
+	network.start_training()
+
+def train_energy_AE_GauSH(mset):
+	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+	PARAMS["SH_LMAX"] = 3
+	PARAMS["train_gradients"] = True
+	PARAMS["train_dipole"] = False
+	PARAMS["train_rotation"] = True
+	PARAMS["weight_decay"] = None
+	PARAMS["AE_hidden_layers"] = [1024]
+	PARAMS["HiddenLayers"] = [512, 512, 512]
+	PARAMS["learning_rate"] = 0.00005
+	PARAMS["max_steps"] = 1000
+	PARAMS["test_freq"] = 5
+	PARAMS["batch_size"] = 100
+	PARAMS["NeuronType"] = "sigmoid"
+	PARAMS["tf_prec"] = "tf.float32"
+	network = BehlerParinelloGauSHAE(mset)
 	network.start_training()
 
 def test_h2o():
@@ -836,7 +854,6 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 train_energy_GauSHv2("water_wb97xd_6311gss")
-# train_energy_GauSHConv("water_wb97xd_6311gss")
 # train_AE_GauSH("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
@@ -904,16 +921,7 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # # r_cutoff = 6.5
 # gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
 # elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
-# # rotation_params = tf.stack([np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
-# # 		np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
-# # 		tf.random_uniform([2, maxnatoms], minval=0.1, maxval=1.9, dtype=tf.float32)], axis=-1)
-# rot_axis = tf.random_normal([2, 3])
-# rot_angle = tf.random_uniform([2, 1], maxval=2.0)
-# # atomic_embed_factors = tf.Variable(PARAMS["ANES"], trainable=True, dtype=tf.float32)
-# # tmp = tf_neighbor_list_sort(xyzstack, zstack, natomsstack, elements, r_cutoff)
-# # tmp = tf_sparse_gaush_element_channel(xyzstack, zstack, pairstack, elements, gaussian_params, 1)
-# # tmp2 = tf_gaush_element_channel(xyzstack, zstack, elements, gaussian_params, 1)
-# tmp = tf_random_rotatev2(xyzstack, rot_axis, rot_angle)
+# tmp2 = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3)
 # # tmp = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3, rotation_params)
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
@@ -923,13 +931,13 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
 # @TMTiming("test")
 # def get_pairs():
-# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
+# 	tmp3 = sess.run(tmp2, options=options, run_metadata=run_metadata)
 # 	return tmp3
 # tmp5 = get_pairs()
-# print tmp5
+# print tmp5[0]
 # print tmp5.shape
-# print zlist
-# print xyzlist
+# m=Mol(zlist[0], xyzlist[0])
+# m.WriteXYZfile(fname="tmp", mode="w")
 # # print tmp6.shape
 # # print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
 # # print np.allclose(tmp5, tmp6, 1e-01)
