@@ -46,7 +46,7 @@ class TFMolManage(TFManage):
 		self.Trainable = Trainable_
 		if (Name_!=""):
 			self.name = Name_
-			self.Prepare()
+			self.Prepare(TData_)
 			return
 		TFManage.__init__(self, Name_, TData_, False, NetType_, RandomTData_, Trainable_)
 		self.suffix = PARAMS["NetNameSuffix"]
@@ -1408,6 +1408,28 @@ class TFMolManage(TFManage):
 			Etotal = self.Instances.evaluate_periodic([xyzs, Zs, dummy_energy, dummy_grads, rad_p_ele, ang_t_elep,  mil_j, mil_jk, 1.0/natom], nreal, False)
 			return Etotal
 
+	def EvalBPDirectEandGChannelSingle(self, mol, Rr_cut, Ra_cut):
+		"""
+		The energy, force and dipole routine for BPs_EE.
+		"""
+		mol_set=MSet()
+		mol_set.mols.append(mol)
+		nmols = len(mol_set.mols)
+		dummy_energy = np.zeros((nmols))
+		self.TData.MaxNAtoms = mol.NAtoms()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		natom = np.zeros((nmols), dtype = np.int32)
+		for i, mol in enumerate(mol_set.mols):
+			xyzs[i][:mol.NAtoms()] = mol.coords
+			Zs[i][:mol.NAtoms()] = mol.atoms
+			natom[i] = mol.NAtoms()
+		NL = NeighborListSet(xyzs, natom, True, True, Zs, sort_=True)
+		rad_p_ele, ang_t_elep, mil_j, mil_jk = NL.buildPairsAndTriplesWithEleIndexChannel(Rr_cut, Ra_cut, self.Instances.eles_np, self.Instances.eles_pairs_np)
+		Etotal, Ebp, Ebp_atom, gradient = self.Instances.evaluate([xyzs, Zs, dummy_energy, dummy_grads, rad_p_ele, ang_t_elep,  mil_j, mil_jk, 1.0/natom])
+		return Etotal, Ebp, Ebp_atom, -JOULEPERHARTREE*gradient[0]
+
 	def EvalBPDirectEELinearSingle(self, mol, Rr_cut, Ra_cut, Ree_cut, HasVdw = False):
 		"""
 		The energy, force and dipole routine for BPs_EE.
@@ -1466,8 +1488,11 @@ class TFMolManage(TFManage):
 		return mol_dipole, atom_charge
 
 	@TMTiming("TFMolMangePrepare")
-	def Prepare(self):
+	def Prepare(self, TData_=None):
 		self.Load()
+		if TData_:
+			self.TData = TData_
+		print ("self.TData.eles 2:", self.TData.eles)
 		self.Instances= None # In order of the elements in TData
 		if (self.NetType == "fc_classify"):
 			self.Instances = MolInstance_fc_classify(None,  self.TrainedNetworks[0], None, Trainable_ = self.Trainable)
@@ -1520,7 +1545,7 @@ class TFMolManage(TFManage):
 		elif (self.NetType == "fc_sqdiff_BP_Direct_EandG_SymFunction"):
 			self.Instances = MolInstance_DirectBP_EandG_SymFunction(None,self.TrainedNetworks[0], Trainable_ = self.Trainable)
 		elif (self.NetType == "fc_sqdiff_BP_Direct_EandG_SymChannel"):
-			self.Instances =MolInstance_DirectBP_EandG_SymChannel(None,self.TrainedNetworks[0], Trainable_ = self.Trainable)
+			self.Instances =MolInstance_DirectBP_EandG_SymChannel(self.TData,self.TrainedNetworks[0], Trainable_ = self.Trainable)
 		elif (self.NetType == "fc_sqdiff_BP_Direct_Charge_SymFunction"):
 			self.Instances = MolInstance_DirectBP_Charge_SymFunction(None,self.TrainedNetworks[0], Trainable_ = self.Trainable)
 		elif (self.NetType == "Dipole_BP"):
