@@ -15,12 +15,13 @@ import random
 import time
 
 class GeomOptimizer:
-	def __init__(self,f_):
+	def __init__(self,f_, efh_= None):
 		"""
 		Geometry optimizations based on NN-PES's etc.
 
 		Args:
 			f_: An EnergyForce routine
+			efh_: An EnergyForceHessian routine
 		"""
 		self.thresh = PARAMS["OptThresh"]
 		self.maxstep = PARAMS["OptMaxStep"]
@@ -30,6 +31,7 @@ class GeomOptimizer:
 		self.max_opt_step = PARAMS["OptMaxCycles"]
 		self.step = self.maxstep
 		self.EnergyAndForce = f_
+		self.EnergyForceHess = efh_
 		self.m = None
 		return
 
@@ -144,6 +146,53 @@ class GeomOptimizer:
 		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
 		prev_m.properties['energy']=self.EnergyAndForce(prev_m.coords,False)
 		print("Final Energy:",prev_m.properties['energy'])
+		return prev_m
+
+	def OptNewton(self,m_, filename="NewtonOptLog",Debug=False, FileOutput = True, eff_thresh = None, eff_max_step = None):
+		"""
+		Requires an analytical hessian.
+		Use full Newton Optimization.
+
+		Args:
+		        m: A distorted molecule to optimize
+		"""
+		# Sweeps one at a time
+		rmsdisp = 10.0
+		rmsgrad = 10.0
+		step=0
+		natom = m_.NAtoms()
+		m = Mol(m_.atoms,m_.coords)
+		mol_hist = []
+		prev_m = Mol(m.atoms, m.coords)
+		#print("Orig Coords", m.coords)
+		if (eff_thresh == None):
+			thresh = self.thresh
+		else:
+			thresh = eff_thresh
+		if (eff_max_step == None):
+			max_step = self.max_opt_step
+		else:
+			max_step = eff_max_step
+		#print "Initial force", self.tfm.evaluate(m, i), "Real Force", m.properties["forces"][i]
+		energy, old_frc, hess0  = self.EnergyForceHess(m.coords)
+		while( step < self.max_opt_step and rmsgrad > thresh):
+			prev_m = Mol(m.atoms, m.coords)
+			if step > 0:
+				old_frc = frc
+			energy, frc, hess = self.EnergyForceHess(m.coords)
+			frc/=JOULEPERHARTREE
+			rmsgrad = np.sum(np.linalg.norm(frc,axis=1))/frc.shape[0]
+			frcrs = np.reshape(frc,3*natom)
+			m.coords = m.coords + np.reshape(np.dot(np.linalg.inv(hess + np.eye(hess.shape[0])),frcrs),(natom,3))
+			rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/m.coords.shape[0]
+			LOGGER.info(filename+"step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
+			mol_hist.append(prev_m)
+			if (FileOutput):
+				prev_m.WriteXYZfile("./results/", filename)
+			step+=1
+		# Checks stability in each cartesian direction.
+		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
+		prev_m.properties['energy']=energy
 		return prev_m
 
 	def OptGD(self,m_, filename="GDOptLog",Debug=False, FileOutput = True, eff_thresh = None, eff_max_step = None):

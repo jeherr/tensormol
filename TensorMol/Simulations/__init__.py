@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from __future__ import print_function
 
+from .HarmonicSpectra import *
 from .Opt import *
 from .Neb import *
 from .Web import *

@@ -72,7 +72,8 @@ def CoordinateScan(f_, x_, name_="", eps_=0.03, num_=15):
 		np.savetxt("./results/CoordScan"+name_+str(ci)+".txt",tore[iti.multi_index])
 		ci += 1
 		iti.iternext()
-def FdiffHessian(f_, x_, eps_=0.001, mode_ = "forward", grad_ = None):
+
+def FdiffHessian(f_, x_, eps_=0.001, mode_ = "central", grad_ = None):
 	"""
 	Computes a finite difference hessian of a single or multi-valued function
 	at x_ for debugging purposes.
@@ -120,7 +121,7 @@ def FdiffHessian(f_, x_, eps_=0.001, mode_ = "forward", grad_ = None):
 			xi_t = x_.copy()
 			xi_t[iti.multi_index] += eps_
 			tmpfs[iti.multi_index]  = f_(xi_t).copy()
-			print(iti.multi_index,tmpfs[iti.multi_index])
+			#print(iti.multi_index,tmpfs[iti.multi_index])
 			iti.iternext()
 		iti = np.nditer(x_, flags=['multi_index'])
 		while not iti.finished:
@@ -154,6 +155,7 @@ def FdiffHessian(f_, x_, eps_=0.001, mode_ = "forward", grad_ = None):
 				itj.iternext()
 			iti.iternext()
 	return tore
+
 def FourPointHessQuad(f):
 	"""
 	f is a 4x4xOutshape
@@ -224,137 +226,6 @@ def InternalCoordinates(x_,m):
 	nint = S.shape[0]
 	print("3N, Number of Internal Coordinates: ", n3 , nint)
 	return S
-
-def HarmonicSpectra(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM_=False, Mu_ = None):
-	"""
-	Perform a finite difference normal mode analysis
-	of a molecule. basically implements http://gaussian.com/vib/
-
-	Args:
-		f_: Energies in Hartree.
-		x_: Coordinates (A)
-		at_: element type of each atom
-		grad_: forces in Hartree/angstrom if available. (unused)
-		eps_: finite difference step
-		WriteNM_: Whether to write the normal modes to readable files
-		Mu_: A dipole field routine for intensities.
-
-	Returns:
-		Frequencies in wavenumbers, Normal modes (cart), and Intensities
-	"""
-	LOGGER.info("Harmonic Analysis")
-	n = x_.shape[0]
-	n3 = 3*n
-	m_ = np.array(list(map(lambda x: ATOMICMASSESAMU[x-1]*ELECTRONPERPROTONMASS, at_.tolist())))
-	print ("m_:", m_)
-	Crds = InternalCoordinates(x_,m_) #invbasis X cart
-	#Crds=np.eye(n3).reshape((n3,n,3))
-	#print("En?",f_(x_))
-	if 0:
-		Hess = DirectedFdiffHessian(f_, x_, Crds.reshape((len(Crds),n,3)))
-		print("Hess (Internal):", Hess)
-		# Transform the invariant hessian into cartesian coordinates.
-		cHess = np.dot(Crds.T,np.dot(Hess,Crds))
-	else:
-		cHess = FdiffHessian(f_, x_,0.0005).reshape((n3,n3))
-	cHess /= (BOHRPERA*BOHRPERA)
-	print("Hess (Cart):", cHess)
-	# Mass weight the invariant hessian in cartesian coordinate
-	for i,mi in enumerate(m_):
-		cHess[i*3:(i+1)*3, i*3:(i+1)*3] /= np.sqrt(mi*mi)
-		for j,mj in enumerate(m_):
-			if (i != j):
-				cHess[i*3:(i+1)*3, j*3:(j+1)*3] /= np.sqrt(mi*mj)
-	# Get the vibrational spectrum and normal modes.
-	u,s,v = np.linalg.svd(cHess)
-	for l in s:
-		print("Central Energy (cm**-1): ", np.sign(l)*np.sqrt(l)*WAVENUMBERPERHARTREE)
-	print("--")
-	# Get the actual normal modes, for visualization sake.
-	w,v = np.linalg.eigh(cHess)
-	v = v.real
-	wave = np.sign(w)*np.sqrt(abs(w))*WAVENUMBERPERHARTREE
-	print("N3, shape v",n3,v.shape)
-	if (WriteNM_):
-		intensities = np.zeros(shape=(3*n))
-		for i in range(3*n):
-			nm = np.zeros(3*n)
-			for j,mi in enumerate(m_):
-				nm[3*j:3*(j+1)] = v[3*j:3*(j+1),i]/np.sqrt(mi/ELECTRONPERPROTONMASS)
-			#nm /= np.sqrt(np.sum(nm*nm))
-			nm = nm.reshape((n,3))
-			# Take finite difference derivative of mu(Q) and return the <dmu/dQ, dmu/dQ>
-			step = 0.01
-			dmudq = (Mu_(x_+step*nm)-Mu_(x_))/step
-			print("|f| (UNITS????) ",np.dot(dmudq,dmudq.T))
-			intensities[i] = np.dot(dmudq,dmudq.T)
-			# for alpha in np.append(np.linspace(0.1,-0.1,30),np.linspace(0.1,-0.1,30)):
-			# 	mdisp = Mol(at_, x_+alpha*nm)
-			# 	#print("Mu",Mu_(x_+alpha*nm))
-			# 	mdisp.WriteXYZfile("./results/","NormalMode_"+str(i))
-		return wave, v, intensities
-	return wave, v
-
-def HarmonicSpectraWithProjection(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM_=False, Mu_ = None):
-	"""
-	Perform a finite difference normal mode analysis
-	of a molecule. basically implements http://gaussian.com/vib/
-
-	Args:
-		f_: Energies in Hartree.
-		x_: Coordinates (A)
-		at_: element type of each atom
-		grad_: forces in Hartree/angstrom if available. (unused)
-		eps_: finite difference step
-		WriteNM_: Whether to write the normal modes to readable files
-		Mu_: A dipole field routine for intensities.
-
-	Returns:
-		Frequencies in wavenumbers, Normal modes (cart), and Intensities
-	"""
-	LOGGER.info("Harmonic Analysis")
-	n = x_.shape[0]
-	n3 = 3*n
-	m_ = np.array(map(lambda x: ATOMICMASSESAMU[x-1]*ELECTRONPERPROTONMASS, at_.tolist()))
-	Crds = InternalCoordinates(x_,m_) #invbasis X cart flatten.
-	cHess = FdiffHessian(f_, x_,0.0005).reshape((n3,n3))
-	cHess /= (BOHRPERA*BOHRPERA)
-	print("Hess (Cart):", cHess)
-	# Mass weight the invariant hessian in cartesian coordinate
-	for i,mi in enumerate(m_):
-		cHess[i*3:(i+1)*3, i*3:(i+1)*3] /= np.sqrt(mi*mi)
-		for j,mj in enumerate(m_):
-			if (i != j):
-				cHess[i*3:(i+1)*3, j*3:(j+1)*3] /= np.sqrt(mi*mj)
-	# Get the vibrational spectrum and normal modes.
-	# pHess = np.einsum('ab,cb->ac',np.einsum('ij,jk->ik',Crds,cHess),Crds)
-	s,v = np.linalg.eigh(Hess)
-	for l in s:
-		print("Central Energy (cm**-1): ", np.sign(l)*np.sqrt(l)*WAVENUMBERPERHARTREE)
-	print("--")
-	# Get the actual normal modes, for visualization sake.
-	v = v.real
-	wave = np.sign(s)*np.sqrt(abs(s))*WAVENUMBERPERHARTREE
-	print("N3, shape v",n3,v.shape)
-	if (WriteNM_):
-		intensities = np.zeros(shape=(3*n))
-		for i in range(3*n):
-			nm = np.zeros(3*n)
-			for j,mi in enumerate(m_):
-				nm[3*j:3*(j+1)] = v[3*j:3*(j+1),i]/np.sqrt(mi/ELECTRONPERPROTONMASS)
-			#nm /= np.sqrt(np.sum(nm*nm))
-			nm = nm.reshape((n,3))
-			# Take finite difference derivative of mu(Q) and return the <dmu/dQ, dmu/dQ>
-			step = 0.01
-			dmudq = (Mu_(x_+step*nm)-Mu_(x_))/step
-			print("|f| (UNITS????) ",np.dot(dmudq,dmudq.T))
-			intensities[i] = np.dot(dmudq,dmudq.T)
-			# for alpha in np.append(np.linspace(0.1,-0.1,30),np.linspace(0.1,-0.1,30)):
-			# 	mdisp = Mol(at_, x_+alpha*nm)
-			# 	#print("Mu",Mu_(x_+alpha*nm))
-			# 	mdisp.WriteXYZfile("./results/","NormalMode_"+str(i))
-		return wave, v, intensities
-	return wave, v
 
 class ConjGradient:
 	def __init__(self,f_,x0_,thresh_=0.0001):
