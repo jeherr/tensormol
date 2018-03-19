@@ -2318,6 +2318,20 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			ForceType_: Deprecated
 		"""
 		MolInstance_DirectBP_EandG_SymFunction.__init__(self, TData_,  Name_, Trainable_)
+
+		self.TData = TData_
+		self.eles = self.TData.eles
+		self.n_eles = len(self.eles)
+		self.eles_np = np.asarray(self.eles).reshape((self.n_eles,1))
+		self.eles_pairs = []
+		for i in range (len(self.eles)):
+			for j in range(i, len(self.eles)):
+				self.eles_pairs.append([self.eles[i], self.eles[j]])
+		self.eles_pairs_np = np.asarray(self.eles_pairs)
+		print ("self.eles:", self.eles)
+		self.TData.ele = self.eles_np
+		self.TData.elep = self.eles_pairs_np
+
 		self.NetType = "RawBP_EandG_SymChannel"
 		self.name = "Mol_"+self.TData.name+"_"+self.TData.dig.name+"_"+self.NetType+"_"+self.suffix
 		self.train_dir = PARAMS["networks_directory"]+self.name
@@ -2577,3 +2591,79 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 
 		feed_dict={i: d for i, d in zip([self.xyzs_pl]+[self.Zs_pl]+[self.Elabel_pl] + [self.grads_pl] + [self.Radp_Ele_pl] + [self.Angt_Elep_pl] + [self.mil_j_pl] + [self.mil_jk_pl] + [self.natom_pl] + [self.keep_prob_pl], batch_data)}
 		return feed_dict
+
+
+	def EvalPrepare(self,  continue_training =False):
+		"""
+		Generate Tensorflow graph of evalution.
+
+		Args:
+			continue_training: should read the graph variables from a saved checkpoint.
+		"""
+		with tf.Graph().as_default():
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
+			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
+			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
+			self.mil_j_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
+			self.natom_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
+			self.keep_prob_pl =  tf.placeholder(self.tf_prec, shape=tuple([self.nlayer+1]))
+			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
+			Elep = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int64)
+			Channels = tf.Variable(self.channels, trainable= False, dtype = self.tf_prec)
+			Channel_pairs = tf.Variable(self.channel_pairs, trainable= False, dtype = self.tf_prec)
+			SFPa2 = tf.Variable(self.SFPa2, trainable= False, dtype = self.tf_prec)
+			SFPr2 = tf.Variable(self.SFPr2, trainable= False, dtype = self.tf_prec)
+			Rr_cut = tf.Variable(self.Rr_cut, trainable=False, dtype = self.tf_prec)
+			Ra_cut = tf.Variable(self.Ra_cut, trainable=False, dtype = self.tf_prec)
+			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_prec)
+			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_prec)
+			#self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
+			if self.with_hyb:			
+				self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_ChannelHyb(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
+			else:
+				self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Channel3(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
+			#self.Hybrization = TFSymSet_Hybrization(self.xyzs_pl, self.Zs_pl, Ele, Elep,  2.2, self.Radp_Ele_pl, self.mil_j_pl, self.Angt_Elep_pl, self.mil_jk_pl)
+			self.Etotal, self.Ebp, self.Ebp_atom = self.energy_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.keep_prob_pl)
+			self.gradient  = tf.gradients(self.Etotal, self.xyzs_pl, name="BPEGrad")
+			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
+			self.saver.restore(self.sess, self.chk_file)
+			if (PARAMS["Profiling"]>0):
+				print("logging with FULL TRACE")
+				self.summary_writer = tf.summary.FileWriter('./networks/PROFILE', self.sess.graph)
+				self.options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+				self.run_metadata = tf.RunMetadata()
+				self.summary_writer.add_run_metadata(self.run_metadata, "init", global_step=None)
+			self.sess.graph.finalize()
+
+
+	def evaluate(self, batch_data):
+		"""
+		Evaluate the energy, atom energies, and IfGrad = True the gradients
+		of this Direct Behler-Parinello graph.
+		"""
+		# Check sanity of input
+		nmol = batch_data[2].shape[0]
+		self.activation_function_type = PARAMS["NeuronType"]
+		self.AssignActivation()
+		#print ("self.activation_function:\n\n", self.activation_function)
+		if (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != nmol):
+			self.MaxNAtoms = batch_data[0].shape[1]
+			self.batch_size = nmol
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("loading the session..")
+			self.EvalPrepare()
+		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
+		self.batch_size = nmol
+		if not self.sess:
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("loading the session..")
+			self.EvalPrepare()
+		feed_dict=self.fill_feed_dict(batch_data+[np.ones(self.nlayer+1)])
+		Etotal, Ebp, Ebp_atom, gradient = self.sess.run([self.Etotal, self.Ebp, self.Ebp_atom, self.gradient], feed_dict=feed_dict)
+		return Etotal, Ebp, Ebp_atom, gradient
+
