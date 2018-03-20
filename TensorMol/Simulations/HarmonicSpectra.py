@@ -128,14 +128,14 @@ def HarmonicSpectra(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM_=False, Mu_ =
 			# Take finite difference derivative of mu(Q) and return the <dmu/dQ, dmu/dQ>
 			step = 0.01
 			dmudq = (Mu_(x_+step*nm)-Mu_(x_))/step
-			#print("|f| (UNITS????) ",np.dot(dmudq,dmudq.T))
+			print(VibEs[i-6]*WAVENUMBERPERHARTREE,"|f| (UNITS????) ",np.dot(dmudq,dmudq.T))
 			intensities[i-6] = np.dot(dmudq,dmudq.T)
 			# for alpha in np.append(np.linspace(0.1,-0.1,30),np.linspace(0.1,-0.1,30)):
 			# 	mdisp = Mol(at_, x_+alpha*nm)
 			# 	#print("Mu",Mu_(x_+alpha*nm))
 			# 	mdisp.WriteXYZfile("./results/","NormalMode_"+str(i))
-		return w[ordering][6:]*WAVENUMBERPERHARTREE, v, intensities, thermodynamics
-	return w[ordering][6:]*WAVENUMBERPERHARTREE, v, thermodynamics
+		return VibEs*WAVENUMBERPERHARTREE, v, intensities, thermodynamics
+	return VibEs*WAVENUMBERPERHARTREE, v, thermodynamics
 
 def HarmonicSpectraWithProjection(f_, x_, at_, grad_=None, eps_ = 0.001, WriteNM_=False, Mu_ = None):
 	"""
