@@ -184,7 +184,7 @@ class Digester:
 					raise Exception("Empty energies...")
 				print(ens_.min(), ens_.max())
 				Es=ens_-ens_.min()
-				Boltz=np.exp(-1.0*Es/PARAMS["KAYBEETEE"])
+				Boltz=np.exp(-1.0*Es/PARAMS["KAYBEETEEPERMOL"])
 				rnds = np.random.rand(len(xyz_))
 				Outs = np.array([1 if rnds[i]<Boltz[i] else 0 for i in range(len(ens_))])
 			elif (self.OType=="Energy"):

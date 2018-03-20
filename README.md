@@ -22,7 +22,7 @@
 
 ## Simulation Types:
  - Optimizations
- - Conformation Search. 
+ - Conformation Search.
  - Molecular Dynamics (NVE,NVT Nose-Hoover)
  - Monte Carlo
  - Open/Periodic Boundary Conditions
@@ -100,7 +100,7 @@ The associated energy surface is shown below.
 <img src="doc/images/tyrosine.png" width="300">
 
 ## Publications and Press:
- - John E. Herr, Kun Yao, David W. Toth, Ryker Mcintyre, John Parkhill.Metadynamics for Training Neural Network Model Chemistries: a Competitive Assessment. [Arxiv](https://arxiv.org/abs/1712.07240)
+ - John E. Herr, Kun Yao, David W. Toth, Ryker Mcintyre, John Parkhill.Metadynamics for Training Neural Network Model Chemistries: a Competitive Assessment. [J. Chem. Phys.](https://doi.org/10.1063/1.5020067)
 - Kun Yao, John E. Herr, David W. Toth, Ryker Mcintyre, John Parkhill. The TensorMol-0.1 Model Chemistry: a Neural Network Augmented with Long-Range Physics. [Chemical Science](http://pubs.rsc.org/en/content/articlelanding/2014/SC/C7SC04934J#!divAbstract)
  - Writeup in [Chemistry World](https://www.chemistryworld.com/news/neural-network-predicts-bond-energies-like-a-pro/3007598.article)
  - Kun Yao, John E. Herr, Seth N. Brown, & John Parkhill. Intrinsic Bond Energies from a Bonds-in-Molecules Neural Network. Journal of Physical Chemistry Letters (2017). DOI: [10.1021/acs.jpclett.7b01072](http://pubs.acs.org/doi/abs/10.1021/acs.jpclett.7b01072)
