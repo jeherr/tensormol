@@ -32,7 +32,7 @@ class PeriodicMonteCarlo(PeriodicVelocityVerlet):
 		self.RDFstat = OnlineEstimator(self.RDFold)
 		self.Xstat = OnlineEstimator(self.x)
 		self.PACCstat = OnlineEstimator(1.0)
-		self.kbt = KAYBEETEE*(PARAMS["MDTemp"]/300.0) # Hartrees.
+		self.kbt = KAYBEETEEPERMOL*(PARAMS["MDTemp"]/300.0) # Hartrees.
 		self.Eav = None
 		self.dE2 = None
 		self.Xav = None
