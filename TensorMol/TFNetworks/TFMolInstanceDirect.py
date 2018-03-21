@@ -5692,15 +5692,16 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
 		#print ("self.activation_function:\n\n", self.activation_function)
-		if (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != nmol):
+		MustPrepare = False
+		if (batch_data[0].shape[1] > self.MaxNAtoms or batch_data[0].shape[0] > self.batch_size):
+			self.batch_size = batch_data[0].shape[0]
 			self.MaxNAtoms = batch_data[0].shape[1]
-			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
-			print ("loading the session..")
-			self.EvalPrepare()
-		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
-		self.batch_size = nmol
+			MustPrepare = True
 		if not self.sess:
+			self.batch_size = nmol
+			self.MaxNAtoms = batch_data[0].shape[1]
+			MustPrepare = True
+		if MustPrepare:
 			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
 			print ("loading the session..")
 			self.EvalPrepare()

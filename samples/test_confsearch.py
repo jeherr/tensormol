@@ -241,8 +241,33 @@ H          9.49060       -3.41415        3.68597
 		Fs(s)
 		exit(0)
 
-	EFH = GetEnergyForceHess(m)
+	if 0:
+		m1 = Mol()
+		m1.FromXYZString(sugarXYZ4)
+		s = MSet()
+		s.mols.append(m1)
+		mgr = GetChemSpider12(s)
+		def EnAndForce(tmpm, DoForce=True):
+			Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient = mgr.EvalBPDirectEEUpdateSingle(tmpm, PARAMS["AN1_r_Rc"], PARAMS["AN1_a_Rc"], PARAMS["EECutoffOff"], True)
+			energy = Etotal[0]
+			force = gradient[0]
+			if DoForce:
+				return energy, force
+			else:
+				return energy
+		print(EnAndForce(m1))
+		m2 = Mol()
+		m2.FromXYZString(sugarXYZ2)
+		print(EnAndForce(m2))
+		m2 = Mol()
+		m2.FromXYZString(sugarXYZ3)
+		print(EnAndForce(m2))
+		m2 = Mol()
+		m2.FromXYZString(sugarXYZ)
+		print(EnAndForce(m2))
 
+
+	EFH = GetEnergyForceHess(m)
 	F = GetEnergyForceForMol(m)
 	CF = GetChargeField(m)
 

@@ -1293,32 +1293,34 @@ class TFMolManage(TFManage):
 		"""
 		The energy, force and dipole routine for BPs_EE.
 		"""
-		mol_set=MSet()
-		mol_set.mols.append(mol)
-		nmols = len(mol_set.mols)
+		nmols = 1
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		NArgAtoms = mol.NAtoms()
+		InstAtoms = self.Instances.MaxNAtoms
+		InstMols = self.Instances.batch_size
+		if (NArgAtoms>InstAtoms):
+			self.TData.MaxNAtoms = NArgAtoms
+		AtomsToDo = max(NArgAtoms,InstAtoms)
+		xyzs = np.zeros((nmols, AtomsToDo, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, AtomsToDo, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, AtomsToDo), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
-		for i, mol in enumerate(mol_set.mols):
-			xyzs[i][:mol.NAtoms()] = mol.coords
-			Zs[i][:mol.NAtoms()] = mol.atoms
-			natom[i] = mol.NAtoms()
+		xyzs[0][:mol.NAtoms()] = mol.coords
+		Zs[0][:mol.NAtoms()] = mol.atoms
+		natom[0] = mol.NAtoms()
 		NL = NeighborListSet(xyzs, natom, True, True, Zs, sort_=True)
 		rad_p_ele, ang_t_elep, mil_jk, jk_max = NL.buildPairsAndTriplesWithEleIndex(Rr_cut, Ra_cut, self.Instances.eles_np, self.Instances.eles_pairs_np)
 		NLEE = NeighborListSet(xyzs, natom, False, False,  None)
 		rad_eep = NLEE.buildPairs(Ree_cut)
 		if not HasVdw:
 			Etotal, Ebp, Ecc, mol_dipole, atom_charge, gradient  = self.Instances.evaluate([xyzs, Zs, dummy_energy, dummy_dipole, dummy_grads, rad_p_ele, ang_t_elep, rad_eep, mil_jk, 1.0/natom])
-			return Etotal, Ebp, Ecc, mol_dipole, atom_charge, -JOULEPERHARTREE*gradient[0]
+			return Etotal, Ebp, Ecc, mol_dipole, atom_charge[:,:NArgAtoms], -JOULEPERHARTREE*gradient[0][:,:NArgAtoms]
 		else:
 			Etotal, Ebp, Ebp_atom, Ecc, Evdw,  mol_dipole, atom_charge, gradient = self.Instances.evaluate([xyzs, Zs, dummy_energy, dummy_dipole, dummy_grads, rad_p_ele, ang_t_elep, rad_eep, mil_jk, 1.0/natom])
 			#print ("Etotal:", Etotal)
 			#Etotal, Ebp, Ebp_atom, Ecc, Evdw,  mol_dipole, atom_charge, gradient, bp_gradient, syms  = self.Instances.evaluate([xyzs, Zs, dummy_energy, dummy_dipole, dummy_grads, rad_p_ele, ang_t_elep, rad_eep, mil_jk, 1.0/natom])
-			return Etotal, Ebp, Ebp_atom ,Ecc, Evdw, mol_dipole, atom_charge, -JOULEPERHARTREE*gradient[0]
+			return Etotal, Ebp, Ebp_atom ,Ecc, Evdw, mol_dipole, atom_charge[:,:NArgAtoms], -JOULEPERHARTREE*gradient[0][:,:NArgAtoms]
 			#return Etotal, Ebp, Ebp_atom ,Ecc, Evdw, mol_dipole, atom_charge, -JOULEPERHARTREE*gradient[0], bp_gradient, syms
 
 	@TMTiming("EvalBPDirectEEHessSingle")
@@ -1326,26 +1328,28 @@ class TFMolManage(TFManage):
 		"""
 		The energy, force and dipole routine for BPs_EE.
 		"""
-		mol_set=MSet()
-		mol_set.mols.append(mol)
-		nmols = len(mol_set.mols)
+		nmols = 1
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		NArgAtoms = mol.NAtoms()
+		InstAtoms = self.Instances.MaxNAtoms
+		InstMols = self.Instances.batch_size
+		if (NArgAtoms>InstAtoms):
+			self.TData.MaxNAtoms = NArgAtoms
+		AtomsToDo = max(NArgAtoms,InstAtoms)
+		xyzs = np.zeros((nmols, AtomsToDo, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, AtomsToDo, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, AtomsToDo), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
-		for i, mol in enumerate(mol_set.mols):
-			xyzs[i][:mol.NAtoms()] = mol.coords
-			Zs[i][:mol.NAtoms()] = mol.atoms
-			natom[i] = mol.NAtoms()
+		xyzs[0][:mol.NAtoms()] = mol.coords
+		Zs[0][:mol.NAtoms()] = mol.atoms
+		natom[0] = mol.NAtoms()
 		NL = NeighborListSet(xyzs, natom, True, True, Zs, sort_=True)
 		rad_p_ele, ang_t_elep, mil_jk, jk_max = NL.buildPairsAndTriplesWithEleIndex(Rr_cut, Ra_cut, self.Instances.eles_np, self.Instances.eles_pairs_np)
 		NLEE = NeighborListSet(xyzs, natom, False, False,  None)
 		rad_eep = NLEE.buildPairs(Ree_cut)
 		Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient, Hess  = self.Instances.evaluate([xyzs, Zs, dummy_energy, dummy_dipole, dummy_grads, rad_p_ele, ang_t_elep, rad_eep, mil_jk, 1.0/natom],ToHess_=True)
-		return Etotal, -JOULEPERHARTREE*gradient[0], Hess[0]
+		return Etotal, -JOULEPERHARTREE*gradient[0][:,:NArgAtoms], Hess[0][:,:NArgAtoms,:,:,:NArgAtoms,:]
 
 	@TMTiming("EvalBPDirectEEUpdateSinglePeriodic")
 	def EvalBPDirectEEUpdateSinglePeriodic(self, mol, Rr_cut, Ra_cut, Ree_cut, nreal, HasVdw = True, DoForce=True, DoCharge=False):
@@ -1455,38 +1459,6 @@ class TFMolManage(TFManage):
 		rad_p_ele, ang_t_elep, mil_j, mil_jk = NL.buildPairsAndTriplesWithEleIndexChannel(Rr_cut, Ra_cut, self.Instances.eles_np, self.Instances.eles_pairs_np)
 		Etotal, Ebp, Ebp_atom, gradient = self.Instances.evaluate([xyzs, Zs, dummy_energy, dummy_grads, rad_p_ele, ang_t_elep,  mil_j, mil_jk, 1.0/natom])
 		return Etotal, Ebp, Ebp_atom, -JOULEPERHARTREE*gradient[0]
-
-	def EvalBPDirectEELinearSingle(self, mol, Rr_cut, Ra_cut, Ree_cut, HasVdw = False):
-		"""
-		The energy, force and dipole routine for BPs_EE.
-		This Routine is BROKEN.
-		"""
-		mol_set=MSet()
-		mol_set.mols.append(mol)
-		nmols = len(mol_set.mols)
-		dummy_energy = np.zeros((nmols))
-		dummy_dipole = np.zeros((nmols, 3))
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
-		natom = np.zeros((nmols), dtype = np.int32)
-		for i, mol in enumerate(mol_set.mols):
-			xyzs[i][:mol.NAtoms()] = mol.coords
-			Zs[i][:mol.NAtoms()] = mol.atoms
-			natom[i] = mol.NAtoms()
-		NL = NeighborListSet(xyzs, natom, True, True, Zs, sort_=True)
-		rad_p_ele, ang_t_elep, mil_j, mil_jk = NL.buildPairsAndTriplesWithEleIndexLinear(Rr_cut, Ra_cut, self.Instances.eles_np, self.Instances.eles_pairs_np)
-		NLEE = NeighborListSet(xyzs, natom, False, False,  None)
-		rad_eep = NLEE.buildPairs(Ree_cut)
-		if not HasVdw:
-			Etotal, Ebp, Ecc, mol_dipole, atom_charge, gradient  = self.Instances.evaluate([xyzs, Zs, dummy_energy, dummy_dipole, dummy_grads, rad_p_ele, ang_t_elep, rad_eep, mil_j, mil_jk, 1.0/natom])
-			return Etotal, Ebp, Ecc, mol_dipole, atom_charge, -JOULEPERHARTREE*gradient[0]
-		else:
-			Etotal, Ebp, Ebp_atom, Ecc, Evdw,  mol_dipole, atom_charge, gradient = self.Instances.evaluate([xyzs, Zs, dummy_energy, dummy_dipole, dummy_grads, rad_p_ele, ang_t_elep, rad_eep, mil_j, mil_jk, 1.0/natom])
-			#print ("Etotal:", Etotal)
-			#Etotal, Ebp, Ebp_atom, Ecc, Evdw,  mol_dipole, atom_charge, gradient, bp_gradient, syms  = self.Instances.evaluate([xyzs, Zs, dummy_energy, dummy_dipole, dummy_grads, rad_p_ele, ang_t_elep, rad_eep, mil_jk, 1.0/natom])
-			return Etotal, Ebp, Ebp_atom ,Ecc, Evdw, mol_dipole, atom_charge, -JOULEPERHARTREE*gradient[0]
 
 	def EvalBPDirectEELinearSinglePeriodic(self, mol, Rr_cut, Ra_cut, Ree_cut, nreal, HasVdw = True, DoForce=True, DoCharge=False):
 		return self.EvalBPDirectEEUpdateSinglePeriodic( mol, Rr_cut, Ra_cut, Ree_cut, nreal, HasVdw, DoForce, DoCharge)
