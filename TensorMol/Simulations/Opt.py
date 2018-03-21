@@ -77,6 +77,7 @@ class GeomOptimizer:
 			LOGGER.info(filename+"step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
 			prev_m.properties["OptStep"] = step
 			prev_m.properties["energy"] = energy
+			prev_m.properties["rmsgrad"] = rmsgrad
 			mol_hist.append(prev_m)
 			if (callback != None):
 				callback(mol_hist)

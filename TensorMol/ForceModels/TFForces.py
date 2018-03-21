@@ -333,7 +333,7 @@ class MolInstance_DirectForce(MolInstance_fc_sqdiff_BP):
 		self.name = "Mol_"+self.TData.name+"_"+self.TData.dig.name+"_"+self.NetType
 		LOGGER.debug("Raised Instance: "+self.name)
 		self.train_dir = PARAMS["networks_directory"]+self.name
-		self.MaxNAtoms = TData_.MaxNAtoms
+		self.MaxNAtom = TData_.MaxNAtom
 		self.batch_size_output = 4096
 		self.PreparedFor = 0
 		self.inp_pl=None
@@ -479,7 +479,7 @@ class MolInstance_DirectForce(MolInstance_fc_sqdiff_BP):
 		return En, JOULEPERHARTREE*Frc[0] # Returns energies and forces.
 	def CallLinearLJForce(self,z,x,NZ):
 		if (z.shape[0] != self.PreparedFor):
-			self.MaxNAtoms = z.shape[0]
+			self.MaxNAtom = z.shape[0]
 			self.Prepare()
 		feeddict = {self.z_pl:z.astype(np.int64).reshape(z.shape[0],1),self.x_pl:x, self.nzp2_pl:NZ}
 		En,Frc = self.sess.run([self.energyLinear, self.forceLinear],feed_dict=feeddict)
@@ -487,7 +487,7 @@ class MolInstance_DirectForce(MolInstance_fc_sqdiff_BP):
 	def EvalForceLinear(self,m):
 		Ins = self.TData.dig.Emb(m,False,False)
 		if (Ins.shape[0] != self.PreparedFor):
-			self.MaxNAtoms = Ins.shape[0]
+			self.MaxNAtom = Ins.shape[0]
 			self.Prepare()
 		Ins = Ins.reshape(tuple([1]+list(Ins.shape))) # mol X 4
 		if (self.NL==None):
@@ -540,14 +540,14 @@ class MolInstance_DirectForce(MolInstance_fc_sqdiff_BP):
 		Args:
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
-		self.PreparedFor = self.MaxNAtoms
+		self.PreparedFor = self.MaxNAtom
 		with tf.Graph().as_default():
-			self.inp_pl=tf.placeholder(tf.float64, shape=tuple([None,self.MaxNAtoms,4]))
+			self.inp_pl=tf.placeholder(tf.float64, shape=tuple([None,self.MaxNAtom,4]))
 			self.nzp_pl=tf.placeholder(tf.int64, shape=tuple([None,3]))
-			self.z_pl=tf.placeholder(tf.int64, shape=tuple([self.MaxNAtoms,1]))
-			self.x_pl=tf.placeholder(tf.float64, shape=tuple([self.MaxNAtoms,3]))
+			self.z_pl=tf.placeholder(tf.int64, shape=tuple([self.MaxNAtom,1]))
+			self.x_pl=tf.placeholder(tf.float64, shape=tuple([self.MaxNAtom,3]))
 			self.nzp2_pl=tf.placeholder(tf.int64, shape=tuple([None,2]))
-			self.frce_pl = tf.placeholder(tf.float64, shape=tuple([None,self.MaxNAtoms,3])) # Forces.
+			self.frce_pl = tf.placeholder(tf.float64, shape=tuple([None,self.MaxNAtom,3])) # Forces.
 			if (self.ForceType=="LJ"):
 				self.LJe = tf.Variable(0.40*tf.ones([8,8],dtype=tf.float64),trainable=True,dtype=tf.float64)
 				self.LJr = tf.Variable(1.1*tf.ones([8,8],dtype=tf.float64),trainable=True,dtype=tf.float64)

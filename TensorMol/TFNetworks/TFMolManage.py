@@ -1134,8 +1134,8 @@ class TFMolManage(TFManage):
 	def Eval_BPEnergy_Direct(self, mol_set):
 		nmols = len(mol_set.mols)
 		dummy_outputs = np.zeros((nmols))
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
 			Zs[i][:mol.NAtoms()] = mol.atoms
@@ -1146,11 +1146,11 @@ class TFMolManage(TFManage):
 		mol_set = MSet()
 		mol_set.mols.append(mol)
 		nmols = len(mol_set.mols)
-		self.TData.MaxNAtoms = mol.NAtoms()
+		self.TData.MaxNAtom = mol.NAtoms()
 		dummy_outputs = np.zeros((nmols))
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
 			Zs[i][:mol.NAtoms()] = mol.atoms
@@ -1170,9 +1170,9 @@ class TFMolManage(TFManage):
 		mol_set = MSet()
 		mol_set.mols.append(mol)
 		nmols = len(mol_set.mols)
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		self.TData.MaxNAtom = mol.NAtoms()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
 			Zs[i][:mol.NAtoms()] = mol.atoms
@@ -1196,10 +1196,10 @@ class TFMolManage(TFManage):
 		mol_set.mols.append(mol)
 		nmols = len(mol_set.mols)
 		dummy_outputs = np.zeros((nmols))
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		self.TData.MaxNAtom = mol.NAtoms()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
 			Zs[i][:mol.NAtoms()] = mol.atoms
@@ -1215,10 +1215,10 @@ class TFMolManage(TFManage):
 		nmols = len(mol_set.mols)
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		self.TData.MaxNAtom = mol.NAtoms()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
@@ -1241,10 +1241,10 @@ class TFMolManage(TFManage):
 		nmols = len(mol_set.mols)
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
-		self.TData.MaxNAtoms = mol_set.MaxNAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		self.TData.MaxNAtom = mol_set.MaxNAtom()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
@@ -1265,10 +1265,10 @@ class TFMolManage(TFManage):
 		nmols = len(mol_set.mols)
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
-		self.TData.MaxNAtoms = mol_set.MaxNAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		self.TData.MaxNAtom = mol_set.MaxNAtom()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
@@ -1297,10 +1297,10 @@ class TFMolManage(TFManage):
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
 		NArgAtoms = mol.NAtoms()
-		InstAtoms = self.Instances.MaxNAtoms
+		InstAtoms = self.Instances.MaxNAtom
 		InstMols = self.Instances.batch_size
 		if (NArgAtoms>InstAtoms):
-			self.TData.MaxNAtoms = NArgAtoms
+			self.TData.MaxNAtom = NArgAtoms
 		AtomsToDo = max(NArgAtoms,InstAtoms)
 		xyzs = np.zeros((nmols, AtomsToDo, 3), dtype = np.float64)
 		dummy_grads = np.zeros((nmols, AtomsToDo, 3), dtype = np.float64)
@@ -1332,10 +1332,10 @@ class TFMolManage(TFManage):
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
 		NArgAtoms = mol.NAtoms()
-		InstAtoms = self.Instances.MaxNAtoms
+		InstAtoms = self.Instances.MaxNAtom
 		InstMols = self.Instances.batch_size
 		if (NArgAtoms>InstAtoms):
-			self.TData.MaxNAtoms = NArgAtoms
+			self.TData.MaxNAtom = NArgAtoms
 		AtomsToDo = max(NArgAtoms,InstAtoms)
 		xyzs = np.zeros((nmols, AtomsToDo, 3), dtype = np.float64)
 		dummy_grads = np.zeros((nmols, AtomsToDo, 3), dtype = np.float64)
@@ -1362,10 +1362,10 @@ class TFMolManage(TFManage):
 		nmols = len(mol_set.mols)
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		self.TData.MaxNAtom = mol.NAtoms()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
@@ -1396,10 +1396,10 @@ class TFMolManage(TFManage):
 		mol_set.mols.append(mol)
 		nmols = len(mol_set.mols)
 		dummy_energy = np.zeros((nmols))
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		self.TData.MaxNAtom = mol.NAtoms()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
@@ -1419,10 +1419,10 @@ class TFMolManage(TFManage):
 		mol_set.mols.append(mol)
 		nmols = len(mol_set.mols)
 		dummy_energy = np.zeros((nmols))
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		self.TData.MaxNAtom = mol.NAtoms()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
@@ -1446,10 +1446,10 @@ class TFMolManage(TFManage):
 		mol_set.mols.append(mol)
 		nmols = len(mol_set.mols)
 		dummy_energy = np.zeros((nmols))
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		self.TData.MaxNAtom = mol.NAtoms()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
@@ -1471,9 +1471,9 @@ class TFMolManage(TFManage):
 		mol_set.mols.append(mol)
 		nmols = len(mol_set.mols)
 		dummy_dipole = np.zeros((nmols, 3))
-		self.TData.MaxNAtoms = mol.NAtoms()
-		xyzs = np.zeros((nmols, self.TData.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.TData.MaxNAtoms), dtype = np.int32)
+		self.TData.MaxNAtom = mol.NAtoms()
+		xyzs = np.zeros((nmols, self.TData.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.TData.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
