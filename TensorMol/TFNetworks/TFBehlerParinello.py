@@ -18,6 +18,7 @@ else:
 from ..TFDescriptors.RawSH import *
 from ..TFDescriptors.RawSymFunc import *
 from ..ElementData import *
+from ..Math.TFMath import *
 from tensorflow.python.client import timeline
 
 class BehlerParinelloNetwork(object):
@@ -81,6 +82,8 @@ class BehlerParinelloNetwork(object):
 			for mol in self.mol_set.mols:
 				mol.make_neighbors(self.sparse_cutoff)
 			self.max_num_pairs = self.mol_set.max_neighbors()
+		self.step = 0
+		self.test_freq = PARAMS["test_freq"]
 
 		LOGGER.info("learning rate: %f", self.learning_rate)
 		LOGGER.info("batch size:    %d", self.batch_size)
@@ -146,12 +149,11 @@ class BehlerParinelloNetwork(object):
 		self.train()
 
 	def train(self):
-		test_freq = PARAMS["test_freq"]
 		if self.train_dipole:
 			mini_test_loss = 1e10
 			for step in range(1, 51):
 				self.dipole_train_step(step)
-				if step%test_freq==0:
+				if step%self.test_freq==0:
 					test_loss = self.dipole_test_step(step)
 					if (test_loss < mini_test_loss):
 						mini_test_loss = test_loss
@@ -168,14 +170,17 @@ class BehlerParinelloNetwork(object):
 					train_energy_flag=True
 					LOGGER.info("New best checkpoint found. Starting energy network training.")
 				step += 1
-		mini_test_loss = 1e10
-		for step in range(1, self.max_steps+1):
-			self.energy_train_step(step)
-			if step%test_freq==0:
-				test_loss = self.energy_test_step(step)
-				if (test_loss < mini_test_loss):
-					mini_test_loss = test_loss
-					self.save_checkpoint(step)
+		for i in range(self.max_steps):
+			self.step += 1
+			self.energy_train_step(self.step)
+			if self.step%self.test_freq==0:
+				test_loss = self.energy_test_step(self.step)
+				if self.step == self.test_freq:
+					self.best_loss = test_loss
+					self.save_checkpoint(self.step)
+				elif test_loss < self.best_loss:
+					self.best_loss = test_loss
+					self.save_checkpoint(self.step)
 		self.sess.close()
 		return
 
@@ -713,14 +718,14 @@ class BehlerParinelloNetwork(object):
 		for ministep in range (0, int(Ncase_test/self.batch_size)):
 			batch_data = self.get_energy_test_batch(self.batch_size)
 			feed_dict = self.fill_energy_feed_dict(batch_data)
-			total_energies, energy_labels, gradients, gradient_labels, total_loss, energy_loss, gradient_loss, rotation_loss, num_atoms, gaussian_params = self.sess.run([self.total_energy,
+			total_energies, energy_labels, gradients, gradient_labels, total_loss, energy_loss, gradient_loss, num_atoms, gaussian_params = self.sess.run([self.total_energy,
 			self.energy_pl, self.gradients, self.gradient_labels, self.energy_losses, self.energy_loss,
-			self.gradient_loss, self.rotation_loss, self.num_atoms_pl, self.gaussian_params],  feed_dict=feed_dict)
+			self.gradient_loss, self.num_atoms_pl, self.gaussian_params],  feed_dict=feed_dict)
 			test_loss += total_loss
 			num_mols += self.batch_size
 			test_energy_loss += energy_loss
 			test_gradient_loss += gradient_loss
-			test_rotation_loss += rotation_loss
+			# test_rotation_loss += rotation_loss
 			test_epoch_energy_labels.append(energy_labels)
 			test_epoch_energy_outputs.append(total_energies)
 			test_epoch_force_labels.append(-1.0 * gradient_labels)
@@ -1424,19 +1429,20 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 
-			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-							np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-							tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+			# rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+			# 				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+			# 				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
-			rotation_params = tf.gather_nd(rotation_params, padding_mask)
-			rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
-			self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
+			canonical_xyzs = Canonicalize(centered_xyzs)
+			# rotation_params = tf.gather_nd(rotation_params, padding_mask)
+			# rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
+			# self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
 			if self.train_sparse:
 				embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, self.Zs_pl,
 											self.pairs_pl, elements, self.gaussian_params, self.l_max)
 			else:
-				embed, mol_idx = tf_gaush_element_channelv3(rotated_xyzs, self.Zs_pl,
+				embed, mol_idx = tf_gaush_element_channelv3(canonical_xyzs, self.Zs_pl,
 											elements, self.gaussian_params, self.l_max)
 			for element in range(len(self.elements)):
 				embed[element] -= embed_mean[element]
@@ -1445,26 +1451,24 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
 			self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
 			self.total_energy = self.bp_energy
-			xyz_grad, rot_grad = tf.gradients(self.total_energy, [self.xyzs_pl, rotation_params])
+			xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 			self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 			self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
 			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
 			tf.summary.scalar("energy loss", self.energy_loss)
 			tf.add_to_collection('energy_losses', self.energy_loss)
 			self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
-			self.rotation_loss = self.loss_op(rot_grad)
+			# self.rotation_loss = self.loss_op(rot_grad)
 			if self.train_gradients:
 				tf.add_to_collection('energy_losses', self.gradient_loss)
 				tf.summary.scalar("gradient loss", self.gradient_loss)
-			if self.train_rotation:
-				tf.add_to_collection('energy_losses', self.rotation_loss)
-				tf.summary.scalar("rotational loss", self.rotation_loss)
+			# if self.train_rotation:
+			# 	tf.add_to_collection('energy_losses', self.rotation_loss)
+			# 	tf.summary.scalar("rotational loss", self.rotation_loss)
 			self.energy_losses = tf.add_n(tf.get_collection('energy_losses'))
 			tf.summary.scalar("energy losses", self.energy_losses)
 
-			update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-			with tf.control_dependencies(update_ops):
-				self.energy_train_op = self.optimizer(self.energy_losses, self.learning_rate, self.momentum)
+			self.energy_train_op = self.optimizer(self.energy_losses, self.learning_rate, self.momentum)
 			self.summary_op = tf.summary.merge_all()
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
