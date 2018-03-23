@@ -105,17 +105,17 @@ def TestTFGauSH():
 	np.set_printoptions(threshold=100000)
 	a=MSet("SmallMols_rand")
 	a.Load()
-	maxnatoms = a.MaxNAtoms()
+	MaxNAtom = a.MaxNAtom()
 	zlist = []
 	xyzlist = []
 	labelslist = []
 	natomlist = []
 	for i, mol in enumerate(a.mols):
-		paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
+		paddedxyz = np.zeros((MaxNAtom,3), dtype=np.float32)
 		paddedxyz[:mol.atoms.shape[0]] = mol.coords
-		paddedz = np.zeros((maxnatoms), dtype=np.int32)
+		paddedz = np.zeros((MaxNAtom), dtype=np.int32)
 		paddedz[:mol.atoms.shape[0]] = mol.atoms
-		paddedlabels = np.zeros((maxnatoms, 3), dtype=np.float32)
+		paddedlabels = np.zeros((MaxNAtom, 3), dtype=np.float32)
 		paddedlabels[:mol.atoms.shape[0]] = mol.properties["forces"]
 		xyzlist.append(paddedxyz)
 		zlist.append(paddedz)
@@ -188,16 +188,16 @@ def test_tf_neighbor():
 	np.set_printoptions(threshold=100000)
 	a=MSet("SmallMols_rand")
 	a.Load()
-	maxnatoms = a.MaxNAtoms()
+	MaxNAtom = a.MaxNAtom()
 	zlist = []
 	xyzlist = []
 	labelslist = []
 	for i, mol in enumerate(a.mols):
-		paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
+		paddedxyz = np.zeros((MaxNAtom,3), dtype=np.float32)
 		paddedxyz[:mol.atoms.shape[0]] = mol.coords
-		paddedz = np.zeros((maxnatoms), dtype=np.int32)
+		paddedz = np.zeros((MaxNAtom), dtype=np.int32)
 		paddedz[:mol.atoms.shape[0]] = mol.atoms
-		paddedlabels = np.zeros((maxnatoms, 3), dtype=np.float32)
+		paddedlabels = np.zeros((MaxNAtom, 3), dtype=np.float32)
 		paddedlabels[:mol.atoms.shape[0]] = mol.properties["forces"]
 		xyzlist.append(paddedxyz)
 		zlist.append(paddedz)
@@ -888,7 +888,7 @@ a.Load()
 b=MSet()
 for i in range(1):
 	b.mols.append(a.mols[i])
-maxnatoms = b.MaxNAtoms()
+MaxNAtom = b.MaxNAtom()
 # for mol in a.mols:
 # 	mol.make_neighbors(7.0)
 # max_num_pairs = a.max_neighbors()
@@ -898,11 +898,11 @@ xyzlist = []
 # pairlist = []
 # n_atoms_list = []
 for i, mol in enumerate(b.mols):
-	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
+	paddedxyz = np.zeros((MaxNAtom,3), dtype=np.float32)
 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
-	paddedz = np.zeros((maxnatoms), dtype=np.int32)
+	paddedz = np.zeros((MaxNAtom), dtype=np.int32)
 	paddedz[:mol.atoms.shape[0]] = mol.atoms
-	# paddedpairs = np.zeros((maxnatoms, max_num_pairs, 4), dtype=np.int32)
+	# paddedpairs = np.zeros((MaxNAtom, max_num_pairs, 4), dtype=np.int32)
 	# for j, atom_pairs in enumerate(mol.neighbor_list):
 	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]),
 	# 			np.array([j for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]),
@@ -923,9 +923,9 @@ zstack = tf.stack(zlist)
 # elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
 # tmp2 = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3)
 # tmp = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3, rotation_params)
-rotation_params = tf.stack([np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
-	np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
-	tf.random_uniform([2, maxnatoms], minval=0.1, maxval=1.9, dtype=tf.float32)], axis=-1)
+rotation_params = tf.stack([np.pi * tf.random_uniform([2, MaxNAtom], maxval=2.0, dtype=tf.float32),
+	np.pi * tf.random_uniform([2, MaxNAtom], maxval=2.0, dtype=tf.float32),
+	tf.random_uniform([2, MaxNAtom], minval=0.1, maxval=1.9, dtype=tf.float32)], axis=-1)
 padding_mask = tf.where(tf.not_equal(zstack, 0))
 centered_xyzs = tf.expand_dims(tf.gather_nd(xyzstack, padding_mask), axis=1) - tf.gather(xyzstack, padding_mask[:,0])
 tiled_Zs = tf.gather(zstack, padding_mask[:,0])
