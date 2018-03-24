@@ -78,15 +78,19 @@ def CanonicalizeGS(dxyzs):
 class InGauShBPNetwork:
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 256
+		self.batch_size = 512
 		self.MaxNAtom = 32
 		self.learning_rate = 0.0005
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
 		self.AtomTypes = [1,6,7,8]
 		self.l_max = 3
 		#self.GaussParams = np.array([[0.35, 0.30], [0.70, 0.30], [1.05, 0.30], [1.40, 0.30], [1.75, 0.30], [2.10, 0.30], [2.45, 0.30],[2.80, 0.30], [3.15, 0.30], [3.50, 0.30], [3.85, 0.30], [4.20, 0.30], [4.55, 0.30], [4.90, 0.30]])
-		#self.GaussParams = np.array([[0.35, 0.35], [0.70, 0.35], [1.05, 0.35], [1.40, 0.35], [2.10, 0.35], [2.80, 0.35], [3.15, 0.35], [3.50, 0.35], [3.85, 0.35], [4.20, 0.35], [4.90, 0.35]])
-		self.GaussParams = np.array([[0.70, 0.30], [1.05, 0.30], [1.40, 0.30], [2.10, 0.30],[2.80, 0.30],[3.50, 0.30], [4.20, 0.30], [4.90, 0.30], [5.50, 0.30]])
+		self.GaussParams = np.array([[0.35, 0.25], [0.70, 0.25], [1.05, 0.25], [1.40, 0.25], [2.10, 0.25], [2.80, 0.25], [3.15, 0.25], [3.50, 0.25], [3.85, 0.25], [4.20, 0.25], [4.90, 0.25], [5.50, 0.25]])
+		self.nrad = len(self.GaussParams)
+		self.nang = (self.l_max+1)**2
+		self.ncodes = self.AtomCodes.shape[-1]
+		self.ngaush = self.nrad*self.nang
+		self.nembdim = self.ngaush*self.ncodes
 		self.mset = aset
 		if (aset != None):
 			self.MaxNAtom = b.MaxNAtom()
@@ -113,6 +117,9 @@ class InGauShBPNetwork:
 	def Embed(self, dxyzs, Zs, pair_mask, gauss_params, elecode, l_max):
 		"""
 		Returns the GauSH embedding of every atom.
+		as a
+
+		mol X maxNAtom X ang X rad X code tensor.
 		"""
 		dist_tensor = tf.norm(dxyzs+1.e-36,axis=-1)
 		# NMOL X MAXNATOM X MAXNATOM X NSH
@@ -126,8 +133,9 @@ class InGauShBPNetwork:
 
 	def AtomEmbToAtomEnergy(self,emb,Zs):
 		"""
-		Per-embedded vector, send each to
-		an appropriate atom sub-net.
+		Per-embedded vector, send each to an appropriate atom sub-net.
+		This is an Old-Style BP. To be superceded by a element-less
+		version which is demonstrated below.
 		"""
 		# Step 1: Mol X MaxNAtom X nsh X nrad X ncode
 		# => mol X
@@ -138,35 +146,111 @@ class InGauShBPNetwork:
 		branches=[]
 		for ele in self.AtomTypes:
 			msk = tf.where(tf.equal(Zrs,ele),tf.ones_like(Zrs),tf.zeros_like(Zrs))
-			l1 = tf.layers.dense(inputs=embf,units=256,activation=sftpluswparam,use_bias=True)
-			l2 = tf.layers.dense(inputs=l1,units=256,activation=sftpluswparam,use_bias=True)
+			l1 = tf.layers.dense(inputs=embf,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
+			l2 = tf.layers.dense(inputs=l1,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
 			l3 = tf.layers.dense(l2,units=1,activation=None,use_bias=True)
 			branches.append(l3*msk)
 		output = tf.reshape(tf.add_n(branches),(self.batch_size,self.MaxNAtom,1))
 		return output
 
-	def AtomEmbToAtomEnergyChannel(self,emb,Zs):
+	def fc_variables(self, inp_, nunits=512):
+		inpdim = tf.shape(inp_)[1]
+		weights = tf.get_variable(shape=(inpdim,nunits),dtype=self.prec,initializer=tf.variance_scaling_initializer)
+		biases = tf.get_variable(shape=(nunits),dtype=self.prec,initializer=tf.variance_scaling_initializer)
+		return weights,biases
+
+	def AtomEmbToAtomEnergyChannel_Try0(self,emb,Zs):
 		"""
 		A version without atom branches which instead uses the atom
 		channels of its input.
 		"""
-		# Step 1: Mol X MaxNAtom X nsh X nrad X ncode
-		# => mol X
-		#embshp = tf.shape(emb)
-		#embdim = tf.reduce_prod(embshp[2:])
-		embf = tf.reshape(emb,(self.batch_size*self.MaxNAtom,-1))
-		Zrs = tf.cast(tf.reshape(Zs,(self.batch_size*self.MaxNAtom,-1)),self.prec)
-		# Gather the appropriate channels.
-		tf.reshape(tf.gather_nd(elecode, Zrs),(self.batch_size,self.MaxNAtom,-1)) # mol X maxNatom X 4
-		branches=[]
-		for ele in self.AtomTypes:
-			msk = tf.where(tf.equal(Zrs,ele),tf.ones_like(Zrs),tf.zeros_like(Zrs))
-			l1 = tf.layers.dense(inputs=embf,units=256,activation=sftpluswparam,use_bias=True)
-			l2 = tf.layers.dense(inputs=l1,units=256,activation=sftpluswparam,use_bias=True)
-			l3 = tf.layers.dense(l2,units=1,activation=None,use_bias=True)
-			branches.append(l3*msk)
-		output = tf.reshape(tf.add_n(branches),(self.batch_size,self.MaxNAtom,1))
-		return output
+		ncase = self.batch_size*self.MaxNAtom
+		embf = tf.reshape(emb,(ncase,-1)) # mol X maxNAtom X ang X rad X code tensor.
+		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
+		nchan = self.AtomCodes.shape[1]
+		nembdim = self.nembdim
+		nfc1 = 32
+		nfc2 = 32
+		# Each weight and the output is parameterized by the atom codes...
+		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # mol X maxNatom X 4
+		weight_one = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc1*nembdim, activation=tf.tanh, use_bias=False),(ncase,nfc1,nembdim))
+		bias_one = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc1, activation=tf.tanh, use_bias=False),(ncase,nfc1))
+		weight_two = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2*nfc1, activation=sftpluswparam, use_bias=False),(ncase,nfc2,nfc1))
+		bias_two = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2, activation=sftpluswparam, use_bias=False),(ncase,nfc2))
+		weight_final = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2, activation=sftpluswparam, use_bias=True),(ncase,nfc2))
+		bias_final = tf.layers.dense(inputs=CODES,units=1, activation=sftpluswparam, use_bias=True)
+		# Reshape and evaluate the desired network.
+		# case X dim X case X out X dim => case X out
+		l1 = sftpluswparam(tf.einsum('ij,ikj->ik',embf,weight_one) + bias_one)
+		l2 = sftpluswparam(tf.einsum('ij,ikj->ik',l1,weight_two) + bias_two)
+		output = tf.einsum('ij,ij->i',l2, weight_final)[:,tf.newaxis] + bias_final
+		return tf.reshape(output,(self.batch_size,self.MaxNAtom,1))
+
+	def AtomEmbToAtomEnergyChannel_failed(self,emb,Zs):
+		"""
+		A version without atom branches which instead uses the atom
+		channels of its input.
+		"""
+		ncase = self.batch_size*self.MaxNAtom
+		embf = tf.reshape(emb,(ncase,-1)) # mol X maxNAtom X ang X rad X code tensor.
+		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
+		nchan = self.AtomCodes.shape[1]
+		nembdim = self.nembdim
+		nfc1 = 32
+		nfc2 = 32
+		# Each weight and the output is parameterized by the atom codes...
+		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # mol X maxNatom X 4
+		weight_one = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc1*nembdim, activation=tf.tanh, use_bias=False),(ncase,nfc1,nembdim))
+		bias_one = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc1, activation=tf.tanh, use_bias=False),(ncase,nfc1))
+		weight_two = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2*nfc1, activation=sftpluswparam, use_bias=False),(ncase,nfc2,nfc1))
+		bias_two = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2, activation=sftpluswparam, use_bias=False),(ncase,nfc2))
+		weight_final = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2, activation=sftpluswparam, use_bias=True),(ncase,nfc2))
+		bias_final = tf.layers.dense(inputs=CODES,units=1, activation=sftpluswparam, use_bias=True)
+		# Reshape and evaluate the desired network.
+		# case X dim X case X out X dim => case X out
+		l1 = sftpluswparam(tf.einsum('ij,ikj->ik',embf,weight_one) + bias_one)
+		l2 = sftpluswparam(tf.einsum('ij,ikj->ik',l1,weight_two) + bias_two)
+		output = tf.einsum('ij,ij->i',l2, weight_final)[:,tf.newaxis] + bias_final
+		return tf.reshape(output,(self.batch_size,self.MaxNAtom,1))
+
+	def AtomEmbToAtomEnergyChannel(self,emb,Zs):
+		"""
+		This version creates a network to integrate weight information.
+		and then works like any ordinary network.
+		NOTE: This network is universal in the sense that it works on ANY atom!
+
+		Args:
+			emb: # mol X maxNAtom X ang X rad X code tensor.
+			Zs: mol X maxNatom X 1 atomic number tensor.
+		"""
+		ncase = self.batch_size*self.MaxNAtom
+		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
+		nchan = self.AtomCodes.shape[1]
+		nembdim = self.nembdim
+		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # (mol * maxNatom) X 4
+		# Combine the codes of the main atom and the sensed atom
+		# Using a hinton-esque tensor decomposition.
+		CODEKERN1 = tf.get_variable(name="CodeKernel", shape=(nchan,nchan),dtype=self.prec)
+		CODEKERN2 = tf.get_variable(name="CodeKernel2", shape=(nchan,nchan),dtype=self.prec)
+		# combine the weight kernel with the codes.
+		mix1 = tf.matmul(CODES,CODEKERN1) # ncase X ncode
+		embrs = tf.reshape(emb,(ncase,nchan,-1))
+		# Ensure any zero cases don't contribute.
+		msk = tf.where(tf.equal(Zrs,0.0),tf.zeros_like(Zrs),tf.ones_like(Zrs))
+		embrs *= msk[:,:,tf.newaxis]
+		weighted = tf.einsum('ijk,ij->ijk',embrs,mix1)
+		weighted2 = tf.einsum('ijk,jl->ilk',weighted,CODEKERN2)
+		# Now pass it through as usual.
+		l0 = tf.reshape(weighted2,(ncase,-1))
+		l0p = tf.concat([l0,CODES],axis=-1)
+		l1 = tf.layers.dense(inputs=l0p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
+		l1p = tf.concat([l1,CODES],axis=-1)
+		l2 = tf.layers.dense(inputs=l1p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
+		# in the final layer use the atom code information.
+		l2p = tf.concat([l2,CODES],axis=-1)
+		l3 = tf.layers.dense(l2p,units=1,activation=None,use_bias=True)*msk
+		# Finally allow for a simple 1-D linear filter based on element type.
+		return tf.reshape(l3,(self.batch_size,self.MaxNAtom,1))
 
 	def train_step(self,step):
 		feed_dict = self.NextBatch(self.mset)
@@ -224,7 +308,7 @@ class InGauShBPNetwork:
 		# Canonicalized difference Vectors.
 		self.cdxyzs = CanonicalizeGS(self.dxyzs*self.pair_mask)
 		self.embedded = self.Embed(self.cdxyzs, self.zs_pl, self.pair_mask, self.gp_tf, self.atom_codes, self.l_max)
-		self.AtomEnergies = self.AtomEmbToAtomEnergy(self.embedded,self.zs_pl)
+		self.AtomEnergies = self.AtomEmbToAtomEnergyChannel(self.embedded,self.zs_pl)
 		self.MolEnergies = tf.reduce_sum(self.AtomEnergies,axis=1,keepdims=False)
 
 		# Optional. Verify that the canonicalized differences are invariant.
