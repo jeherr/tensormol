@@ -123,6 +123,6 @@ ATOMCODELINES="""0. 0. 0. 0.
 def ReadAtomCodeString():
 	tmp = []
 	for line in ATOMCODELINES.split('\n'):
-		tmp.append(map(float,line.split(" ")))
+		tmp.append(list(map(float,line.split(" "))))
 	return np.array(tmp)
 ELEMENTCODES = ReadAtomCodeString()
