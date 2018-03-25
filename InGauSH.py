@@ -281,7 +281,8 @@ class InGauShBPNetwork:
 			ens,frcs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
 			for i in range(10):
 				print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i])
-			print("Mean Abs Error: ", np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
+			print("Mean Abs Error: (Energy)", np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
+			print("Mean Abs Error (Force): ", np.average(np.abs(frcs-feed_dict[self.groundTruthG_pl])))
 			if (self.DoRotGrad):
 				print("RotGrad:",self.sess.run([self.RotGrad], feed_dict=feed_dict))
 		return
