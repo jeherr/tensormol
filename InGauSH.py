@@ -109,6 +109,10 @@ class InGauShBPNetwork:
 		self.Prepare()
 		return
 
+	def Load(self,filename_=""):
+		self.saver.restore(self.sess, filename_)
+		return
+
 	def NextBatch(self,aset):
 		# Randomly accumulate a batch.
 		xyzs = np.zeros((self.batch_size,self.MaxNAtom,3),dtype=np.float)
@@ -253,9 +257,9 @@ class InGauShBPNetwork:
 		# Now pass it through as usual.
 		l0 = tf.reshape(weighted2,(ncase,-1))
 		l0p = tf.concat([l0,CODES],axis=-1)
-		l1 = tf.layers.dense(inputs=l0p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
+		l1 = tf.layers.dense(inputs=l0p,units=1024,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
 		l1p = tf.concat([l1,CODES],axis=-1)
-		l2 = tf.layers.dense(inputs=l1p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
+		l2 = tf.layers.dense(inputs=l1p,units=1024,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
 		# in the final layer use the atom code information.
 		l2p = tf.concat([l2,CODES],axis=-1)
 		l3 = tf.layers.dense(l2p,units=1,activation=None,use_bias=True)*msk
@@ -270,6 +274,7 @@ class InGauShBPNetwork:
 
 	def print_training(self, step, loss_):
 		if (step%10==0):
+			self.saver.save(self.sess, './networks/InGauSH'+str(step)+'.ckpt')
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
 			print(self.sess.run([self.gp_tf])[0])
 			feed_dict = self.NextBatch(self.mset)
@@ -336,6 +341,8 @@ class InGauShBPNetwork:
 
 		self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 		self.init = tf.global_variables_initializer()
+		self.saver = tf.train.Saver()
+
 		self.sess.run(self.init)
 
 net = InGauShBPNetwork(b)
