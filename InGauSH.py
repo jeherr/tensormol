@@ -1,7 +1,8 @@
 from TensorMol import *
 import numpy as np
 
-b = MSet("HNCO_small")
+#b = MSet("HNCO_small")
+b = MSet("chemspider12_clean_maxatom35")
 b.Load()
 MAX_ATOMIC_NUMBER = 55
 
@@ -88,9 +89,9 @@ def CanonicalizeGS(dxyzs):
 class InGauShBPNetwork:
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 128
+		self.batch_size = 512
 		self.MaxNAtom = 32
-		self.learning_rate = 0.0005
+		self.learning_rate = 0.0003
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
 		self.AtomTypes = [1,6,7,8]
 		self.l_max = 4
@@ -268,23 +269,24 @@ class InGauShBPNetwork:
 
 	def train_step(self,step):
 		feed_dict = self.NextBatch(self.mset)
-		_,train_loss = self.sess.run([self.train_op, self.loss], feed_dict=feed_dict)
+		_,train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
 		self.print_training(step, train_loss)
 		return
 
 	def print_training(self, step, loss_):
 		if (step%10==0):
-			self.saver.save(self.sess, './networks/InGauSH'+str(step)+'.ckpt')
+			self.saver.save(self.sess, './networks/InGauSH.ckpt')
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
 			print(self.sess.run([self.gp_tf])[0])
 			feed_dict = self.NextBatch(self.mset)
-			ens,frcs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
+			ens,frcs,summary = self.sess.run([self.MolEnergies,self.MolGrads,self.summary_op], feed_dict=feed_dict)
 			for i in range(10):
 				print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i])
 			print("Mean Abs Error: (Energy)", np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
 			print("Mean Abs Error (Force): ", np.average(np.abs(frcs-feed_dict[self.groundTruthG_pl])))
 			if (self.DoRotGrad):
 				print("RotGrad:",self.sess.run([self.RotGrad], feed_dict=feed_dict))
+			self.writer.add_summary(summary,step)
 		return
 
 	def training(self, loss):
@@ -294,7 +296,7 @@ class InGauShBPNetwork:
 		train_op = optimizer.minimize(loss, global_step=global_step)
 		return train_op
 
-	def Train(self,mxsteps=3000):
+	def Train(self,mxsteps=30000):
 		test_freq = 40
 		for step in range(1, mxsteps+1):
 			self.train_step(step)
@@ -336,13 +338,23 @@ class InGauShBPNetwork:
 
 		# Add force error?
 		self.MolGrads = tf.gradients(self.MolEnergies,self.xyzs_pl)[0]
-		self.loss = tf.losses.mean_squared_error(self.MolEnergies, self.groundTruthE_pl)+tf.losses.mean_squared_error(self.MolGrads, self.groundTruthG_pl)
-		tf.add_to_collection('losses', self.loss)
-		self.train_op = self.training(self.loss)
+
+		self.Eloss = tf.losses.mean_squared_error(self.MolEnergies, self.groundTruthE_pl)
+		self.Gloss = tf.losses.mean_squared_error(self.MolGrads, self.groundTruthG_pl)
+		self.Tloss = self.Eloss + self.Gloss/(3*20)
+		tf.summary.scalar('ELoss',self.Eloss)
+		tf.summary.scalar('GLoss',self.Gloss)
+		tf.summary.scalar('TLoss',self.Tloss)
+		tf.add_to_collection('losses', self.Eloss)
+		tf.add_to_collection('losses', self.Gloss)
+		tf.add_to_collection('losses', self.Tloss)
+		self.train_op = self.training(self.Tloss)
 
 		self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 		self.init = tf.global_variables_initializer()
 		self.saver = tf.train.Saver()
+		self.writer = tf.summary.FileWriter('./networks/InGauSH', graph=tf.get_default_graph())
+		self.summary_op = tf.summary.merge_all()
 
 		self.sess.run(self.init)
 
