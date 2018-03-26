@@ -72,24 +72,27 @@ def TestMetadynamics():
 	meta.Prop()
 
 def test_md():
-	PARAMS["RBFS"] = np.array([[0.35, 0.35], [0.70, 0.35], [1.05, 0.35], [1.40, 0.35], [1.75, 0.35], [2.10, 0.35], [2.45, 0.35],
-								[2.80, 0.35], [3.15, 0.35], [3.50, 0.35], [3.85, 0.35], [4.20, 0.35], [4.55, 0.35], [4.90, 0.35]])
-	PARAMS["ANES"] = np.array([2.20, 1.0, 1.0, 1.0, 1.0, 2.55, 3.04, 3.44]) #pauling electronegativity
-	PARAMS["SH_NRAD"] = 14
-	PARAMS["SH_LMAX"] = 4
-	a = MSet("OptMols")
+	PARAMS["tf_prec"] = "tf.float32"
+	a = MSet("water10")
 	a.ReadXYZ()
-	mol = a.mols[4]
-	manager=TFManage(Name_="SmallMols_GauSH_fc_sqdiff_GauSH_direct",Train_=False,NetType_="fc_sqdiff_GauSH_direct")
-	force_field = lambda x: manager.evaluate_mol_forces_direct(x)
+	mol = a.mols[1]
+	network = BehlerParinelloGauSHv2(name="BPGauSH_water_wb97xd_6311gss_Thu_Mar_15_16.29.21_2018")
+	def force_field(coords, forces=True):
+		m=Mol(mol.atoms, coords)
+		if forces:
+			energy, forces = network.evaluate_mol(m, forces, avg_rots=True)
+			return energy, JOULEPERHARTREE*forces
+		else:
+			energy = network.evaluate_mol(m, forces, avg_rots=True)
+			return energy
 	masses = np.array(map(lambda x: ATOMICMASSESAMU[x-1], mol.atoms))
 	print "Masses:", masses
-	PARAMS["MDdt"] = 0.2
+	PARAMS["MDdt"] = 0.5
 	PARAMS["RemoveInvariant"]=True
 	PARAMS["MDMaxStep"] = 20000
-	PARAMS["MDThermostat"] = "Nose"
+	PARAMS["MDThermostat"] = None
 	PARAMS["MDTemp"]= 300.0
-	md = VelocityVerlet(force_field, mol)
+	md = VelocityVerlet(force_field, mol, EandF_=force_field)
 	md.Prop()
 
 def TestTFBond():
@@ -412,11 +415,14 @@ def evaluate_BPSymFunc(mset):
 	print "RMSE:",np.sqrt(np.mean(np.square(output-labels)))*627.509
 
 def water_dimer_plot():
-	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
-	PARAMS["SH_NRAD"] = 16
-	PARAMS["SH_LMAX"] = 3
-	PARAMS["HiddenLayers"] = [512, 512, 512]
-	PARAMS["NeuronType"] = "shifted_softplus"
+	a = MSet("water_trimer_stretch")
+	a.ReadXYZ()
+	m=a.mols[0]
+	# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
+	# PARAMS["SH_NRAD"] = 16
+	# PARAMS["SH_LMAX"] = 5
+	# PARAMS["HiddenLayers"] = [512, 512, 512]
+	# PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
 	def qchemdft(m_,ghostatoms,basis_ = '6-31g*',xc_='b3lyp', jobtype_='force', filename_='tmp', path_='./qchem/', threads=False):
 		istring = '$molecule\n0 1 \n'
@@ -464,28 +470,30 @@ def water_dimer_plot():
 			return Energy
 		else:
 			raise Exception("jobtype needs formatted for return variables")
-
-	a = MSet("H2O_dimer_flip_rightone")
-	a.ReadXYZ()
-	manager = TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Wed_Feb_14_12.10.39_2018", network_type = "BPGauSH")
+	# a = MSet("H2O_dimer_flip_rightone")
+	# a.ReadXYZ()
+	# manager=TFMolManageDirect(name="BPGauSH_water_wb97xd_6311gss_Mon_Feb_12_12.17.58_2018", network_type = "BPGauSH")
+	# manager.network.embed_shape = manager.network.embedding_shape
+	network = BehlerParinelloGauSHv2(name="BPGauSH_water_wb97xd_6311gss_Thu_Mar_15_16.29.21_2018")
 	qchemff = lambda x, y: qchemdft(x, y, basis_ = '6-311g**',xc_='wb97x-d', jobtype_='sp', filename_='tmp', path_='./qchem/', threads=8)
 	# for i in range(len(a.mols)):
-	# 	# h2o1 = qchemff(Mol(mol.atoms[:3], mol.coords[:3]), [])
-	# 	# h2o23 = qchemff(Mol(mol.atoms[3:], mol.coords[3:]), [])
-	# 	# h2o1cp = qchemff(mol, [3, 4, 5])
-	# 	# h2o2cp = qchemff(mol, [0, 1, 2])
+	# # 	h2o1 = qchemff(Mol(a.mols[i].atoms[:3], a.mols[i].coords[:3]), [])
+	# # 	h2o2 = qchemff(Mol(a.mols[i].atoms[3:], a.mols[i].coords[3:]), [])
+	# # # 	# h2o1cp = qchemff(mol, [3, 4, 5])
+	# # # 	# h2o2cp = qchemff(mol, [0, 1, 2])
 	# 	dimer = qchemff(a.mols[i], [])
-	# 	# cpc = h2o1cp - h2o1 + h2o2cp - h2o2
-	# 	# cp_correction.append(cpc)
-	# 	bond_e = dimer# - h2o1 - h2o23
+	# # # 	# cpc = h2o1cp - h2o1 + h2o2cp - h2o2
+	# # # 	# cp_correction.append(cpc)
+	# 	bond_e = dimer# - h2o1 - h2o2
 	# 	print "{%.10f, %.10f}," % (i, bond_e * 627.509)
-	print "TensorMol evaluation"
+	# print "TensorMol evaluation"
 	for i in range(len(a.mols)):
-		dimer = manager.evaluate_mol(a.mols[i], False)
-		# h2o1 = manager.evaluate_mol(Mol(mol.atoms[:3], mol.coords[:3]), False)
-		# h2o23 = manager.evaluate_mol(Mol(mol.atoms[3:], mol.coords[3:]), False)
-		bond_e = dimer# - h2o1 - h2o23
-		print "{%.10f, %.10f}," % (i, bond_e * 627.509)
+		dimer = network.evaluate_mol(a.mols[i], False)
+		h2o1 = network.evaluate_mol(Mol(a.mols[i].atoms[:3], a.mols[i].coords[:3]), False)
+		h2o2 = network.evaluate_mol(Mol(a.mols[i].atoms[3:], a.mols[i].coords[3:]), False)
+		bond_e = dimer - h2o1 - h2o2
+		bond_dist = np.linalg.norm(a.mols[i].coords[1] - (a.mols[i].coords[4] + a.mols[i].coords[7])/2)
+		print "{%.10f, %.10f}," % (bond_dist, bond_e * 627.509)
 
 def train_Poly_GauSH():
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.35, 16)), axis=1)
@@ -871,92 +879,126 @@ def minimize_ob():
 # metaopt_chemsp()
 # water_web()
 
-PARAMS["tf_prec"] = "tf.float32"
-PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
-PARAMS["SH_NRAD"] = 16
-a = MSet("SmallMols_rand")
-a.Load()
-# a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
-# # # Tesselate that water to create a box
-# ntess = 16
-# latv = 2.8*np.eye(3)
-# # # # Start with a water in a ten angstrom box.
-# lat = Lattice(latv)
-# mc = lat.CenteredInLattice(a.mols[0])
-# mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
-# # # mt.WriteXYZfile()
-b=MSet()
-for i in range(1):
-	b.mols.append(a.mols[i])
-MaxNAtom = b.MaxNAtom()
-# for mol in a.mols:
-# 	mol.make_neighbors(7.0)
-# max_num_pairs = a.max_neighbors()
+# PARAMS["tf_prec"] = "tf.float32"
+# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
+# PARAMS["SH_NRAD"] = 16
+# a = MSet("SmallMols_rand")
+# a.Load()
+# # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
+# # # # Tesselate that water to create a box
+# # ntess = 16
+# # latv = 2.8*np.eye(3)
+# # # # # Start with a water in a ten angstrom box.
+# # lat = Lattice(latv)
+# # mc = lat.CenteredInLattice(a.mols[0])
+# # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
+# # # # mt.WriteXYZfile()
+# b=MSet()
+# for i in range(1):
+# 	b.mols.append(a.mols[i])
+# maxnatoms = b.MaxNAtoms()
+# # for mol in a.mols:
+# # 	mol.make_neighbors(7.0)
+# # max_num_pairs = a.max_neighbors()
+#
+# zlist = []
+# xyzlist = []
+# # pairlist = []
+# # n_atoms_list = []
+# for i, mol in enumerate(b.mols):
+# 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
+# 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
+# 	paddedz = np.zeros((maxnatoms), dtype=np.int32)
+# 	paddedz[:mol.atoms.shape[0]] = mol.atoms
+# 	# paddedpairs = np.zeros((maxnatoms, max_num_pairs, 4), dtype=np.int32)
+# 	# for j, atom_pairs in enumerate(mol.neighbor_list):
+# 	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]),
+# 	# 			np.array([j for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]),
+# 	# 			mol.atoms[mol.neighbor_list[j]]]).T
+# 	# 	paddedpairs[j,:len(atom_pairs)] = molpair
+# 	xyzlist.append(paddedxyz)
+# 	zlist.append(paddedz)
+# 	# pairlist.append(paddedpairs)
+# 	# n_atoms_list.append(mol.NAtoms())
+# 	# if i == 1:
+# 	# 	break
+# xyzstack = tf.stack(xyzlist)
+# zstack = tf.stack(zlist)
+# # pairstack = tf.stack(pairlist)
+# # natomsstack = tf.stack(n_atoms_list)
+# # r_cutoff = 6.5
+# # gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
+# # elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
+# # tmp2 = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3)
+# # tmp = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3, rotation_params)
+# rotation_params = tf.stack([np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
+# 	np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
+# 	tf.random_uniform([2, maxnatoms], minval=0.1, maxval=1.9, dtype=tf.float32)], axis=-1)
+# padding_mask = tf.where(tf.not_equal(zstack, 0))
+# centered_xyzs = tf.expand_dims(tf.gather_nd(xyzstack, padding_mask), axis=1) - tf.gather(xyzstack, padding_mask[:,0])
+# # tiled_Zs = tf.gather(zstack, padding_mask[:,0])
+# # reduce_pad = tf.expand_dims(tf.where(tf.not_equal(tiled_Zs, 0), tf.ones_like(tiled_Zs, dtype=tf.float32), tf.zeros_like(tiled_Zs, dtype=tf.float32)), axis=-1)
+# # centered_xyzs *= reduce_pad
+# rotation_params = tf.gather_nd(rotation_params, padding_mask)
+# rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
+# # tiled_Zs = tf.gather(zstack, padding_mask[:,0])
+# # centered_xyzs = tf.where(tf.not_equal(tiled_Zs, 0), centered_xyzs, tf.zeros_like(centered_xyzs))
+# tmp = Canonicalize(rotated_xyzs)
+# grad = tf.gradients(tmp, rotation_params)[0]
+# sess = tf.Session()
+# sess.run(tf.global_variables_initializer())
+# options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+# run_metadata = tf.RunMetadata()
+# # # for i in range(a.mols[0].atoms.shape[0]):
+# # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
+# @TMTiming("test")
+# def get_pairs():
+# 	tmp3 = sess.run(grad, options=options, run_metadata=run_metadata)
+# 	return tmp3
+# tmp5 = get_pairs()
+# print tmp5.shape
+# # m=Mol(zlist[0], xyzlist[0])
+# # m.WriteXYZfile(fname="tmp", mode="w")
+# # print tmp6.shape
+# # print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
+# # print np.allclose(tmp5, tmp6, 1e-01)
+# # print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
+# fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+# chrome_trace = fetched_timeline.generate_chrome_trace_format()
+# with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
+# 	f.write(chrome_trace)
 
-zlist = []
-xyzlist = []
-# pairlist = []
-# n_atoms_list = []
-for i, mol in enumerate(b.mols):
-	paddedxyz = np.zeros((MaxNAtom,3), dtype=np.float32)
-	paddedxyz[:mol.atoms.shape[0]] = mol.coords
-	paddedz = np.zeros((MaxNAtom), dtype=np.int32)
-	paddedz[:mol.atoms.shape[0]] = mol.atoms
-	# paddedpairs = np.zeros((MaxNAtom, max_num_pairs, 4), dtype=np.int32)
-	# for j, atom_pairs in enumerate(mol.neighbor_list):
-	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]),
-	# 			np.array([j for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]),
-	# 			mol.atoms[mol.neighbor_list[j]]]).T
-	# 	paddedpairs[j,:len(atom_pairs)] = molpair
-	xyzlist.append(paddedxyz)
-	zlist.append(paddedz)
-	# pairlist.append(paddedpairs)
-	# n_atoms_list.append(mol.NAtoms())
-	# if i == 1:
-	# 	break
-xyzstack = tf.stack(xyzlist)
-zstack = tf.stack(zlist)
-# pairstack = tf.stack(pairlist)
-# natomsstack = tf.stack(n_atoms_list)
-# r_cutoff = 6.5
-# gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
-# elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
-# tmp2 = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3)
-# tmp = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3, rotation_params)
-rotation_params = tf.stack([np.pi * tf.random_uniform([2, MaxNAtom], maxval=2.0, dtype=tf.float32),
-	np.pi * tf.random_uniform([2, MaxNAtom], maxval=2.0, dtype=tf.float32),
-	tf.random_uniform([2, MaxNAtom], minval=0.1, maxval=1.9, dtype=tf.float32)], axis=-1)
-padding_mask = tf.where(tf.not_equal(zstack, 0))
-centered_xyzs = tf.expand_dims(tf.gather_nd(xyzstack, padding_mask), axis=1) - tf.gather(xyzstack, padding_mask[:,0])
-tiled_Zs = tf.gather(zstack, padding_mask[:,0])
-reduce_pad = tf.expand_dims(tf.where(tf.not_equal(tiled_Zs, 0), tf.ones_like(tiled_Zs, dtype=tf.float32), tf.zeros_like(tiled_Zs, dtype=tf.float32)), axis=-1)
-centered_xyzs *= reduce_pad
-rotation_params = tf.gather_nd(rotation_params, padding_mask)
-rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
-# tiled_Zs = tf.gather(zstack, padding_mask[:,0])
-# centered_xyzs = tf.where(tf.not_equal(tiled_Zs, 0), centered_xyzs, tf.zeros_like(centered_xyzs))
-tmp = Canonicalize(rotated_xyzs)
-grad = tf.gradients(tmp, rotation_params)[0]
-sess = tf.Session()
-sess.run(tf.global_variables_initializer())
-options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-run_metadata = tf.RunMetadata()
-# # for i in range(a.mols[0].atoms.shape[0]):
-# # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
-@TMTiming("test")
-def get_pairs():
-	tmp3, tmp4 = sess.run([centered_xyzs, rotated_xyzs], options=options, run_metadata=run_metadata)
-	return tmp3, tmp4
-tmp5, tmp6 = get_pairs()
-print tmp5
-print tmp5.shape
-# m=Mol(zlist[0], xyzlist[0])
-# m.WriteXYZfile(fname="tmp", mode="w")
-# print tmp6.shape
-# print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
-# print np.allclose(tmp5, tmp6, 1e-01)
-# print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
-fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-chrome_trace = fetched_timeline.generate_chrome_trace_format()
-with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
-	f.write(chrome_trace)
+# a = MSet("water_dimer_rotate")
+# a.ReadXYZ()
+# m=a.mols[0]
+# # axis=m.coords[1]-m.coords[2]
+# # naxis=axis/np.linalg.norm(axis)
+# # for i in range(361):
+# # 	angle=(2./360.)*i*np.pi
+# # 	rmat=np.array([[np.cos(angle)+np.square(naxis[0])*(1-np.cos(angle)), naxis[0]*naxis[1]*(1-np.cos(angle))-naxis[2]*np.sin(angle), naxis[0]*naxis[2]*(1-np.cos(angle))+naxis[1]*np.sin(angle)],
+# # 					[naxis[0]*naxis[1]*(1-np.cos(angle))+naxis[2]*np.sin(angle), np.cos(angle)+np.square(naxis[1])*(1-np.cos(angle)), naxis[1]*naxis[2]*(1-np.cos(angle))-naxis[0]*np.sin(angle)],
+# # 					[naxis[0]*naxis[2]*(1-np.cos(angle))-naxis[1]*np.sin(angle), naxis[1]*naxis[2]*(1-np.cos(angle))-naxis[0]*np.sin(angle), np.cos(angle)+np.square(naxis[2])*(1-np.cos(angle))]])
+# # 	new_coords = m.coords.copy()-m.coords[1]
+# # 	new_h = np.matmul(rmat, new_coords[0])
+# # 	new_coords[0] = new_h
+# # 	new_m = Mol(m.atoms, new_coords)
+# # 	new_m.WriteXYZfile(fname="tmp", mode="a")
+#
+# r = m.coords[0] - m.coords[1]
+# r = r/np.sum(np.square(r))**0.5
+# v = m.coords[2] - m.coords[1]
+# for i in range(0, 361):
+# 	angle = i*math.pi/180.0
+# 	new_coords = m.coords.copy()
+# 	v_rot = (1-math.cos(angle))*np.dot(v, r)*r + math.cos(angle)*v + math.sin(angle)*np.cross(r, v)
+# 	new_coords[2] = m.coords[1] + v_rot
+# 	new_m = Mol(m.atoms, new_coords)
+# 	new_m.WriteXYZfile(fname="tmp")
+
+md=np.loadtxt("./results/MDLog.txt")
+p=md[:,5]*2625.499638*1000/4183.9953
+k=md[:,4]*30/1000.0*1000/4183.9953
+f=open("energy_conserv3.dat", "w")
+for i in range(len(p)):
+	f.write(str(i*0.5/1000)+" "+str(p[i])+" "+str(k[i])+"\n")
+f.close
