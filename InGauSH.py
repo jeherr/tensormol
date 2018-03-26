@@ -62,8 +62,10 @@ def CanonicalizeGS(dxyzs):
 
 	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[1],3))
 	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[1]+3,3))
-	weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
-	maskedDs = tf.where(tf.equal(weights,0.),tf.zeros_like(weights),weights)
+	weights = tf.exp(-1.0*tf.norm(dxyzsandDef,axis=-1))
+	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
+	#weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
+	#maskedDs = tf.where(tf.equal(weights,0.),tf.zeros_like(weights),weights)
 
 	# GS orth the first three vectors.
 	tosort= tf.reshape(maskedDs,(argshape[0]*argshape[1],-1))
