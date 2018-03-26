@@ -1,8 +1,8 @@
 from TensorMol import *
 import numpy as np
 
-#b = MSet("HNCO_small")
-b = MSet("chemspider12_clean_maxatom35")
+b = MSet("HNCO_small")
+#b = MSet("chemspider12_clean_maxatom35")
 b.Load()
 MAX_ATOMIC_NUMBER = 55
 
@@ -62,8 +62,8 @@ def CanonicalizeGS(dxyzs):
 
 	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[1],3))
 	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[1]+3,3))
-	weights = tf.exp(-1.0*tf.norm(dxyzsandDef,axis=-1))
-	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
+	weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
+	maskedDs = tf.where(tf.equal(weights,0.),tf.zeros_like(weights),weights)
 
 	# GS orth the first three vectors.
 	tosort= tf.reshape(maskedDs,(argshape[0]*argshape[1],-1))
@@ -89,14 +89,14 @@ def CanonicalizeGS(dxyzs):
 class InGauShBPNetwork:
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 512
+		self.batch_size = 256
 		self.MaxNAtom = 32
-		self.learning_rate = 0.0003
+		self.learning_rate = 0.0002
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
 		self.AtomTypes = [1,6,7,8]
-		self.l_max = 4
+		self.l_max = 3
 		#self.GaussParams = np.array([[0.35, 0.30], [0.70, 0.30], [1.05, 0.30], [1.40, 0.30], [1.75, 0.30], [2.10, 0.30], [2.45, 0.30],[2.80, 0.30], [3.15, 0.30], [3.50, 0.30], [3.85, 0.30], [4.20, 0.30], [4.55, 0.30], [4.90, 0.30]])
-		self.GaussParams = np.array([[0.35, 0.24], [0.70, 0.24], [1.05, 0.24], [1.40, 0.24], [1.75, 0.24],[2.10, 0.24], [2.80, 0.24], [2.45, 0.24],[3.15, 0.24], [3.50, 0.24], [3.85, 0.24], [4.20, 0.24], [4.90, 0.24], [5.50, 0.24]])
+		self.GaussParams = np.array([[0.36, 0.25], [0.70, 0.24], [1.05, 0.24], [1.38, 0.23], [1.70, 0.23],[2.08, 0.23], [2.79, 0.23], [2.42, 0.23],[3.14, 0.23], [3.50, 0.23], [3.85, 0.23], [4.20, 0.23], [4.90, 0.23], [5.50, 0.22], [6.0, 0.22]])
 		self.nrad = len(self.GaussParams)
 		self.nang = (self.l_max+1)**2
 		self.ncodes = self.AtomCodes.shape[-1]
@@ -110,9 +110,46 @@ class InGauShBPNetwork:
 		self.Prepare()
 		return
 
-	def Load(self,filename_=""):
-		self.saver.restore(self.sess, filename_)
+	def Load(self):
+		chkpt = tf.train.latest_checkpoint('./networks/')
+		self.saver.restore(self.sess, chkpt)
 		return
+
+	def GetEnergyForceRoutine(self,m):
+		if (m.NAtoms() > self.MaxNAtom):
+			self.MaxNAtom = m.NAtoms()
+		self.batch_size=1
+		self.Prepare()
+		self.Load()
+		def EF(xyz_,DoForce=True):
+			xyzs = np.zeros((self.batch_size,self.MaxNAtom,3))
+			Zs = np.zeros((self.batch_size,self.MaxNAtom,1))
+			xyzs[0,:m.NAtoms(),:] = xyz_
+			Zs[0,:m.NAtoms(),0] = m.atoms
+			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs}
+			if (DoForce):
+				ens,fs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
+				return ens[0],fs[0][:m.NAtoms()]*(-JOULEPERHARTREE)
+			else:
+				ens = self.sess.run(self.MolEnergies, feed_dict=feed_dict)[0]
+				return ens[0]
+		return EF
+
+	def GetEnergyForceHessRoutine(self,m):
+		if (m.NAtoms() > self.MaxNAtom):
+			self.MaxNAtom = m.NAtoms()
+		self.batch_size=1
+		self.Prepare()
+		self.Load()
+		def EFH(xyz_):
+			xyzs = np.zeros((self.batch_size,self.MaxNAtom,3))
+			Zs = np.zeros((self.batch_size,self.MaxNAtom,1))
+			xyzs[0,:m.NAtoms(),:] = xyz_
+			zs[0,:m.NAtoms(),0] = m.atoms
+			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:zs}
+			ens,fs,hs = self.sess.run([self.MolEnergies,self.MolGrads,self.MolHess], feed_dict=feed_dict)
+			return ens[0], fs[0][:m.NAtoms()]*(-JOULEPERHARTREE), hs[0][:m.NAtoms()][:m.NAtoms()]*JOULEPERHARTREE*JOULEPERHARTREE
+		return EFH
 
 	def NextBatch(self,aset):
 		# Randomly accumulate a batch.
@@ -168,66 +205,6 @@ class InGauShBPNetwork:
 		output = tf.reshape(tf.add_n(branches),(self.batch_size,self.MaxNAtom,1))
 		return output
 
-	def fc_variables(self, inp_, nunits=512):
-		inpdim = tf.shape(inp_)[1]
-		weights = tf.get_variable(shape=(inpdim,nunits),dtype=self.prec,initializer=tf.variance_scaling_initializer)
-		biases = tf.get_variable(shape=(nunits),dtype=self.prec,initializer=tf.variance_scaling_initializer)
-		return weights,biases
-
-	def AtomEmbToAtomEnergyChannel_Try0(self,emb,Zs):
-		"""
-		A version without atom branches which instead uses the atom
-		channels of its input.
-		"""
-		ncase = self.batch_size*self.MaxNAtom
-		embf = tf.reshape(emb,(ncase,-1)) # mol X maxNAtom X ang X rad X code tensor.
-		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
-		nchan = self.AtomCodes.shape[1]
-		nembdim = self.nembdim
-		nfc1 = 32
-		nfc2 = 32
-		# Each weight and the output is parameterized by the atom codes...
-		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # mol X maxNatom X 4
-		weight_one = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc1*nembdim, activation=tf.tanh, use_bias=False),(ncase,nfc1,nembdim))
-		bias_one = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc1, activation=tf.tanh, use_bias=False),(ncase,nfc1))
-		weight_two = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2*nfc1, activation=sftpluswparam, use_bias=False),(ncase,nfc2,nfc1))
-		bias_two = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2, activation=sftpluswparam, use_bias=False),(ncase,nfc2))
-		weight_final = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2, activation=sftpluswparam, use_bias=True),(ncase,nfc2))
-		bias_final = tf.layers.dense(inputs=CODES,units=1, activation=sftpluswparam, use_bias=True)
-		# Reshape and evaluate the desired network.
-		# case X dim X case X out X dim => case X out
-		l1 = sftpluswparam(tf.einsum('ij,ikj->ik',embf,weight_one) + bias_one)
-		l2 = sftpluswparam(tf.einsum('ij,ikj->ik',l1,weight_two) + bias_two)
-		output = tf.einsum('ij,ij->i',l2, weight_final)[:,tf.newaxis] + bias_final
-		return tf.reshape(output,(self.batch_size,self.MaxNAtom,1))
-
-	def AtomEmbToAtomEnergyChannel_failed(self,emb,Zs):
-		"""
-		A version without atom branches which instead uses the atom
-		channels of its input.
-		"""
-		ncase = self.batch_size*self.MaxNAtom
-		embf = tf.reshape(emb,(ncase,-1)) # mol X maxNAtom X ang X rad X code tensor.
-		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
-		nchan = self.AtomCodes.shape[1]
-		nembdim = self.nembdim
-		nfc1 = 32
-		nfc2 = 32
-		# Each weight and the output is parameterized by the atom codes...
-		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # mol X maxNatom X 4
-		weight_one = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc1*nembdim, activation=tf.tanh, use_bias=False),(ncase,nfc1,nembdim))
-		bias_one = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc1, activation=tf.tanh, use_bias=False),(ncase,nfc1))
-		weight_two = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2*nfc1, activation=sftpluswparam, use_bias=False),(ncase,nfc2,nfc1))
-		bias_two = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2, activation=sftpluswparam, use_bias=False),(ncase,nfc2))
-		weight_final = tf.reshape(tf.layers.dense(inputs=CODES,units=nfc2, activation=sftpluswparam, use_bias=True),(ncase,nfc2))
-		bias_final = tf.layers.dense(inputs=CODES,units=1, activation=sftpluswparam, use_bias=True)
-		# Reshape and evaluate the desired network.
-		# case X dim X case X out X dim => case X out
-		l1 = sftpluswparam(tf.einsum('ij,ikj->ik',embf,weight_one) + bias_one)
-		l2 = sftpluswparam(tf.einsum('ij,ikj->ik',l1,weight_two) + bias_two)
-		output = tf.einsum('ij,ij->i',l2, weight_final)[:,tf.newaxis] + bias_final
-		return tf.reshape(output,(self.batch_size,self.MaxNAtom,1))
-
 	def AtomEmbToAtomEnergyChannel(self,emb,Zs):
 		"""
 		This version creates a network to integrate weight information.
@@ -258,9 +235,9 @@ class InGauShBPNetwork:
 		# Now pass it through as usual.
 		l0 = tf.reshape(weighted2,(ncase,-1))
 		l0p = tf.concat([l0,CODES],axis=-1)
-		l1 = tf.layers.dense(inputs=l0p,units=1024,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
+		l1 = tf.layers.dense(inputs=l0p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
 		l1p = tf.concat([l1,CODES],axis=-1)
-		l2 = tf.layers.dense(inputs=l1p,units=1024,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
+		l2 = tf.layers.dense(inputs=l1p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
 		# in the final layer use the atom code information.
 		l2p = tf.concat([l2,CODES],axis=-1)
 		l3 = tf.layers.dense(l2p,units=1,activation=None,use_bias=True)*msk
@@ -275,11 +252,11 @@ class InGauShBPNetwork:
 
 	def print_training(self, step, loss_):
 		if (step%10==0):
-			self.saver.save(self.sess, './networks/InGauSH.ckpt')
+			self.saver.save(self.sess, './networks/InGauSH',global_step=step, max_to_keep=5 )
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
 			print(self.sess.run([self.gp_tf])[0])
 			feed_dict = self.NextBatch(self.mset)
-			ens,frcs,summary = self.sess.run([self.MolEnergies,self.MolGrads,self.summary_op], feed_dict=feed_dict)
+			ens,frcs,summary = self.sess.run([self.MolEnergies,self.MolGrads,self.summary_op], feed_dict=feed_dict, options=self.options, run_metadata=self.run_metadata)
 			for i in range(10):
 				print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i])
 			print("Mean Abs Error: (Energy)", np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
@@ -303,7 +280,10 @@ class InGauShBPNetwork:
 		return
 
 	def Prepare(self):
-		self.MaxZtf = tf.constant(MAX_ATOMIC_NUMBER)
+		tf.reset_default_graph()
+		self.DoRotGrad = False
+		self.DoForceLearning = True
+
 		self.xyzs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = self.prec)
 		self.zs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,1), dtype = tf.int32)
 
@@ -311,9 +291,8 @@ class InGauShBPNetwork:
 		self.groundTruthG_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = tf.float64)
 
 		self.atom_codes = tf.Variable(self.AtomCodes,trainable=True)
-		self.gp_tf  = tf.Variable(self.GaussParams,trainable=True, dtype = self.prec)
+		self.gp_tf  = tf.Variable(self.GaussParams,trainable=False, dtype = self.prec)
 
-		self.DoRotGrad = False
 		if self.DoRotGrad:
 			thetas = tf.acos(2.0*tf.random_uniform([self.batch_size],dtype=tf.float64)-1.0)
 			phis = tf.random_uniform([self.batch_size],dtype=tf.float64)*2*Pi
@@ -334,19 +313,36 @@ class InGauShBPNetwork:
 
 		# Optional. Verify that the canonicalized differences are invariant.
 		if self.DoRotGrad:
-			self.RotGrad = tf.gradients(self.embedded,psis)[0]
+			self.RotGrad = tf.gfradients(self.embedded,psis)[0]
+			tf.summary.scalar('RotGrad',tf.reduce_sum(self.RotGrad))
 
 		# Add force error?
+		self.Eloss = tf.nn.l2_loss(self.MolEnergies - self.groundTruthE_pl,name='Eloss')/tf.cast(self.batch_size,self.prec)
 		self.MolGrads = tf.gradients(self.MolEnergies,self.xyzs_pl)[0]
+		self.MolHess = tf.hessians(self.MolEnergies,self.xyzs_pl)[0]
 
-		self.Eloss = tf.losses.mean_squared_error(self.MolEnergies, self.groundTruthE_pl)
-		self.Gloss = tf.losses.mean_squared_error(self.MolGrads, self.groundTruthG_pl)
-		self.Tloss = self.Eloss + self.Gloss/(3*20)
+		if (self.DoForceLearning):
+			t1 = tf.reshape(self.MolGrads,(self.batch_size,-1))
+			t2 = tf.reshape(self.groundTruthG_pl,(self.batch_size,-1))
+			nrm1 = tf.sqrt(tf.clip_by_value(tf.reduce_sum(t1*t1,axis=1),1e-36,1e36))
+			nrm2 = tf.sqrt(tf.clip_by_value(tf.reduce_sum(t2*t2,axis=1),1e-36,1e36))
+			diff = nrm1-nrm2
+			num = tf.reduce_sum(t1*t2,axis=1)
+			self.Gloss1 = (1.0 - tf.reduce_mean(num/(nrm1*nrm2)))/20.
+			self.Gloss2 = (tf.reduce_mean(diff*diff))/20.
+			#self.Gloss = tf.losses.mean_squared_error(self.MolGrads, self.groundTruthG_pl)
+			tf.summary.scalar('GLossDir',self.Gloss1)
+			tf.summary.scalar('GLossMag',self.Gloss2)
+			tf.add_to_collection('losses', self.Gloss1)
+			tf.add_to_collection('losses', self.Gloss2)
+			self.Tloss = self.Eloss + self.Gloss1 + self.Gloss2
+		else:
+			self.Tloss = self.Eloss
+
+		tf.losses.add_loss(self.Tloss,loss_collection=tf.GraphKeys.LOSSES)
 		tf.summary.scalar('ELoss',self.Eloss)
-		tf.summary.scalar('GLoss',self.Gloss)
 		tf.summary.scalar('TLoss',self.Tloss)
 		tf.add_to_collection('losses', self.Eloss)
-		tf.add_to_collection('losses', self.Gloss)
 		tf.add_to_collection('losses', self.Tloss)
 		self.train_op = self.training(self.Tloss)
 
@@ -356,7 +352,21 @@ class InGauShBPNetwork:
 		self.writer = tf.summary.FileWriter('./networks/InGauSH', graph=tf.get_default_graph())
 		self.summary_op = tf.summary.merge_all()
 
+		if (True):
+			print("logging with FULL TRACE")
+			self.options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+			self.run_metadata = tf.RunMetadata()
+			self.writer.add_run_metadata(self.run_metadata, "init", global_step=None)
+
 		self.sess.run(self.init)
+		#self.sess.graph.finalize()
 
 net = InGauShBPNetwork(b)
-net.Train()
+#net.Train()
+mi = np.random.randint(len(b.mols))
+m = b.mols[mi]
+print m.atoms, m.coords
+EF = net.GetEnergyForceRoutine(m)
+print EF(m.coords)
+Opt = GeomOptimizer(EF)
+Opt.Opt(m)

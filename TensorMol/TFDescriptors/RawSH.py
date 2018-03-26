@@ -155,7 +155,7 @@ def tf_spherical_harmonics_1(dxyzs, inv_dist_tensor, invariant=False):
 	l1_harmonics = 0.4886025119029199 * tf.stack([dxyzs[...,1], dxyzs[...,2], dxyzs[...,0]],
 										axis=-1) * tf.expand_dims(inv_dist_tensor, axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l1_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l1_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l1_harmonics], axis=-1)
 
@@ -171,7 +171,7 @@ def tf_spherical_harmonics_2(dxyzs, inv_dist_tensor, invariant=False):
 			(0.5462742152960396 * (tf.square(dxyzs[...,0]) - 1. * tf.square(dxyzs[...,1])))], axis=-1) \
 			* tf.expand_dims(tf.square(inv_dist_tensor),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l2_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l2_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l2_harmonics], axis=-1)
 
@@ -192,7 +192,7 @@ def tf_spherical_harmonics_3(dxyzs, inv_dist_tensor, invariant=False):
 			(0.5900435899266435 * dxyzs[...,0] * (tf.square(dxyzs[...,0]) - 3. * tf.square(dxyzs[...,1])))], axis=-1) \
 				* tf.expand_dims(tf.pow(inv_dist_tensor,3),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l3_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l3_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l3_harmonics], axis=-1)
 
@@ -220,7 +220,7 @@ def tf_spherical_harmonics_4(dxyzs, inv_dist_tensor, invariant=False):
 				+ tf.pow(dxyzs[...,1], 4)))], axis=-1) \
 			* tf.expand_dims(tf.pow(inv_dist_tensor,4),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l4_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l4_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l4_harmonics], axis=-1)
 
@@ -256,7 +256,7 @@ def tf_spherical_harmonics_5(dxyzs, inv_dist_tensor, invariant=False):
 				* tf.square(dxyzs[...,0]) * tf.square(dxyzs[...,1]) + 5. * tf.pow(dxyzs[...,1], 4)))], axis=-1) \
 			* tf.expand_dims(tf.pow(inv_dist_tensor,5),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l5_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l5_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l5_harmonics], axis=-1)
 
@@ -302,7 +302,7 @@ def tf_spherical_harmonics_6(dxyzs, inv_dist_tensor, invariant=False):
 				+ 15. * tf.square(dxyzs[...,0]) * tf.pow(dxyzs[...,1], 4) - 1. * tf.pow(dxyzs[...,1], 6)))], axis=-1) \
 			* tf.expand_dims(tf.pow(inv_dist_tensor,6),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l6_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l6_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l6_harmonics], axis=-1)
 
@@ -369,7 +369,7 @@ def tf_spherical_harmonics_7(dxyzs, inv_dist_tensor, invariant=False):
 				* tf.pow(dxyzs[...,1], 6)))], axis=-1) \
 			* tf.expand_dims(tf.pow(inv_dist_tensor,7),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l7_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l7_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l7_harmonics], axis=-1)
 
@@ -453,7 +453,7 @@ def tf_spherical_harmonics_8(dxyzs, inv_dist_tensor, invariant=False):
 				* tf.pow(dxyzs[...,1], 6) + tf.pow(dxyzs[...,1], 8)))], axis=-1) \
 			* tf.expand_dims(tf.pow(inv_dist_tensor,8),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l8_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l8_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l8_harmonics], axis=-1)
 
@@ -694,7 +694,7 @@ def tf_gaush_element_channelv2(xyzs, Zs, elements, gauss_params, l_max, invarian
 	min_x_idx = tf.stack([tf.cast(padding_mask[:,0], tf.int32), min_idx[:,2]], axis=-1)
 	min_y_idx = tf.stack([tf.cast(padding_mask[:,0], tf.int32), min_idx[:,3]], axis=-1)
 	z_midpoint = 0.5 * (tf.constant([0., 0., 1.], dtype=tf.float32)
-				+ tf.gather_nd(xyzs, min_z_idx) / tf.norm(tf.gather_nd(xyzs, min_z_idx), axis=-1, keep_dims=True))
+				+ tf.gather_nd(xyzs, min_z_idx) / tf.norm(tf.gather_nd(xyzs, min_z_idx), axis=-1, keepdims=True))
 	z_orient_xyzs = tf_rotate(centered_xyzs, z_midpoint, np.pi * tf.ones([tf.shape(z_midpoint)[0]], dtype=tf.float32))
 	return z_orient_xyzs
 	gauss = tf_gauss(dist_tensor, gauss_params)
@@ -792,11 +792,11 @@ def tf_rotate(xyzs, axis, angle):
 		new_xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor of randomly rotated molecules
 		new_labels (tf.float): NMol x MaxNAtom x label shape tensor of randomly rotated learning targets
 	"""
-	axis = tf.tile(tf.expand_dims(axis / tf.norm(axis, axis=-1, keep_dims=True), axis=-2), [1, tf.shape(xyzs)[1], 1])
+	axis = tf.tile(tf.expand_dims(axis / tf.norm(axis, axis=-1, keepdims=True), axis=-2), [1, tf.shape(xyzs)[1], 1])
 	angle = tf.reshape(angle, [tf.shape(angle)[0], 1, 1])
 	term1 = xyzs * tf.cos(angle)
 	term2 = tf.cross(axis, xyzs) * tf.sin(angle)
-	term3 = axis * (1 - tf.cos(angle)) * tf.reduce_sum(axis * xyzs, axis=-1, keep_dims=True)
+	term3 = axis * (1 - tf.cos(angle)) * tf.reduce_sum(axis * xyzs, axis=-1, keepdims=True)
 	new_xyzs = term1 + term2 + term3
 	return new_xyzs
 

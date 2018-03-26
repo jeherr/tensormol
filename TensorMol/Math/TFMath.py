@@ -340,13 +340,13 @@ def Canonicalize(dxyzs, ChiralInv=True):
 	    Cdxyz: canonically oriented versions of the above coordinates.
 	"""
 	decd = tf.reciprocal(dxyzs+1.0)
-	ap = decd - tf.reduce_mean(decd, axis=-2, keep_dims=True)
+	ap = decd - tf.reduce_mean(decd, axis=-2, keepdims=True)
 	C = tf.einsum('mji,mjk->mik', ap, ap) # Covariance matrix.
 	w,v = tf.self_adjoint_eig(C)
 	tore = tf.matmul(dxyzs,v)
 	if (not ChiralInv):
 		return tore
-	signc = tf.sign(tf.reduce_mean(tore, axis=-2, keep_dims=True))
+	signc = tf.sign(tf.reduce_mean(tore, axis=-2, keepdims=True))
 	# output axes only match up to a sign due to phase freedom of eigenvalues.
 	# Make a convention that mean axis is positive.
 	return tore*signc
