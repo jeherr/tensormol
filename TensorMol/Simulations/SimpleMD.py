@@ -405,12 +405,12 @@ class VelocityVerlet:
 				self.x , self.v, self.a, self.EPot, self.force = self.Tstat.step(self.ForceFunction, self.a, self.x, self.v, self.m, self.dt, self.EnergyAndForce)
 			if self.cellsize != None:
 				self.x  = np.mod(self.x, self.cellsize)
+			self.KE = KineticEnergy(self.v,self.m)
 			self.md_log[step,0] = self.t
 			self.md_log[step,4] = self.KE
 			self.md_log[step,5] = self.EPot
 			self.md_log[step,6] = self.KE+(self.EPot-self.EPot0)*JOULEPERHARTREE
 			avE, Evar = self.EnergyStat(self.EPot) # I should log these.
-			self.KE = KineticEnergy(self.v,self.m)
 			Teff = (2./3.)*self.KE/IDEALGASR
 
 			if (step%3==0 and PARAMS["MDLogTrajectory"]):
@@ -422,6 +422,7 @@ class VelocityVerlet:
 			LOGGER.info("%s Step: %i time: %.1f(fs) KE(kJ): %.5f PotE(Eh): %.5f ETot(kJ/mol): %.5f Teff(K): %.5f", self.name, step, self.t, self.KE*len(self.m)/1000.0, self.EPot, self.KE*len(self.m)/1000.0+(self.EPot)*KJPERHARTREE, Teff)
 			#LOGGER.info("Step: %i time: %.1f(fs) <KE>(kJ/mol): %.5f <|a|>(m/s2): %.5f <EPot>(Eh): %.5f <Etot>(kJ/mol): %.5f Teff(K): %.5f", step, self.t, self.KE/1000.0,  np.linalg.norm(self.a) , self.EPot, self.KE/1000.0+self.EPot*KJPERHARTREE, Teff)
 			print(("per step cost:", time.time() -t ))
+		np.savetxt("./results/"+"MDLog"+self.name+".txt",self.md_log)
 		return
 
 class IRTrajectory(VelocityVerlet):

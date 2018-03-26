@@ -1328,7 +1328,6 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		num_atoms_feed = np.zeros((1), dtype=np.int32)
 		num_atoms_feed[0] = mol.NAtoms()
 		feed_dict=self.evaluate_fill_feed_dict(xyzs_feed, Zs_feed, num_atoms_feed)
-		atomization_energy = 0.0
 		if eval_forces:
 			energy, gradients = self.sess.run([self.bp_energy, self.gradients], feed_dict=feed_dict)
 			forces = -gradients[0,:mol.NAtoms()]
@@ -1429,15 +1428,14 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 
-			# rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-			# 				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-			# 				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
+			rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
+							tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
-			canonical_xyzs = Canonicalize(centered_xyzs)
-			# rotation_params = tf.gather_nd(rotation_params, padding_mask)
-			# rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
-			# self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
+			rotation_params = tf.gather_nd(rotation_params, padding_mask)
+			rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
+			self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
 			if self.train_sparse:
 				embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, self.Zs_pl,
 											self.pairs_pl, elements, self.gaussian_params, self.l_max)
@@ -1458,13 +1456,13 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			tf.summary.scalar("energy loss", self.energy_loss)
 			tf.add_to_collection('energy_losses', self.energy_loss)
 			self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
-			# self.rotation_loss = self.loss_op(rot_grad)
+			self.rotation_loss = self.loss_op(rot_grad)
 			if self.train_gradients:
 				tf.add_to_collection('energy_losses', self.gradient_loss)
 				tf.summary.scalar("gradient loss", self.gradient_loss)
-			# if self.train_rotation:
-			# 	tf.add_to_collection('energy_losses', self.rotation_loss)
-			# 	tf.summary.scalar("rotational loss", self.rotation_loss)
+			if self.train_rotation:
+				tf.add_to_collection('energy_losses', self.rotation_loss)
+				tf.summary.scalar("rotational loss", self.rotation_loss)
 			self.energy_losses = tf.add_n(tf.get_collection('energy_losses'))
 			tf.summary.scalar("energy losses", self.energy_losses)
 
@@ -1482,3 +1480,84 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				self.options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 				self.run_metadata = tf.RunMetadata()
 		return
+
+	def evaluate_prepare(self, avg_rots=False):
+		"""
+		Get placeholders, graph and losses in order to begin training.
+		Also assigns the desired padding.
+
+		Args:
+			continue_training: should read the graph variables from a saved checkpoint.
+		"""
+		with tf.Graph().as_default():
+			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[1, self.max_num_atoms, 3])
+			self.Zs_pl = tf.placeholder(tf.int32, shape=[1, self.max_num_atoms])
+			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[1])
+			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
+			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
+			embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
+			embed_stddev = tf.Variable(self.embed_stddev, trainable=False, dtype = self.tf_precision)
+			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
+			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
+			if avg_rots:
+				tiled_xyzs = tf.tile(self.xyzs_pl, [64, 1, 1])
+				tiled_Zs = tf.tile(self.Zs_pl, [64, 1])
+				rotation_params = tf.cast(tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.0, 1.5, 4), [16]), axis=1),
+						np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.0, 1.5, 4), axis=1), [1,16]), [64,1]),
+						tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.1, 1.9, 4), axis=1),
+						axis=2), [4,1,4]), [64,1])], axis=1), dtype=self.tf_precision)
+				rotated_xyzs = tf_random_rotate(tiled_xyzs, rotation_params)
+				embed, mol_idx = tf_gaush_element_channel(rotated_xyzs, tiled_Zs, elements, self.gaussian_params, self.l_max)
+			# padding_mask = tf.where(tf.not_equal(tiled_Zs, 0))
+			# centered_xyzs = tf.expand_dims(tf.gather_nd(tiled_xyzs, padding_mask), axis=1) - tf.gather(tiled_xyzs, padding_mask[:,0])
+			# rotation_params = tf.gather(rotation_params, padding_mask[:,0])
+			else:
+				embed, mol_idx = tf_gaush_element_channel(self.xyzs_pl, self.Zs_pl, elements, self.gaussian_params, self.l_max)
+			for element in range(len(self.elements)):
+				embed[element] -= embed_mean[element]
+				embed[element] /= embed_stddev[element]
+			atom_energies, energy_variables = self.energy_inference(embed, mol_idx)
+			norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
+			self.bp_energy = tf.reduce_mean((norm_bp_energy * energy_stddev) + energy_mean)
+			self.gradients = tf.gradients(self.bp_energy, self.xyzs_pl)[0]
+			# self.gradients = tf.scatter_nd(tf.cast(gradients.indices, tf.int32), gradients.values, gradients.dense_shape)[0]
+
+			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+			self.saver = tf.train.Saver()
+			self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
+		return
+
+	def evaluate_mol(self, mol, eval_forces=True, avg_rots=False):
+		"""
+		Takes coordinates and atomic numbers from a manager and feeds them into the network
+		for evaluation of the forces
+
+		Args:
+			xyzs (np.float): numpy array of atomic coordinates
+			Zs (np.int32): numpy array of atomic numbers
+		"""
+		try:
+			self.sess
+		except AttributeError:
+			self.sess = None
+		if self.sess is None:
+			print("loading the session..")
+			self.assign_activation()
+			self.max_num_atoms = mol.NAtoms()
+			if avg_rots:
+				self.batch_size = 64
+			self.evaluate_prepare(avg_rots)
+		xyzs_feed = np.zeros((1,self.max_num_atoms, 3))
+		xyzs_feed[0,:mol.NAtoms()] = mol.coords
+		Zs_feed = np.zeros((1,self.max_num_atoms), dtype=np.int32)
+		Zs_feed[0,:mol.NAtoms()] = mol.atoms
+		num_atoms_feed = np.zeros((1), dtype=np.int32)
+		num_atoms_feed[0] = mol.NAtoms()
+		feed_dict=self.evaluate_fill_feed_dict(xyzs_feed, Zs_feed, num_atoms_feed)
+		if eval_forces:
+			energy, gradients = self.sess.run([self.bp_energy, self.gradients], feed_dict=feed_dict)
+			forces = -gradients[0]
+			return energy, forces
+		else:
+			energy = self.sess.run(self.bp_energy, feed_dict=feed_dict)
+			return energy
