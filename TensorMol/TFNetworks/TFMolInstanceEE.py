@@ -835,7 +835,7 @@ class MolInstance_BP_Dipole_2_Direct(MolInstance_DirectBP_NoGrad):
 		self.SFPr = None
 		self.Ra_cut = None
 		self.Rr_cut = None
-		self.MaxNAtoms = self.TData.MaxNAtoms
+		self.MaxNAtom = self.TData.MaxNAtom
 		self.eles = self.TData.eles
 		self.n_eles = len(self.eles)
 		self.eles_np = np.asarray(self.eles).reshape((self.n_eles,1))
@@ -888,8 +888,8 @@ class MolInstance_BP_Dipole_2_Direct(MolInstance_DirectBP_NoGrad):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]))
 			self.natom_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
@@ -942,7 +942,7 @@ class MolInstance_BP_Dipole_2_Direct(MolInstance_DirectBP_NoGrad):
 		hidden1_units=self.hidden1
 		hidden2_units=self.hidden2
 		hidden3_units=self.hidden3
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		nrm1=1.0/(10+math.sqrt(float(self.inshape)))
 		nrm2=1.0/(10+math.sqrt(float(hidden1_units)))
 		nrm3=1.0/(10+math.sqrt(float(hidden2_units)))
@@ -984,15 +984,15 @@ class MolInstance_BP_Dipole_2_Direct(MolInstance_DirectBP_NoGrad):
 				atom_outputs.append(rshp)
 				rshpflat = tf.reshape(cut,[shp_out[0]])
 				atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-				ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+				ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 				output = tf.add(output, ToAdd)
 			tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			netcharge = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
 			delta_charge = tf.multiply(netcharge, natom)
-			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtoms])
+			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtom])
 			scaled_charge = tf.subtract(output, delta_charge_tile)
-			flat_dipole = tf.multiply(tf.reshape(xyzs,[self.batch_size*self.MaxNAtoms, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtoms, 1]))
-			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtoms, 3]), axis=1)
+			flat_dipole = tf.multiply(tf.reshape(xyzs,[self.batch_size*self.MaxNAtom, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtom, 1]))
+			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtom, 3]), axis=1)
 		return  dipole, scaled_charge, output
 
 	def fill_feed_dict(self, batch_data):
@@ -1079,7 +1079,7 @@ class MolInstance_BP_Dipole_2_Direct(MolInstance_DirectBP_NoGrad):
 		"""
 		# Check sanity of input
 		nmol = batch_data[2].shape[0]
-		self.MaxNAtoms = batch_data[0].shape[1]
+		self.MaxNAtom = batch_data[0].shape[1]
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
@@ -1098,8 +1098,8 @@ class MolInstance_BP_Dipole_2_Direct(MolInstance_DirectBP_NoGrad):
 		Doesn't generate the training operations or losses.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]))
 			self.natom_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)

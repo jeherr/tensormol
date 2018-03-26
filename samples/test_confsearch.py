@@ -169,8 +169,25 @@ O          9.68926       -2.37377        3.58482
 H          9.49060       -3.41415        3.68597
 """
 
+	alanine = """13
+
+H          1.04857        1.60497       -1.38623
+C          0.78587        1.55274       -0.29970
+N          2.01080        1.10366        0.40081
+H          2.24739        0.17899        0.11073
+H          1.87099        1.11853        1.38932
+C          0.36965        2.93562        0.18914
+H         -0.49440        3.30862       -0.37619
+H          1.18422        3.66109        0.06124
+H          0.09394        2.93536        1.25279
+C         -0.38527        0.58981       -0.12672
+O         -0.56705       -0.23812        0.74856
+O         -1.34343        0.66280       -1.07666
+H         -2.03934        0.04074       -0.88709
+"""
+
 	m = Mol()
-	m.FromXYZString(sugarXYZ)
+	m.FromXYZString(alanine)
 
 	#d,t,q = m.Topology()
 	#print("Topology",d,t,q)
@@ -241,8 +258,33 @@ H          9.49060       -3.41415        3.68597
 		Fs(s)
 		exit(0)
 
-	EFH = GetEnergyForceHess(m)
+	if 0:
+		m1 = Mol()
+		m1.FromXYZString(sugarXYZ4)
+		s = MSet()
+		s.mols.append(m1)
+		mgr = GetChemSpider12(s)
+		def EnAndForce(tmpm, DoForce=True):
+			Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient = mgr.EvalBPDirectEEUpdateSingle(tmpm, PARAMS["AN1_r_Rc"], PARAMS["AN1_a_Rc"], PARAMS["EECutoffOff"], True)
+			energy = Etotal[0]
+			force = gradient[0]
+			if DoForce:
+				return energy, force
+			else:
+				return energy
+		print(EnAndForce(m1))
+		m2 = Mol()
+		m2.FromXYZString(sugarXYZ2)
+		print(EnAndForce(m2))
+		m2 = Mol()
+		m2.FromXYZString(sugarXYZ3)
+		print(EnAndForce(m2))
+		m2 = Mol()
+		m2.FromXYZString(sugarXYZ)
+		print(EnAndForce(m2))
 
+
+	EFH = GetEnergyForceHess(m)
 	F = GetEnergyForceForMol(m)
 	CF = GetChargeField(m)
 

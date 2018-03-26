@@ -108,17 +108,17 @@ def TestTFGauSH():
 	np.set_printoptions(threshold=100000)
 	a=MSet("SmallMols_rand")
 	a.Load()
-	maxnatoms = a.MaxNAtoms()
+	MaxNAtom = a.MaxNAtom()
 	zlist = []
 	xyzlist = []
 	labelslist = []
 	natomlist = []
 	for i, mol in enumerate(a.mols):
-		paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
+		paddedxyz = np.zeros((MaxNAtom,3), dtype=np.float32)
 		paddedxyz[:mol.atoms.shape[0]] = mol.coords
-		paddedz = np.zeros((maxnatoms), dtype=np.int32)
+		paddedz = np.zeros((MaxNAtom), dtype=np.int32)
 		paddedz[:mol.atoms.shape[0]] = mol.atoms
-		paddedlabels = np.zeros((maxnatoms, 3), dtype=np.float32)
+		paddedlabels = np.zeros((MaxNAtom, 3), dtype=np.float32)
 		paddedlabels[:mol.atoms.shape[0]] = mol.properties["forces"]
 		xyzlist.append(paddedxyz)
 		zlist.append(paddedz)
@@ -191,16 +191,16 @@ def test_tf_neighbor():
 	np.set_printoptions(threshold=100000)
 	a=MSet("SmallMols_rand")
 	a.Load()
-	maxnatoms = a.MaxNAtoms()
+	MaxNAtom = a.MaxNAtom()
 	zlist = []
 	xyzlist = []
 	labelslist = []
 	for i, mol in enumerate(a.mols):
-		paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
+		paddedxyz = np.zeros((MaxNAtom,3), dtype=np.float32)
 		paddedxyz[:mol.atoms.shape[0]] = mol.coords
-		paddedz = np.zeros((maxnatoms), dtype=np.int32)
+		paddedz = np.zeros((MaxNAtom), dtype=np.int32)
 		paddedz[:mol.atoms.shape[0]] = mol.atoms
-		paddedlabels = np.zeros((maxnatoms, 3), dtype=np.float32)
+		paddedlabels = np.zeros((MaxNAtom, 3), dtype=np.float32)
 		paddedlabels[:mol.atoms.shape[0]] = mol.properties["forces"]
 		xyzlist.append(paddedxyz)
 		zlist.append(paddedz)

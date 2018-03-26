@@ -496,7 +496,7 @@ class TensorDataDirect(TensorData):
 	def __init__(self, MSet_=None, Dig_=None, Name_=None, type_="atom"):
 		TensorData.__init__(self, MSet_, Dig_, Name_, type_)
 		if (MSet_ != None):
-			self.MaxNAtoms = np.max([m.NAtoms() for m in self.set.mols])
+			self.MaxNAtom = np.max([m.NAtoms() for m in self.set.mols])
 			self.Nmols = len(self.set.mols)
 			self.AvailableElements = self.set.AtomTypes()
 			self.name = self.set.name
@@ -505,10 +505,10 @@ class TensorDataDirect(TensorData):
 		if self.set == None:
 			self.ReloadSet()
 		random.shuffle(self.set.mols)
-		xyzs = np.zeros((self.Nmols, self.MaxNAtoms, 3))
-		Zs = np.zeros((self.Nmols, self.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((self.Nmols, self.MaxNAtom, 3))
+		Zs = np.zeros((self.Nmols, self.MaxNAtom), dtype = np.int32)
 		if (self.dig.OType == "Force"):
-			labels = np.zeros((self.Nmols,self.MaxNAtoms,3))
+			labels = np.zeros((self.Nmols,self.MaxNAtom,3))
 		else:
 			raise Exception("Output Type is not implemented yet")
 		for i, mol in enumerate(self.set.mols):

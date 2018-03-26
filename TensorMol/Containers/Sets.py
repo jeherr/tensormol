@@ -135,7 +135,7 @@ class MSet:
 			nat += m.NAtoms()
 		return nat
 
-	def MaxNAtoms(self):
+	def MaxNAtom(self):
 		return np.max([m.NAtoms() for m in self.mols])
 
 	def max_neighbors(self):

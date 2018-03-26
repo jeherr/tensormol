@@ -76,7 +76,7 @@ class BehlerParinelloNetwork(object):
 		self.mol_set = MSet(self.mol_set_name)
 		self.mol_set.Load()
 		self.elements = self.mol_set.AtomTypes()
-		self.max_num_atoms = self.mol_set.MaxNAtoms()
+		self.max_num_atoms = self.mol_set.MaxNAtom()
 		self.num_molecules = len(self.mol_set.mols)
 		if self.train_sparse:
 			for mol in self.mol_set.mols:

@@ -350,3 +350,37 @@ def Canonicalize(dxyzs, ChiralInv=True):
 	# output axes only match up to a sign due to phase freedom of eigenvalues.
 	# Make a convention that mean axis is positive.
 	return tore*signc
+
+def CanonicalizeGS(dxyzs):
+	"""
+	Canonicalize using nearest three atoms and Graham-Schmidt.
+
+	Args:
+		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
+		ie: ... X i X i = (0.,0.,0.))
+		pair_mask: nMol X maxNatom X maxNatom X 1 mask tensor. (=0 if either atom is dummy. )
+
+	"""
+	argshape = tf.shape(dxyzs)
+	togather = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[1],3))
+	weights = tf.exp(-1.0*tf.norm(dxyzs,axis=-1))
+	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
+	# GS orth the first three vectors.
+	tosort= tf.reshape(maskedDs,(argshape[0]*argshape[1],-1))
+	vals, inds = tf.nn.top_k(maskedDs,k=4)
+	inds = tf.reshape(inds,(argshape[0]*argshape[1],4))
+	v1i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,:1]],axis=-1)
+	v2i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,1:2]],axis=-1)
+	v3i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,2:3]],axis=-1)
+	v1 = tf.gather_nd(togather,v1i)
+	v1 /= tf.norm(v1,axis=-1,keepdims=True)+1e-16
+	v2 = tf.gather_nd(togather,v2i)
+	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
+	v2 /= tf.norm(v2,axis=-1,keepdims=True)+1e-16
+	v3 = tf.gather_nd(togather,v3i)
+	v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
+	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
+	v3 /= tf.norm(v3,axis=-1,keepdims=True)+1e-16
+	vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
+	tore = tf.einsum('ijk,ilk->ijl',togather,vs)
+	return tf.reshape(tore,tf.shape(dxyzs))

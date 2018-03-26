@@ -2,7 +2,7 @@
 Raw => various descriptors in Tensorflow code.
 
 The Raw format is a batch of rank three tensors.
-mol X MaxNAtoms X 4
+mol X MaxNAtom X 4
 The final dim is atomic number, x,y,z (Angstrom)
 
 https://www.youtube.com/watch?v=h2zgB93KANE
@@ -1860,7 +1860,7 @@ def PolynomialRangeSepCoulomb(R,Qs,Radpair,SRRc,LRRc,dx):
 		LRRc: Distance where LR polynomial begins.
 		dx: Small interval after which the kernel is zero.
 	Returns
-		A #Mols X MaxNAtoms X MaxNAtoms matrix of LJ kernel contributions.
+		A #Mols X MaxNAtom X MaxNAtom matrix of LJ kernel contributions.
 	"""
 	inp_shp = tf.shape(R)
 	nmol = inp_shp[0]

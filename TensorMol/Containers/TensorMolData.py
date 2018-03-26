@@ -35,7 +35,7 @@ class TensorMolData(TensorData):
 		self.order = order_
 		self.num_indis = num_indis_
 		self.NTrain = 0
-		#self.MaxNAtoms = MSet_.MaxNAtoms()
+		#self.MaxNAtom = MSet_.MaxNAtom()
 		TensorData.__init__(self, MSet_,Dig_,Name_, type_=type_)
 		try:
 			LOGGER.info("TensorMolData.type: %s",self.type)
@@ -44,12 +44,12 @@ class TensorMolData(TensorData):
 			self.raw_it = iter(self.set.mols)
 		except:
 			print(" do not include MSet")
-		self.MaxNAtoms = None
+		self.MaxNAtom = None
 		try:
 			if (MSet_ != None):
-				self.MaxNAtoms = MSet_.MaxNAtoms()
+				self.MaxNAtom = MSet_.MaxNAtom()
 		except:
-			print("fail to load self.MaxNAtoms")
+			print("fail to load self.MaxNAtom")
 		return
 
 	def QueryAvailable(self):
@@ -148,13 +148,13 @@ class TensorMolData(TensorData):
 			Returns:
 				Ins: a #atomsX4 tensor (AtNum,x,y,z)
 				Outs: output of the digester
-				Keys: (nmol)X(MaxNAtoms) tensor listing each molecule's place in the input.
+				Keys: (nmol)X(MaxNAtom) tensor listing each molecule's place in the input.
 		"""
 		ndone = 0
 		natdone = 0
-		self.MaxNAtoms = self.set.MaxNAtoms()
-		Ins = np.zeros(tuple([nmol,self.MaxNAtoms,4]))
-		Outs = np.zeros(tuple([nmol,self.MaxNAtoms,3]))
+		self.MaxNAtom = self.set.MaxNAtom()
+		Ins = np.zeros(tuple([nmol,self.MaxNAtom,4]))
+		Outs = np.zeros(tuple([nmol,self.MaxNAtom,3]))
 		while (ndone<nmol):
 			try:
 				m = next(self.raw_it)
@@ -314,7 +314,7 @@ class TensorMolDataDirect:
 		self.randomize_data = PARAMS["RandomizeData"]
 		self.test_ratio = PARAMS["TestRatio"]
 		self.elements = self.molecule_set.AtomTypes()
-		self.max_num_atoms = self.molecule_set.MaxNAtoms() #Used to pad data so that each molecule is the same size
+		self.max_num_atoms = self.molecule_set.MaxNAtom() #Used to pad data so that each molecule is the same size
 		self.num_molecules = len(self.molecule_set.mols)
 		self.Ree_cut = PARAMS["EECutoffOff"]
 		return
@@ -1230,8 +1230,8 @@ class TensorMolData_BP_Direct(TensorMolData):
 		if (MSet_ != None):
 			self.eles = list(MSet_.AtomTypes())
 			self.eles.sort()
-			self.MaxNAtoms = np.max([m.NAtoms() for m in self.set.mols])
-			print("self.MaxNAtoms:", self.MaxNAtoms)
+			self.MaxNAtom = np.max([m.NAtoms() for m in self.set.mols])
+			print("self.MaxNAtom:", self.MaxNAtom)
 			self.Nmols = len(self.set.mols)
 		self.MeanStoich=None
 		self.MeanNAtoms=None
@@ -1260,14 +1260,14 @@ class TensorMolData_BP_Direct(TensorMolData):
 			except Exception as Ex:
 				print("TData doesn't have a set.", Ex)
 		random.shuffle(self.set.mols)
-		xyzs = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((self.Nmols, self.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((self.Nmols, self.MaxNAtom), dtype = np.int32)
 		if (self.dig.OType == "AtomizationEnergy"):
 			labels = np.zeros((self.Nmols), dtype = np.float64)
 		else:
 			raise Exception("Output Type is not implemented yet")
 		if (self.HasGrad):
-			grads = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype=np.float64)
+			grads = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype=np.float64)
 		for i, mol in enumerate(self.set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
 			Zs[i][:mol.NAtoms()] = mol.atoms
@@ -1374,8 +1374,8 @@ class TensorMolData_BPBond_Direct(TensorMolData):
 		if (MSet_ != None):
 			self.eles = list(MSet_.AtomTypes())
 			self.eles.sort()
-			self.MaxNAtoms = np.max([m.NAtoms() for m in self.set.mols])
-			print("self.MaxNAtoms:", self.MaxNAtoms)
+			self.MaxNAtom = np.max([m.NAtoms() for m in self.set.mols])
+			print("self.MaxNAtom:", self.MaxNAtom)
 			self.Nmols = len(self.set.mols)
 		self.MeanStoich=None
 		self.MeanNAtoms=None
@@ -1409,14 +1409,14 @@ class TensorMolData_BPBond_Direct(TensorMolData):
 			Returns:
 				Ins: a #atomsX4 tensor (AtNum,x,y,z)
 				Outs: output of the digester
-				Keys: (nmol)X(MaxNAtoms) tensor listing each molecule's place in the input.
+				Keys: (nmol)X(MaxNAtom) tensor listing each molecule's place in the input.
 		"""
 		if self.set == None:
 			self.ReloadSet()
 		ndone = 0
 		natdone = 0
-		self.MaxNAtoms = self.set.MaxNAtoms()
-		Ins = np.zeros(tuple([nmol,self.MaxNAtoms,4]))
+		self.MaxNAtom = self.set.MaxNAtom()
+		Ins = np.zeros(tuple([nmol,self.MaxNAtom,4]))
 		NAtomsVec = np.zeros((nmol),dtype=np.int32)
 		Outs = np.zeros(tuple([nmol]))
 		while (ndone<nmol):
@@ -1439,14 +1439,14 @@ class TensorMolData_BPBond_Direct(TensorMolData):
 		if self.set == None:
 			self.ReloadSet()
 		random.shuffle(self.set.mols)
-		xyzs = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((self.Nmols, self.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((self.Nmols, self.MaxNAtom), dtype = np.int32)
 		if (self.dig.OType == "AtomizationEnergy"):
 			labels = np.zeros((self.Nmols), dtype = np.float64)
 		else:
 			raise Exception("Output Type is not implemented yet")
 		if (self.HasGrad):
-			grads = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype=np.float64)
+			grads = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype=np.float64)
 		for i, mol in enumerate(self.set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
 			Zs[i][:mol.NAtoms()] = mol.atoms
@@ -1560,15 +1560,15 @@ class TensorMolData_BP_Direct_Linear(TensorMolData_BP_Direct):
 			except Exception as Ex:
 				print("TData doesn't have a set.", Ex)
 		random.shuffle(self.set.mols)
-		xyzs = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((self.Nmols, self.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((self.Nmols, self.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((self.Nmols), dtype = np.int64)
 		if (self.dig.OType == "AtomizationEnergy"):
 			labels = np.zeros((self.Nmols), dtype = np.float64)
 		else:
 			raise Exception("Output Type is not implemented yet")
 		if (self.HasGrad):
-			grads = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype=np.float64)
+			grads = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype=np.float64)
 		for i, mol in enumerate(self.set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
 			Zs[i][:mol.NAtoms()] = mol.atoms
@@ -1683,8 +1683,8 @@ class TensorMolData_BP_Direct_EE(TensorMolData_BP_Direct_Linear):
 			except Exception as Ex:
 				print("TData doesn't have a set.", Ex)
 		random.shuffle(self.set.mols)
-		xyzs = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((self.Nmols, self.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((self.Nmols, self.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((self.Nmols), dtype = np.int32)
 		if (self.dig.OType == "EnergyAndDipole"):
 			Elabels = np.zeros((self.Nmols), dtype = np.float64)
@@ -1692,7 +1692,7 @@ class TensorMolData_BP_Direct_EE(TensorMolData_BP_Direct_Linear):
 		else:
 			raise Exception("Output Type is not implemented yet")
 		if (self.HasGrad):
-			grads = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype=np.float64)
+			grads = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype=np.float64)
 		for i, mol in enumerate(self.set.mols):
 			try:
 				xyzs[i][:mol.NAtoms()] = mol.coords
@@ -2031,15 +2031,15 @@ class TensorMolData_BP_Direct_WithEle(TensorMolData_BP_Direct_EE):
 			except Exception as Ex:
 				print("TData doesn't have a set.", Ex)
 		random.shuffle(self.set.mols)
-		xyzs = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((self.Nmols, self.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((self.Nmols, self.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((self.Nmols), dtype = np.int32)
 		if (self.dig.OType == "atomization"):
 			labels = np.zeros((self.Nmols), dtype = np.float64)
 		else:
 			raise Exception("Output Type is not implemented yet")
 		if (self.HasGrad):
-			grads = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype=np.float64)
+			grads = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype=np.float64)
 		for i, mol in enumerate(self.set.mols):
 			try:
 				xyzs[i][:mol.NAtoms()] = mol.coords
