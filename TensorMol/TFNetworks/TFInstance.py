@@ -779,7 +779,7 @@ class Instance_fc_sqdiff_GauSH_direct(Instance):
 		self.l_max = PARAMS["SH_LMAX"]
 		self.gaussian_params = PARAMS["RBFS"][:self.number_radial]
 		self.atomic_embed_factors = PARAMS["ANES"]
-		self.MaxNAtoms = self.TData.MaxNAtoms
+		self.MaxNAtom = self.TData.MaxNAtom
 		self.inshape =  self.number_radial * (self.l_max + 1) ** 2
 		self.outshape = 3
 		TensorMol.TFDescriptors.RawSH.data_precision = self.tf_prec
@@ -789,7 +789,7 @@ class Instance_fc_sqdiff_GauSH_direct(Instance):
 			self.Load()
 			self.gaussian_params = PARAMS["RBFS"][:self.number_radial]
 			self.atomic_embed_factors = PARAMS["ANES"]
-			self.MaxNAtoms = self.TData.MaxNAtoms
+			self.MaxNAtom = self.TData.MaxNAtom
 			self.inshape =  self.number_radial * (self.l_max + 1) ** 2
 			self.outshape = 3
 			self.AssignActivation()
@@ -826,9 +826,9 @@ class Instance_fc_sqdiff_GauSH_direct(Instance):
 	def TrainPrepare(self):
 		""" Builds the graphs by calling inference """
 		with tf.Graph().as_default():
-			self.xyzs_pl = tf.placeholder(self.tf_prec, shape=tuple([None, self.MaxNAtoms, 3]))
-			self.Zs_pl = tf.placeholder(tf.int32, shape=tuple([None, self.MaxNAtoms]))
-			self.labels_pl = tf.placeholder(self.tf_prec, shape=tuple([None, self.MaxNAtoms, 3]))
+			self.xyzs_pl = tf.placeholder(self.tf_prec, shape=tuple([None, self.MaxNAtom, 3]))
+			self.Zs_pl = tf.placeholder(tf.int32, shape=tuple([None, self.MaxNAtom]))
+			self.labels_pl = tf.placeholder(self.tf_prec, shape=tuple([None, self.MaxNAtom, 3]))
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_prec)
 			self.atomic_embed_factors = tf.Variable(self.atomic_embed_factors, trainable=False, dtype=self.tf_prec)
 			element = tf.constant(self.element, dtype=tf.int32)
@@ -1145,7 +1145,7 @@ class FCGauSHDirectRotationInvariant(Instance_fc_sqdiff_GauSH_direct):
 		self.gaussian_params = PARAMS["RBFS"][:self.number_radial]
 		self.atomic_embed_factors = PARAMS["ANES"]
 		TensorMol.TFDescriptors.RawSH.data_precision = self.tf_prec
-		self.MaxNAtoms = self.TData.MaxNAtoms
+		self.MaxNAtom = self.TData.MaxNAtom
 		self.inshape =  self.number_radial * (self.l_max + 1) ** 2
 		self.outshape = 3
 		self.Trainable = Trainable_
@@ -1176,9 +1176,9 @@ class FCGauSHDirectRotationInvariant(Instance_fc_sqdiff_GauSH_direct):
 	def TrainPrepare(self):
 		""" Builds the graphs by calling inference """
 		with tf.Graph().as_default():
-			self.xyzs_pl = tf.placeholder(self.tf_prec, shape=tuple([None, self.MaxNAtoms, 3]), name="xyzs_pl")
-			self.Zs_pl = tf.placeholder(tf.int32, shape=tuple([None, self.MaxNAtoms]), name="Zs_pl")
-			self.labels_pl = tf.placeholder(self.tf_prec, shape=tuple([None, self.MaxNAtoms, 3]), name="labels_pl")
+			self.xyzs_pl = tf.placeholder(self.tf_prec, shape=tuple([None, self.MaxNAtom, 3]), name="xyzs_pl")
+			self.Zs_pl = tf.placeholder(tf.int32, shape=tuple([None, self.MaxNAtom]), name="Zs_pl")
+			self.labels_pl = tf.placeholder(self.tf_prec, shape=tuple([None, self.MaxNAtom, 3]), name="labels_pl")
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_prec)
 			self.atomic_embed_factors = tf.Variable(self.atomic_embed_factors, trainable=False, dtype=self.tf_prec)
 			num_mols = tf.shape(self.xyzs_pl)[0]

@@ -44,7 +44,7 @@ class MolInstance_DirectBP_EandG_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.Rr_cut = None
 		self.HasANI1PARAMS = False
 		MolInstance.__init__(self, TData_,  Name_, Trainable_)
-		self.MaxNAtoms = self.TData.MaxNAtoms
+		self.MaxNAtom = self.TData.MaxNAtom
 		self.eles = self.TData.eles
 		self.n_eles = len(self.eles)
 		self.eles_np = np.asarray(self.eles).reshape((self.n_eles,1))
@@ -158,10 +158,10 @@ class MolInstance_DirectBP_EandG_SymFunction(MolInstance_fc_sqdiff_BP):
 		Define Tensorflow graph for training.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -227,7 +227,7 @@ class MolInstance_DirectBP_EandG_SymFunction(MolInstance_fc_sqdiff_BP):
 		"""
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Ebranches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		with tf.name_scope("EnergyNet"):
 			for e in range(len(self.eles)):
@@ -257,7 +257,7 @@ class MolInstance_DirectBP_EandG_SymFunction(MolInstance_fc_sqdiff_BP):
 					atom_outputs.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output = tf.add(output, ToAdd)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
@@ -422,9 +422,9 @@ class MolInstance_DirectBP_EandG_SymFunction(MolInstance_fc_sqdiff_BP):
 		nmols = len(mol_set.mols)
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
-		xyzs = np.zeros((nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((nmols, self.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
@@ -459,16 +459,16 @@ class MolInstance_DirectBP_EandG_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
 		#print ("self.activation_function:\n\n", self.activation_function)
-		if (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != nmol):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom or self.batch_size != nmol):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		feed_dict=self.fill_feed_dict(batch_data+[np.ones(self.nlayer+1)])
@@ -483,10 +483,10 @@ class MolInstance_DirectBP_EandG_SymFunction(MolInstance_fc_sqdiff_BP):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -592,16 +592,16 @@ class MolInstance_DirectBP_EandG_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.nreal = nreal
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
-		if (batch_data[0].shape[1] != self.MaxNAtoms):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare_Periodic()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare_Periodic()
 		t0 = time.time()
@@ -621,10 +621,10 @@ class MolInstance_DirectBP_EandG_SymFunction(MolInstance_fc_sqdiff_BP):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -671,7 +671,7 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.Rr_cut = None
 		self.HasANI1PARAMS = False
 		MolInstance.__init__(self, TData_,  Name_, Trainable_)
-		self.MaxNAtoms = self.TData.MaxNAtoms
+		self.MaxNAtom = self.TData.MaxNAtom
 		self.eles = self.TData.eles
 		self.n_eles = len(self.eles)
 		self.eles_np = np.asarray(self.eles).reshape((self.n_eles,1))
@@ -810,11 +810,11 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 		Define Tensorflow graph for training.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -903,7 +903,7 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 		"""
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Ebranches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		with tf.name_scope("EnergyNet"):
 			for e in range(len(self.eles)):
@@ -933,7 +933,7 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 					atom_outputs.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output = tf.add(output, ToAdd)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
@@ -964,7 +964,7 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Dbranches=[]
 		atom_outputs_charge = []
-		output_charge = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output_charge = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		dipole_wb = []
 		with tf.name_scope("DipoleNet"):
 			for e in range(len(self.eles)):
@@ -1000,15 +1000,15 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 					atom_outputs_charge.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(charge_index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output_charge = tf.add(output_charge, ToAdd)
 			tf.verify_tensor_all_finite(output_charge,"Nan in output!!!")
 			netcharge = tf.reshape(tf.reduce_sum(output_charge, axis=1), [self.batch_size])
 			delta_charge = tf.multiply(netcharge, natom)
-			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtoms])
+			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtom])
 			scaled_charge =  tf.subtract(output_charge, delta_charge_tile)
-			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtoms, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtoms, 1]))
-			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtoms, 3]), axis=1)
+			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtom, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtom, 1]))
+			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtom, 3]), axis=1)
 		def f1(): return TFCoulombEluSRDSFLR(xyzsInBohr, scaled_charge, Elu_Width*BOHRPERA, Reep, tf.cast(self.DSFAlpha, self.tf_prec), tf.cast(self.elu_alpha,self.tf_prec), tf.cast(self.elu_shift,self.tf_prec))
 		def f2(): return  tf.zeros([self.batch_size], dtype=self.tf_prec)
 		cc_energy = tf.cond(AddEcc, f1, f2)
@@ -1394,9 +1394,9 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 		nmols = len(mol_set.mols)
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
-		xyzs = np.zeros((nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((nmols, self.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
@@ -1433,16 +1433,16 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
 		#print ("self.activation_function:\n\n", self.activation_function)
-		if (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != nmol):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom or self.batch_size != nmol):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		feed_dict=self.fill_feed_dict(batch_data+[PARAMS["AddEcc"]]+[np.ones(self.nlayer+1)])
@@ -1457,11 +1457,11 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -1613,7 +1613,7 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 			flat_dipole = tf.multiply(tf.reshape(xyzs_real,[self.batch_size*self.nreal, 3]), tf.reshape(scaled_charge,[self.batch_size*self.nreal, 1]))
 			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.nreal, 3]), axis=1)
 
-		ntess = tf.cast(tf.div(self.MaxNAtoms, self.nreal), dtype=tf.int32)
+		ntess = tf.cast(tf.div(self.MaxNAtom, self.nreal), dtype=tf.int32)
 		scaled_charge_all = tf.tile(scaled_charge, [1, ntess])
 		def f1(): return TFCoulombEluSRDSFLR(xyzsInBohr, scaled_charge_all, Elu_Width*BOHRPERA, Reep, tf.cast(self.DSFAlpha, self.tf_prec), tf.cast(self.elu_alpha,self.tf_prec), tf.cast(self.elu_shift,self.tf_prec))
 		def f2(): return  tf.zeros([self.batch_size], dtype=self.tf_prec)
@@ -1647,16 +1647,16 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.nreal = nreal
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
-		if (batch_data[0].shape[1] != self.MaxNAtoms):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare_Periodic()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare_Periodic()
 		t0 = time.time()
@@ -1676,11 +1676,11 @@ class MolInstance_DirectBP_EE_SymFunction(MolInstance_fc_sqdiff_BP):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -1738,7 +1738,7 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.Rr_cut = None
 		self.HasANI1PARAMS = False
 		MolInstance.__init__(self, TData_,  Name_, Trainable_)
-		self.MaxNAtoms = self.TData.MaxNAtoms
+		self.MaxNAtom = self.TData.MaxNAtom
 		self.eles = self.TData.eles
 		self.n_eles = len(self.eles)
 		self.eles_np = np.asarray(self.eles).reshape((self.n_eles,1))
@@ -1855,8 +1855,8 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 		Define Tensorflow graph for training.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
@@ -1877,7 +1877,7 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 			self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Release(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
 			#self.dipole, self.charge = self.dipole_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.natom_pl, self.Reep_e1e2_pl,  self.keep_prob_pl)
 			self.eleneg = self.eleneg_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.natom_pl, self.keep_prob_pl)
-			self.ini_charge = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+			self.ini_charge = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 			self.dipole, self.charge, self.debug1 = self.pairwise_charge_exchange(self.Sym_Index, self.xyzs_pl, self.Zs_pl, self.eleneg, self.ini_charge, Ele, Elep, self.Reep_e1e2_pl, self.keep_prob_pl)
 			self.total_loss, self.dipole_loss = self.loss_op(self.dipole, self.Dlabel_pl, self.natom_pl)
 			tf.summary.scalar("loss", self.total_loss)
@@ -1933,7 +1933,7 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Dbranches=[]
 		atom_outputs_charge = []
-		output_charge = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output_charge = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		dipole_wb = []
 		with tf.name_scope("DipoleNet"):
 			for e in range(len(self.eles)):
@@ -1969,15 +1969,15 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 					atom_outputs_charge.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(charge_index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output_charge = tf.add(output_charge, ToAdd)
 			tf.verify_tensor_all_finite(output_charge,"Nan in output!!!")
 			netcharge = tf.reshape(tf.reduce_sum(output_charge, axis=1), [self.batch_size])
 			delta_charge = tf.multiply(netcharge, natom)
-			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtoms])
+			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtom])
 			scaled_charge =  tf.subtract(output_charge, delta_charge_tile)
-			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtoms, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtoms, 1]))
-			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtoms, 3]), axis=1)
+			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtom, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtom, 1]))
+			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtom, 3]), axis=1)
 
 		return  dipole, scaled_charge
 
@@ -1996,7 +1996,7 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 		# convert the index matrix from bool to float
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Dbranches=[]
-		output_eleneg = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output_eleneg = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		with tf.name_scope("EleNegNet"):
 			for e in range(len(self.eles)):
 				Dbranches.append([])
@@ -2024,7 +2024,7 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 					rshp = tf.reshape(cut,[1,shp_out[0]])
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(eleneg_index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output_eleneg = tf.add(output_eleneg, ToAdd)
 			tf.verify_tensor_all_finite(output_eleneg,"Nan in output!!!")
 		scaled_output_eleneg = tf.sigmoid(output_eleneg)
@@ -2063,8 +2063,8 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 			qj = tf.gather_nd(charge, mj)
 			Ejoni = tf.reshape(qj,[-1,1])*(Ri-Rj)/tf.reshape(D*D,[-1,1])
 			Eionj = tf.reshape(qi,[-1,1])*(Rj-Ri)/tf.reshape(D*D,[-1,1])
-			scattered_Ejoni = tf.scatter_nd(Reep_e1e2[:,:3], Ejoni, [self.batch_size, self.MaxNAtoms, self.MaxNAtoms, 3]) # this needs to be replaced if linear scaling is needed
-			scattered_Eionj = tf.scatter_nd(mji, Eionj, [self.batch_size, self.MaxNAtoms, self.MaxNAtoms, 3]) # this needs to be replaced if linear scaling is needed
+			scattered_Ejoni = tf.scatter_nd(Reep_e1e2[:,:3], Ejoni, [self.batch_size, self.MaxNAtom, self.MaxNAtom, 3]) # this needs to be replaced if linear scaling is needed
+			scattered_Eionj = tf.scatter_nd(mji, Eionj, [self.batch_size, self.MaxNAtom, self.MaxNAtom, 3]) # this needs to be replaced if linear scaling is needed
 			Ejoni_sum = tf.reduce_sum(scattered_Ejoni,2)
 			Eionj_sum = tf.reduce_sum(scattered_Eionj,2)
 			E_sum = Ejoni_sum + Eionj_sum
@@ -2073,7 +2073,7 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 			else:
 				reuse_flag = True
 			with tf.variable_scope("ChargeNet", reuse=reuse_flag):
-				delta_charge = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+				delta_charge = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 				for pair in range(len(self.eles_pairs)):
 					mask = tf.reduce_all(tf.equal(Elep[pair], ele12), 1)
 					masked  = tf.boolean_mask(Reep_e1e2, mask)
@@ -2110,12 +2110,12 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 						Cbranches[-1].append(tf.matmul(tf.nn.dropout(Cbranches[-1][-1], keep_prob[-1]), weights) + biases)
 						shp_out = tf.shape(Cbranches[-1][-1])
 						rshp = tf.reshape(Cbranches[-1][-1],[-1])
-						delta_charge += tf.scatter_nd(masked[:,:2], rshp, [self.batch_size, self.MaxNAtoms])
-						delta_charge -= tf.scatter_nd(tf.transpose(tf.stack([masked[:,0], masked[:,2]])), rshp, [self.batch_size, self.MaxNAtoms])
+						delta_charge += tf.scatter_nd(masked[:,:2], rshp, [self.batch_size, self.MaxNAtom])
+						delta_charge -= tf.scatter_nd(tf.transpose(tf.stack([masked[:,0], masked[:,2]])), rshp, [self.batch_size, self.MaxNAtom])
 				charge += delta_charge
 
 
-		dipole = tf.reduce_sum(tf.multiply(xyzsInBohr, tf.reshape(charge,[self.batch_size,self.MaxNAtoms,1])), axis=1)
+		dipole = tf.reduce_sum(tf.multiply(xyzsInBohr, tf.reshape(charge,[self.batch_size,self.MaxNAtom,1])), axis=1)
 		return  dipole, charge, E_sum
 
 	def loss_op(self, dipole, Dlabels, natom):
@@ -2244,16 +2244,16 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
 		#print ("self.activation_function:\n\n", self.activation_function)
-		if (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != nmol):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom or self.batch_size != nmol):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		feed_dict=self.fill_feed_dict(batch_data+[np.ones(self.nlayer+1)])
@@ -2268,8 +2268,8 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
@@ -2290,7 +2290,7 @@ class MolInstance_DirectBP_Charge_SymFunction(MolInstance_fc_sqdiff_BP):
 			self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_Release(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl)
 			#self.dipole, self.charge = self.dipole_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.natom_pl, self.Reep_e1e2_pl,  self.keep_prob_pl)
 			self.eleneg = self.eleneg_inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.natom_pl, self.keep_prob_pl)
-			self.ini_charge = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+			self.ini_charge = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 			self.dipole, self.charge, self.debug1 = self.pairwise_charge_exchange(self.Sym_Index, self.xyzs_pl, self.Zs_pl, self.eleneg, self.ini_charge, Ele, Elep, self.Reep_e1e2_pl, self.keep_prob_pl)
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
@@ -2417,10 +2417,10 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		Define Tensorflow graph for training.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -2537,7 +2537,7 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		"""
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Ebranches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		with tf.name_scope("EnergyNet"):
 			for e in range(len(self.eles)):
@@ -2567,7 +2567,7 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 					atom_outputs.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output = tf.add(output, ToAdd)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
@@ -2601,10 +2601,10 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -2651,16 +2651,16 @@ class MolInstance_DirectBP_EandG_SymChannel(MolInstance_DirectBP_EandG_SymFuncti
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
 		#print ("self.activation_function:\n\n", self.activation_function)
-		if (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != nmol):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom or self.batch_size != nmol):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		feed_dict=self.fill_feed_dict(batch_data+[np.ones(self.nlayer+1)])

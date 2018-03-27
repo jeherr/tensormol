@@ -583,15 +583,15 @@ class TensorMolData_BP_Multipole_2_Direct(TensorMolData_BP_Direct):
 	def LoadData(self):
 		self.ReloadSet()
 		random.shuffle(self.set.mols)
-		xyzs = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((self.Nmols, self.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((self.Nmols, self.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((self.Nmols), dtype = np.int32)
 		if (self.dig.OType == "Multipole2"):
 			labels = np.zeros((self.Nmols, 3), dtype = np.float64)
 		else:
 			raise Exception("Output Type is not implemented yet")
 		if (self.HasGrad):
-			grads = np.zeros((self.Nmols, self.MaxNAtoms, 3), dtype=np.float64)
+			grads = np.zeros((self.Nmols, self.MaxNAtom, 3), dtype=np.float64)
 		for i, mol in enumerate(self.set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
 			Zs[i][:mol.NAtoms()] = mol.atoms

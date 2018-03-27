@@ -240,7 +240,7 @@ def LJKernels(Ds,Zs,Ee,Re):
 		Ee: a matrix of LJ well depths.
 		Re: a matrix of Bond minima.
 	Returns
-		A #Mols X MaxNAtoms X MaxNAtoms matrix of LJ kernel contributions.
+		A #Mols X MaxNAtom X MaxNAtom matrix of LJ kernel contributions.
 	"""
 	# Zero distances will be set to 100.0 then masked to zero energy contributions.
 	ones = tf.ones(tf.shape(Ds),dtype = tf.float64)
@@ -344,7 +344,7 @@ def ElectrostaticDampedShiftedLinear(Ds,Qs,NZP,alpha,Rc):
 		alpha: DSF alpha parameter (~0.2)
 		Rc: DSF Rc parameter. (15A)
 	Returns
-		A #Mols X MaxNAtoms X MaxNAtoms matrix of LJ kernel contributions.
+		A #Mols X MaxNAtom X MaxNAtom matrix of LJ kernel contributions.
 	"""
 	twooversqrtpi = tf.constant(1.1283791671,dtype=tf.float64)
 	NZP_shape = tf.shape(NZP)

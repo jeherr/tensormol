@@ -2,7 +2,7 @@
 Raw => various descriptors in Tensorflow code.
 
 The Raw format is a batch of rank three tensors.
-mol X MaxNAtoms X 4
+mol X MaxNAtom X 4
 The final dim is atomic number, x,y,z (Angstrom)
 
 https://www.youtube.com/watch?v=h2zgB93KANE
@@ -155,7 +155,7 @@ def tf_spherical_harmonics_1(dxyzs, inv_dist_tensor, invariant=False):
 	l1_harmonics = 0.4886025119029199 * tf.stack([dxyzs[...,1], dxyzs[...,2], dxyzs[...,0]],
 										axis=-1) * tf.expand_dims(inv_dist_tensor, axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l1_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l1_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l1_harmonics], axis=-1)
 
@@ -171,7 +171,7 @@ def tf_spherical_harmonics_2(dxyzs, inv_dist_tensor, invariant=False):
 			(0.5462742152960396 * (tf.square(dxyzs[...,0]) - 1. * tf.square(dxyzs[...,1])))], axis=-1) \
 			* tf.expand_dims(tf.square(inv_dist_tensor),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l2_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l2_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l2_harmonics], axis=-1)
 
@@ -192,7 +192,7 @@ def tf_spherical_harmonics_3(dxyzs, inv_dist_tensor, invariant=False):
 			(0.5900435899266435 * dxyzs[...,0] * (tf.square(dxyzs[...,0]) - 3. * tf.square(dxyzs[...,1])))], axis=-1) \
 				* tf.expand_dims(tf.pow(inv_dist_tensor,3),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l3_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l3_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l3_harmonics], axis=-1)
 
@@ -220,7 +220,7 @@ def tf_spherical_harmonics_4(dxyzs, inv_dist_tensor, invariant=False):
 				+ tf.pow(dxyzs[...,1], 4)))], axis=-1) \
 			* tf.expand_dims(tf.pow(inv_dist_tensor,4),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l4_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l4_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l4_harmonics], axis=-1)
 
@@ -256,7 +256,7 @@ def tf_spherical_harmonics_5(dxyzs, inv_dist_tensor, invariant=False):
 				* tf.square(dxyzs[...,0]) * tf.square(dxyzs[...,1]) + 5. * tf.pow(dxyzs[...,1], 4)))], axis=-1) \
 			* tf.expand_dims(tf.pow(inv_dist_tensor,5),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l5_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l5_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l5_harmonics], axis=-1)
 
@@ -302,7 +302,7 @@ def tf_spherical_harmonics_6(dxyzs, inv_dist_tensor, invariant=False):
 				+ 15. * tf.square(dxyzs[...,0]) * tf.pow(dxyzs[...,1], 4) - 1. * tf.pow(dxyzs[...,1], 6)))], axis=-1) \
 			* tf.expand_dims(tf.pow(inv_dist_tensor,6),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l6_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l6_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l6_harmonics], axis=-1)
 
@@ -369,7 +369,7 @@ def tf_spherical_harmonics_7(dxyzs, inv_dist_tensor, invariant=False):
 				* tf.pow(dxyzs[...,1], 6)))], axis=-1) \
 			* tf.expand_dims(tf.pow(inv_dist_tensor,7),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l7_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l7_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l7_harmonics], axis=-1)
 
@@ -453,7 +453,7 @@ def tf_spherical_harmonics_8(dxyzs, inv_dist_tensor, invariant=False):
 				* tf.pow(dxyzs[...,1], 6) + tf.pow(dxyzs[...,1], 8)))], axis=-1) \
 			* tf.expand_dims(tf.pow(inv_dist_tensor,8),axis=-1)
 	if invariant:
-		return tf.concat([lower_order_harmonics, tf.norm(l8_harmonics+1.e-16, axis=-1, keep_dims=True)], axis=-1)
+		return tf.concat([lower_order_harmonics, tf.norm(l8_harmonics+1.e-16, axis=-1, keepdims=True)], axis=-1)
 	else:
 		return tf.concat([lower_order_harmonics, l8_harmonics], axis=-1)
 
@@ -521,13 +521,13 @@ def tf_gaussian_spherical_harmonics(xyzs, Zs, elements, gauss_params, atomic_emb
 	This one doesn't split into channels (not working?)
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
 		element (int): element to return embedding/labels for
 		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
 		atomic_embed_factors (tf.float): MaxElementNumber tensor of scaling factors for elements
 		l_max (tf.int32): Scalar for the highest order spherical harmonics to use (needs implemented)
-		labels (tf.Tensor): NMol x MaxNAtoms x label shape tensor of learning targets
+		labels (tf.Tensor): NMol x MaxNAtom x label shape tensor of learning targets
 
 	Returns:
 		embedding (tf.float): atom embeddings for element
@@ -552,8 +552,8 @@ def tf_gaush_element_channel(xyzs, Zs, elements, gauss_params, l_max):
 	cast into element channels. Works on a batch of molecules.
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
 		element (int): element to return embedding/labels for
 		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
 		l_max (tf.int32): Scalar for the highest order spherical harmonics to use
@@ -570,7 +570,7 @@ def tf_gaush_element_channel(xyzs, Zs, elements, gauss_params, l_max):
 	dxyzs = tf.gather_nd(dxyzs, padding_mask)
 	dist_tensor = tf.norm(dxyzs+1.e-16,axis=-1)
 	gauss = tf_gauss(dist_tensor, gauss_params)
-	# dxyzs has dimension NNZ X MaxNAtoms X 3
+	# dxyzs has dimension NNZ X MaxNAtom X 3
 	harmonics = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)
 	channel_scatter = tf.gather(tf.equal(tf.expand_dims(Zs, axis=-1), elements), padding_mask[:,0])
 	channel_scatter = tf.where(channel_scatter, tf.ones_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])),
@@ -593,9 +593,9 @@ def tf_sparse_gaush_element_channel(xyzs, Zs, pairs, elements, gauss_params, l_m
 	cast into element channels. Works on a batch of molecules.
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
-		pairs (tf.int32): NMol x MaxNAtoms x MaxNNeighbors neighbor index tensor
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
+		pairs (tf.int32): NMol x MaxNAtom x MaxNNeighbors neighbor index tensor
 		element (int): element to return embedding/labels for
 		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
 		l_max (tf.int32): Scalar for the highest order spherical harmonics to use
@@ -634,8 +634,8 @@ def tf_gaush_embed_channel(xyzs, Zs, elements, gauss_params, l_max, embed_factor
 	cast into channels with embedding factors. Works on a batch of molecules.
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
 		elements (tf.int32): NElements tensor of unique atomic numbers
 		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
 		l_max (tf.int32): Scalar for the highest order spherical harmonics to use
@@ -671,8 +671,8 @@ def tf_gaush_element_channelv2(xyzs, Zs, elements, gauss_params, l_max, invarian
 	cast into element channels. Works on a batch of molecules.
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
 		element (int): element to return embedding/labels for
 		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
 		l_max (tf.int32): Scalar for the highest order spherical harmonics to use
@@ -694,7 +694,7 @@ def tf_gaush_element_channelv2(xyzs, Zs, elements, gauss_params, l_max, invarian
 	min_x_idx = tf.stack([tf.cast(padding_mask[:,0], tf.int32), min_idx[:,2]], axis=-1)
 	min_y_idx = tf.stack([tf.cast(padding_mask[:,0], tf.int32), min_idx[:,3]], axis=-1)
 	z_midpoint = 0.5 * (tf.constant([0., 0., 1.], dtype=tf.float32)
-				+ tf.gather_nd(xyzs, min_z_idx) / tf.norm(tf.gather_nd(xyzs, min_z_idx), axis=-1, keep_dims=True))
+				+ tf.gather_nd(xyzs, min_z_idx) / tf.norm(tf.gather_nd(xyzs, min_z_idx), axis=-1, keepdims=True))
 	z_orient_xyzs = tf_rotate(centered_xyzs, z_midpoint, np.pi * tf.ones([tf.shape(z_midpoint)[0]], dtype=tf.float32))
 	return z_orient_xyzs
 	gauss = tf_gauss(dist_tensor, gauss_params)
@@ -714,8 +714,8 @@ def tf_gaush_element_channelv3(xyzs, Zs, elements, gauss_params, l_max):
 	cast into element channels. Works on a batch of molecules.
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
 		element (int): element to return embedding/labels for
 		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
 		l_max (tf.int32): Scalar for the highest order spherical harmonics to use
@@ -750,13 +750,13 @@ def tf_random_rotate(xyzs, rot_params, labels = None, return_matrix = False):
 	Rotates molecules and optionally labels in a uniformly random fashion
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		labels (tf.float, optional): NMol x MaxNAtoms x label shape tensor of learning targets
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		labels (tf.float, optional): NMol x MaxNAtom x label shape tensor of learning targets
 		return_matrix (bool): Returns rotation tensor if True
 
 	Returns:
-		new_xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor of randomly rotated molecules
-		new_labels (tf.float): NMol x MaxNAtoms x label shape tensor of randomly rotated learning targets
+		new_xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor of randomly rotated molecules
+		new_labels (tf.float): NMol x MaxNAtom x label shape tensor of randomly rotated learning targets
 	"""
 	r = tf.sqrt(rot_params[...,2])
 	v = tf.stack([tf.sin(rot_params[...,1]) * r, tf.cos(rot_params[...,1]) * r, tf.sqrt(2.0 - rot_params[...,2])], axis=-1)
@@ -784,19 +784,19 @@ def tf_rotate(xyzs, axis, angle):
 	Rotates molecules and optionally labels in a uniformly random fashion
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		labels (tf.float, optional): NMol x MaxNAtoms x label shape tensor of learning targets
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		labels (tf.float, optional): NMol x MaxNAtom x label shape tensor of learning targets
 		return_matrix (bool): Returns rotation tensor if True
 
 	Returns:
-		new_xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor of randomly rotated molecules
-		new_labels (tf.float): NMol x MaxNAtoms x label shape tensor of randomly rotated learning targets
+		new_xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor of randomly rotated molecules
+		new_labels (tf.float): NMol x MaxNAtom x label shape tensor of randomly rotated learning targets
 	"""
-	axis = tf.tile(tf.expand_dims(axis / tf.norm(axis, axis=-1, keep_dims=True), axis=-2), [1, tf.shape(xyzs)[1], 1])
+	axis = tf.tile(tf.expand_dims(axis / tf.norm(axis, axis=-1, keepdims=True), axis=-2), [1, tf.shape(xyzs)[1], 1])
 	angle = tf.reshape(angle, [tf.shape(angle)[0], 1, 1])
 	term1 = xyzs * tf.cos(angle)
 	term2 = tf.cross(axis, xyzs) * tf.sin(angle)
-	term3 = axis * (1 - tf.cos(angle)) * tf.reduce_sum(axis * xyzs, axis=-1, keep_dims=True)
+	term3 = axis * (1 - tf.cos(angle)) * tf.reduce_sum(axis * xyzs, axis=-1, keepdims=True)
 	new_xyzs = term1 + term2 + term3
 	return new_xyzs
 
@@ -805,8 +805,8 @@ def tf_symmetry_functions(xyzs, Zs, elements, element_pairs, radial_cutoff, angu
 	Encodes atoms into the symmetry function embedding as implemented in the ANI-1 Neural Network (doi: 10.1039/C6SC05720A)
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
 		num_atoms (tf.int32): NMol number of atoms numpy array
 		elements (tf.int32): NElements tensor containing sorted unique atomic numbers present
 		element_pairs (tf.int32): NElementPairs x 2 tensor containing sorted unique pairs of atomic numbers present
@@ -870,8 +870,8 @@ def tf_symmetry_functions_radial_grid(xyzs, Zs, radial_cutoff, radial_rs, eta, p
 	Encodes the radial grid portion of the symmetry functions. Should be called by tf_symmetry_functions_2()
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
 		num_atoms (np.int32): NMol number of atoms numpy array
 		radial_cutoff (tf.float): scalar tensor with the cutoff for radial pairs
 		radial_rs (tf.float): NRadialGridPoints tensor with R_s values for the radial grid
@@ -901,8 +901,8 @@ def tf_symmetry_function_angular_grid(xyzs, Zs, angular_cutoff, angular_rs, thet
 	Encodes the radial grid portion of the symmetry functions. Should be called by tf_symmetry_functions_2()
 
 	Args:
-		xyzs (tf.float): NMol x MaxNAtoms x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtoms atomic number tensor
+		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
+		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
 		angular_cutoff (tf.float): scalar tensor with the cutoff for the angular triples
 		angular_rs (tf.float): NAngularGridPoints tensor with the R_s values for the radial part of the angular grid
 		theta_s (tf.float): NAngularGridPoints tensor with the theta_s values for the angular grid

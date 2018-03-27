@@ -32,7 +32,7 @@ class MolInstance_DirectForce_tmp(MolInstance_fc_sqdiff_BP):
 		"""
 		self.NetType = "LJE"
 		self.TData = TData_
-		self.MaxNAtoms = TData_.MaxNAtoms
+		self.MaxNAtom = TData_.MaxNAtom
 		self.name = "Mol_"+self.TData.name+"_"+self.TData.dig.name+"_"+self.NetType
 		self.train_dir = PARAMS["networks_directory"]+self.name
 		self.batch_size_output = 10000
@@ -129,7 +129,7 @@ class MolInstance_DirectBP(MolInstance_fc_sqdiff_BP):
 		self.name = "Mol_"+self.TData.name+"_"+self.TData.dig.name+"_"+self.NetType
 		LOGGER.debug("Raised Instance: "+self.name)
 		self.train_dir = PARAMS["networks_directory"]+self.name
-		self.MaxNAtoms = TData_.MaxNAtoms
+		self.MaxNAtom = TData_.MaxNAtom
 		self.batch_size_output = 4096
 		self.inp_pl=None
 		self.frce_pl=None
@@ -301,7 +301,7 @@ class MolInstance_DirectBP_NoGrad(MolInstance_fc_sqdiff_BP):
 		self.SFPr = None
 		self.Ra_cut = None
 		self.Rr_cut = None
-		self.MaxNAtoms = self.TData.MaxNAtoms
+		self.MaxNAtom = self.TData.MaxNAtom
 		self.eles = self.TData.eles
 		self.n_eles = len(self.eles)
 		self.eles_np = np.asarray(self.eles).reshape((self.n_eles,1))
@@ -387,8 +387,8 @@ class MolInstance_DirectBP_NoGrad(MolInstance_fc_sqdiff_BP):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
 			Elep = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int64)
@@ -612,8 +612,8 @@ class MolInstance_DirectBP_NoGrad(MolInstance_fc_sqdiff_BP):
 	def EvalPrepare(self):
 		#eval_labels = np.zeros(Ncase)  # dummy labels
 		with tf.Graph().as_default(), tf.device('/job:localhost/replica:0/task:0/gpu:1'):
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
 			Elep = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int64)
@@ -672,7 +672,7 @@ class MolInstance_DirectBPBond_NoGrad(MolInstance_fc_sqdiff_BP):
 		MolInstance.__init__(self, TData_,  Name_, Trainable_)
 		# if (Name_ != None):
 			# return
-		self.MaxNAtoms = self.TData.MaxNAtoms
+		self.MaxNAtom = self.TData.MaxNAtom
 		self.eles = self.TData.eles
 		self.n_eles = len(self.eles)
 		self.eles_np = np.asarray(self.eles).reshape((self.n_eles,1))
@@ -724,7 +724,7 @@ class MolInstance_DirectBPBond_NoGrad(MolInstance_fc_sqdiff_BP):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.Zxyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,4]))
+			self.Zxyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,4]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			self.BondIdxMatrix_pl = tf.placeholder(tf.int32, shape=tuple([None,3]))
 			ElemPairs = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int32)
@@ -929,7 +929,7 @@ class MolInstance_DirectBPBond_NoGrad(MolInstance_fc_sqdiff_BP):
 
 	def EvalPrepare(self):
 		with tf.Graph().as_default(), tf.device('/job:localhost/replica:0/task:0/gpu:1'):
-			self.Zxyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.TData.set.MaxNAtoms(),4]))
+			self.Zxyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.TData.set.MaxNAtom(),4]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			self.BondIdxMatrix_pl = tf.placeholder(tf.int32, shape=tuple([None,3]))
 			ElemPairs = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int32)
@@ -961,7 +961,7 @@ class MolPairsTriples(MolInstance):
 		"""
 		MolInstance.__init__(self, TData_,  Name_, Trainable_)
 		self.NetType = "BPPairsTriples"
-		self.MaxNAtoms = self.TData.MaxNAtoms
+		self.MaxNAtom = self.TData.MaxNAtom
 		self.elements = np.asarray(self.TData.eles)
 		self.element_pairs = []
 		self.element_triples = []
@@ -996,8 +996,8 @@ class MolPairsTriples(MolInstance):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms, 3]))
-			self.Zs_pl = tf.placeholder(tf.int32, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom, 3]))
+			self.Zs_pl = tf.placeholder(tf.int32, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.labels_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			pairs_distance_cutoff = tf.constant(5.0, dtype=self.tf_prec)
 			triples_distance_cutoff = tf.constant(5.0, dtype=self.tf_prec)
@@ -1219,7 +1219,7 @@ class MolPairsTriples(MolInstance):
 
 	def EvalPrepare(self):
 		with tf.Graph().as_default():
-			self.Zxyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.TData.set.MaxNAtoms(),4]))
+			self.Zxyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.TData.set.MaxNAtom(),4]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			self.BondIdxMatrix_pl = tf.placeholder(tf.int32, shape=tuple([None,3]))
 			ElemPairs = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int32)
@@ -1256,7 +1256,7 @@ class MolInstance_DirectBP_Grad(MolInstance_fc_sqdiff_BP):
 		MolInstance.__init__(self, TData_,  Name_, Trainable_)
 		#if (Name_ != None):
 		#	return
-		self.MaxNAtoms = self.TData.MaxNAtoms
+		self.MaxNAtom = self.TData.MaxNAtom
 		self.eles = self.TData.eles
 		self.n_eles = len(self.eles)
 		self.eles_np = np.asarray(self.eles).reshape((self.n_eles,1))
@@ -1522,7 +1522,7 @@ class MolInstance_DirectBP_Grad(MolInstance_fc_sqdiff_BP):
 		"""
 		# Check sanity of input
 		nmol = batch_data[2].shape[0]
-		self.MaxNAtoms = batch_data[0].shape[1]
+		self.MaxNAtom = batch_data[0].shape[1]
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
@@ -1545,10 +1545,10 @@ class MolInstance_DirectBP_Grad(MolInstance_fc_sqdiff_BP):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
 			Elep = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int64)
 			SFPa = tf.Variable(self.SFPa, trainable=False, dtype = self.tf_prec)
@@ -1590,10 +1590,10 @@ class MolInstance_DirectBP_Grad(MolInstance_fc_sqdiff_BP):
 		Doesn't generate the training operations or losses.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
 			Elep = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int64)
 			SFPa = tf.Variable(self.SFPa, trainable=False, dtype = self.tf_prec)
@@ -1690,7 +1690,7 @@ class MolInstance_DirectBP_Grad_NewIndex(MolInstance_DirectBP_Grad):
 		hidden2_units=self.hidden2
 		hidden3_units=self.hidden3
 
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		nrm1=1.0/(10+math.sqrt(float(self.inshape)))
 		nrm2=1.0/(10+math.sqrt(float(hidden1_units)))
 		nrm3=1.0/(10+math.sqrt(float(hidden2_units)))
@@ -1732,7 +1732,7 @@ class MolInstance_DirectBP_Grad_NewIndex(MolInstance_DirectBP_Grad):
 				atom_outputs.append(rshp)
 				rshpflat = tf.reshape(cut,[shp_out[0]])
 				atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-				ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+				ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 				output = tf.add(output, ToAdd)
 			tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			#tf.Print(output, [output], message="This is output: ",first_n=10000000,summarize=100000000)
@@ -1747,10 +1747,10 @@ class MolInstance_DirectBP_Grad_NewIndex(MolInstance_DirectBP_Grad):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
 			Elep = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int64)
 			SFPa = tf.Variable(self.SFPa, trainable=False, dtype = self.tf_prec)
@@ -1831,7 +1831,7 @@ class MolInstance_DirectBP_Grad_Linear(MolInstance_DirectBP_Grad):
 		"""
 		# convert the index matrix from bool to float
 		branches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		for e in range(len(self.eles)):
 			branches.append([])
@@ -1860,7 +1860,7 @@ class MolInstance_DirectBP_Grad_Linear(MolInstance_DirectBP_Grad):
 				atom_outputs.append(rshp)
 				rshpflat = tf.reshape(cut,[shp_out[0]])
 				atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-				ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+				ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 				output = tf.add(output, ToAdd)
 			tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			#tf.Print(output, [output], message="This is output: ",first_n=10000000,summarize=100000000)
@@ -1873,22 +1873,22 @@ class MolInstance_DirectBP_Grad_Linear(MolInstance_DirectBP_Grad):
 
 		Args:
 			batch_data: a list containing
-			XYZ,Z,radial pairs, angular triples (all set format Mol X MaxNAtoms... )
+			XYZ,Z,radial pairs, angular triples (all set format Mol X MaxNAtom... )
 		"""
 		# Check sanity of input
 		xf = batch_data[0].copy()
 		zf = batch_data[1].copy()
 		MustPrepare = not self.sess
-		if (batch_data[0].shape[1] > self.MaxNAtoms or self.batch_size > batch_data[0].shape[0]):
-			print("Natoms Match?", batch_data[0].shape[1] , self.MaxNAtoms)
+		if (batch_data[0].shape[1] > self.MaxNAtom or self.batch_size > batch_data[0].shape[0]):
+			print("Natoms Match?", batch_data[0].shape[1] , self.MaxNAtom)
 			print("BatchSizes Match?", self.batch_size , batch_data[0].shape[0])
 			self.batch_size = batch_data[0].shape[0]
-			self.MaxNAtoms = batch_data[0].shape[1]
+			self.MaxNAtom = batch_data[0].shape[1]
 			MustPrepare = True
 			# Create tensors with the right shape, and sub-fill them.
-		elif (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != batch_data[0].shape[0]):
-			xf = np.zeros((self.batch_size,self.MaxNAtoms,3))
-			zf = np.zeros((self.batch_size,self.MaxNAtoms))
+		elif (batch_data[0].shape[1] != self.MaxNAtom or self.batch_size != batch_data[0].shape[0]):
+			xf = np.zeros((self.batch_size,self.MaxNAtom,3))
+			zf = np.zeros((self.batch_size,self.MaxNAtom))
 			xf[:batch_data[0].shape[0],:batch_data[0].shape[1],:] = batch_data[0]
 			zf[:batch_data[1].shape[0],:batch_data[1].shape[1]] = batch_data[1]
 		LOGGER.debug("Batch_Size: %i", self.batch_size)
@@ -1907,9 +1907,9 @@ class MolInstance_DirectBP_Grad_Linear(MolInstance_DirectBP_Grad):
 		"""
 		with tf.Graph().as_default():
 			self.SetANI1Param()
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			self.Radp_pl=tf.placeholder(tf.int64, shape=tuple([None,3]))
 			self.Angt_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
@@ -1939,10 +1939,10 @@ class MolInstance_DirectBP_Grad_Linear(MolInstance_DirectBP_Grad):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			self.Radp_pl=tf.placeholder(tf.int64, shape=tuple([None,3]))
 			self.Angt_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			Ele = tf.Variable(self.eles_np, trainable=False, dtype = tf.int64)
@@ -2090,7 +2090,7 @@ class MolInstance_DirectBP_Grad_Linear_EmbOpt(MolInstance_DirectBP_Grad):
 		"""
 		# convert the index matrix from bool to float
 		branches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		for e in range(len(self.eles)):
 			branches.append([])
@@ -2119,7 +2119,7 @@ class MolInstance_DirectBP_Grad_Linear_EmbOpt(MolInstance_DirectBP_Grad):
 				atom_outputs.append(rshp)
 				rshpflat = tf.reshape(cut,[shp_out[0]])
 				atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-				ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+				ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 				output = tf.add(output, ToAdd)
 			tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size]), atom_outputs
@@ -2229,22 +2229,22 @@ class MolInstance_DirectBP_Grad_Linear_EmbOpt(MolInstance_DirectBP_Grad):
 
 		Args:
 			batch_data: a list containing
-			XYZ,Z,radial pairs, angular triples (all set format Mol X MaxNAtoms... )
+			XYZ,Z,radial pairs, angular triples (all set format Mol X MaxNAtom... )
 		"""
 		# Check sanity of input
 		xf = batch_data[0].copy()
 		zf = batch_data[1].copy()
 		MustPrepare = not self.sess
-		if (batch_data[0].shape[1] > self.MaxNAtoms or self.batch_size > batch_data[0].shape[0]):
-			print("Natoms Match?", batch_data[0].shape[1] , self.MaxNAtoms)
+		if (batch_data[0].shape[1] > self.MaxNAtom or self.batch_size > batch_data[0].shape[0]):
+			print("Natoms Match?", batch_data[0].shape[1] , self.MaxNAtom)
 			print("BatchSizes Match?", self.batch_size , batch_data[0].shape[0])
 			self.batch_size = batch_data[0].shape[0]
-			self.MaxNAtoms = batch_data[0].shape[1]
+			self.MaxNAtom = batch_data[0].shape[1]
 			MustPrepare = True
 			# Create tensors with the right shape, and sub-fill them.
-		elif (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != batch_data[0].shape[0]):
-			xf = np.zeros((self.batch_size,self.MaxNAtoms,3))
-			zf = np.zeros((self.batch_size,self.MaxNAtoms))
+		elif (batch_data[0].shape[1] != self.MaxNAtom or self.batch_size != batch_data[0].shape[0]):
+			xf = np.zeros((self.batch_size,self.MaxNAtom,3))
+			zf = np.zeros((self.batch_size,self.MaxNAtom))
 			xf[:batch_data[0].shape[0],:batch_data[0].shape[1],:] = batch_data[0]
 			zf[:batch_data[1].shape[0],:batch_data[1].shape[1]] = batch_data[1]
 		LOGGER.debug("Batch_Size: %i", self.batch_size)
@@ -2262,9 +2262,9 @@ class MolInstance_DirectBP_Grad_Linear_EmbOpt(MolInstance_DirectBP_Grad):
 		"""
 		with tf.Graph().as_default():
 			self.SetANI1Param()
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int32, shape=tuple([self.batch_size, self.MaxNAtoms]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int32, shape=tuple([self.batch_size, self.MaxNAtom]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			self.Radp_Ele_pl=tf.placeholder(tf.int32, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int32, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int32, shape=tuple([None,4]))
@@ -2297,10 +2297,10 @@ class MolInstance_DirectBP_Grad_Linear_EmbOpt(MolInstance_DirectBP_Grad):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int32, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int32, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.label_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			self.Radp_Ele_pl=tf.placeholder(tf.int32, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int32, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int32, shape=tuple([None,4]))
@@ -2403,11 +2403,11 @@ class MolInstance_DirectBP_EE(MolInstance_DirectBP_Grad_Linear):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			self.Radp_pl=tf.placeholder(tf.int64, shape=tuple([None,3]))
 			self.Angt_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Reep_pl=tf.placeholder(tf.int64, shape=tuple([None,3]))
@@ -2529,7 +2529,7 @@ class MolInstance_DirectBP_EE(MolInstance_DirectBP_Grad_Linear):
 		# convert the index matrix from bool to float
 		Ebranches=[]
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		with tf.name_scope("EnergyNet"):
 			for e in range(len(self.eles)):
@@ -2559,14 +2559,14 @@ class MolInstance_DirectBP_EE(MolInstance_DirectBP_Grad_Linear):
 					atom_outputs.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output = tf.add(output, ToAdd)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
 		energy_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="EnergyNet")
 		Dbranches=[]
 		atom_outputs_charge = []
-		output_charge = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output_charge = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		dipole_wb = []
 		with tf.name_scope("DipoleNet"):
 			for e in range(len(self.eles)):
@@ -2602,15 +2602,15 @@ class MolInstance_DirectBP_EE(MolInstance_DirectBP_Grad_Linear):
 					atom_outputs_charge.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(charge_index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output_charge = tf.add(output_charge, ToAdd)
 				tf.verify_tensor_all_finite(output_charge,"Nan in output!!!")
 				netcharge = tf.reshape(tf.reduce_sum(output_charge, axis=1), [self.batch_size])
 				delta_charge = tf.multiply(netcharge, natom)
-				delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtoms])
+				delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtom])
 				scaled_charge =  tf.subtract(output_charge, delta_charge_tile)
-				flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtoms, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtoms, 1]))
-				dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtoms, 3]), axis=1)
+				flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtom, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtom, 1]))
+				dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtom, 3]), axis=1)
 		#cc_energy = TFCoulombErfLR(xyzsInBohr, scaled_charge, EE_cuton, Reep)
 		#cc_energy =tf.zeros([self.batch_size], dtype=self.tf_prec)
 		def f1(): return TFCoulombPolyLR(xyzsInBohr, scaled_charge, EE_cuton*BOHRPERA, Reep)
@@ -2925,11 +2925,11 @@ class MolInstance_DirectBP_EE(MolInstance_DirectBP_Grad_Linear):
 		Load pretrained network and build graph for evaluation
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			self.Radp_pl=tf.placeholder(tf.int64, shape=tuple([None,3]))
 			self.Angt_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Reep_pl=tf.placeholder(tf.int64, shape=tuple([None,3]))
@@ -2977,7 +2977,7 @@ class MolInstance_DirectBP_EE(MolInstance_DirectBP_Grad_Linear):
 		"""
 		# Check sanity of input
 		nmol = batch_data[2].shape[0]
-		self.MaxNAtoms = batch_data[0].shape[1]
+		self.MaxNAtom = batch_data[0].shape[1]
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
@@ -3172,11 +3172,11 @@ class MolInstance_DirectBP_EE_ChargeEncode(MolInstance_DirectBP_EE):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_pl=tf.placeholder(tf.int64, shape=tuple([None,3]),name="RadialPairs")
 			self.Angt_pl=tf.placeholder(tf.int64, shape=tuple([None,4]),name="AngularTriples")
 			self.Reep_pl=tf.placeholder(tf.int64, shape=tuple([None,3]),name="RadialElectros")
@@ -3251,7 +3251,7 @@ class MolInstance_DirectBP_EE_ChargeEncode(MolInstance_DirectBP_EE):
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Dbranches=[]
 		atom_outputs_charge = []
-		output_charge = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output_charge = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		dipole_wb = []
 		with tf.name_scope("DipoleNet"):
 			for e in range(len(self.eles)):
@@ -3287,15 +3287,15 @@ class MolInstance_DirectBP_EE_ChargeEncode(MolInstance_DirectBP_EE):
 					atom_outputs_charge.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(charge_index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output_charge = tf.add(output_charge, ToAdd)
 			tf.verify_tensor_all_finite(output_charge,"Nan in output!!!")
 			netcharge = tf.reshape(tf.reduce_sum(output_charge, axis=1), [self.batch_size])
 			delta_charge = tf.multiply(netcharge, natom)
-			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtoms])
+			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtom])
 			scaled_charge =  tf.subtract(output_charge, delta_charge_tile)
-			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtoms, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtoms, 1]))
-			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtoms, 3]), axis=1)
+			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtom, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtom, 1]))
+			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtom, 3]), axis=1)
 
 		def f1(): return TFCoulombPolyLR(xyzsInBohr, scaled_charge, EE_cuton*BOHRPERA, Reep)
 		#def f1(): return TFCoulombErfLR(xyzsInBohr, scaled_charge, EE_cuton*BOHRPERA, Reep)
@@ -3318,7 +3318,7 @@ class MolInstance_DirectBP_EE_ChargeEncode(MolInstance_DirectBP_EE):
 		"""
 		# convert the index matrix from bool to float
 		Ebranches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		with tf.name_scope("EnergyNet"):
 			for e in range(len(self.eles)):
@@ -3350,7 +3350,7 @@ class MolInstance_DirectBP_EE_ChargeEncode(MolInstance_DirectBP_EE):
 					atom_outputs.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output = tf.add(output, ToAdd)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
@@ -3368,11 +3368,11 @@ class MolInstance_DirectBP_EE_ChargeEncode(MolInstance_DirectBP_EE):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			self.Radp_pl=tf.placeholder(tf.int64, shape=tuple([None,3]))
 			self.Angt_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Reep_pl=tf.placeholder(tf.int64, shape=tuple([None,3]))
@@ -3472,11 +3472,11 @@ class MolInstance_DirectBP_EE_Update(MolInstance_DirectBP_EE):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -3563,11 +3563,11 @@ class MolInstance_DirectBP_EE_Update(MolInstance_DirectBP_EE):
 		"""
 		# Check sanity of input
 		nmol = batch_data[2].shape[0]
-		self.MaxNAtoms = batch_data[0].shape[1]
+		self.MaxNAtom = batch_data[0].shape[1]
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		feed_dict=self.fill_feed_dict(batch_data+[PARAMS["AddEcc"]])
@@ -3580,11 +3580,11 @@ class MolInstance_DirectBP_EE_Update(MolInstance_DirectBP_EE):
 		Load pretrained network and build graph for evaluation
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]))
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]))
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]))
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]))
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]))
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]))
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -3662,11 +3662,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update(MolInstance_DirectBP_EE_Charge
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -3775,11 +3775,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw(MolInstance_DirectBP_EE_Ch
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -3854,7 +3854,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw(MolInstance_DirectBP_EE_Ch
 		# convert the index matrix from bool to float
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Ebranches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		with tf.name_scope("EnergyNet"):
 			for e in range(len(self.eles)):
@@ -3886,7 +3886,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw(MolInstance_DirectBP_EE_Ch
 					atom_outputs.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output = tf.add(output, ToAdd)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
@@ -4039,16 +4039,16 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw(MolInstance_DirectBP_EE_Ch
 		"""
 		# Check sanity of input
 		nmol = batch_data[2].shape[0]
-		if (batch_data[0].shape[1] != self.MaxNAtoms):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		feed_dict=self.fill_feed_dict(batch_data+[PARAMS["AddEcc"]])
@@ -4064,11 +4064,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw(MolInstance_DirectBP_EE_Ch
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -4135,16 +4135,16 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw(MolInstance_DirectBP_EE_Ch
 		# Check sanity of input
 		nmol = batch_data[2].shape[0]
 		self.nreal = nreal
-		if (batch_data[0].shape[1] != self.MaxNAtoms):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare_Periodic()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare_Periodic()
 		t0 = time.time()
@@ -4175,11 +4175,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw(MolInstance_DirectBP_EE_Ch
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_j_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -4282,7 +4282,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw(MolInstance_DirectBP_EE_Ch
 			flat_dipole = tf.multiply(tf.reshape(xyzs_real,[self.batch_size*self.nreal, 3]), tf.reshape(scaled_charge,[self.batch_size*self.nreal, 1]))
 			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.nreal, 3]), axis=1)
 
-		ntess = tf.cast(tf.div(self.MaxNAtoms, self.nreal), dtype=tf.int32)
+		ntess = tf.cast(tf.div(self.MaxNAtom, self.nreal), dtype=tf.int32)
 		scaled_charge_all = tf.tile(scaled_charge, [1, ntess])
 		def f1(): return TFCoulombPolyLRSR(xyzsInBohr, scaled_charge_all, EE_cuton*BOHRPERA, Reep)
 		#def f1(): return TFCoulombErfLR(xyzsInBohr, scaled_charge, EE_cuton*BOHRPERA, Reep)
@@ -4389,11 +4389,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu(MolInstance_Direct
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -4470,7 +4470,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu(MolInstance_Direct
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Dbranches=[]
 		atom_outputs_charge = []
-		output_charge = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output_charge = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		dipole_wb = []
 		with tf.name_scope("DipoleNet"):
 			for e in range(len(self.eles)):
@@ -4506,15 +4506,15 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu(MolInstance_Direct
 					atom_outputs_charge.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(charge_index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output_charge = tf.add(output_charge, ToAdd)
 			tf.verify_tensor_all_finite(output_charge,"Nan in output!!!")
 			netcharge = tf.reshape(tf.reduce_sum(output_charge, axis=1), [self.batch_size])
 			delta_charge = tf.multiply(netcharge, natom)
-			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtoms])
+			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtom])
 			scaled_charge =  tf.subtract(output_charge, delta_charge_tile)
-			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtoms, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtoms, 1]))
-			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtoms, 3]), axis=1)
+			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtom, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtom, 1]))
+			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtom, 3]), axis=1)
 
 		def f1(): return TFCoulombEluSRDSFLR(xyzsInBohr, scaled_charge, Elu_Width*BOHRPERA, Reep, tf.cast(self.DSFAlpha, self.tf_prec), tf.cast(self.elu_alpha,self.tf_prec), tf.cast(self.elu_shift,self.tf_prec))
 		def f2(): return  tf.zeros([self.batch_size], dtype=self.tf_prec)
@@ -4584,7 +4584,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu(MolInstance_Direct
 			flat_dipole = tf.multiply(tf.reshape(xyzs_real,[self.batch_size*self.nreal, 3]), tf.reshape(scaled_charge,[self.batch_size*self.nreal, 1]))
 			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.nreal, 3]), axis=1)
 
-		ntess = tf.cast(tf.div(self.MaxNAtoms, self.nreal), dtype=tf.int32)
+		ntess = tf.cast(tf.div(self.MaxNAtom, self.nreal), dtype=tf.int32)
 		scaled_charge_all = tf.tile(scaled_charge, [1, ntess])
 		def f1(): return TFCoulombEluSRDSFLR(xyzsInBohr, scaled_charge_all, Elu_Width*BOHRPERA, Reep, tf.cast(self.DSFAlpha, self.tf_prec), tf.cast(self.elu_alpha,self.tf_prec), tf.cast(self.elu_shift,self.tf_prec))
 		#def f1(): return TFCoulombPolyLRSR(xyzsInBohr, scaled_charge_all, EE_cuton*BOHRPERA, Reep)
@@ -4604,11 +4604,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu(MolInstance_Direct
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -4659,11 +4659,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu(MolInstance_Direct
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_j_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -4737,11 +4737,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize(MolInsta
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -4817,7 +4817,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize(MolInsta
 		# convert the index matrix from bool to float
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Ebranches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		with tf.name_scope("EnergyNet"):
 			for e in range(len(self.eles)):
@@ -4847,7 +4847,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize(MolInsta
 					atom_outputs.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output = tf.add(output, ToAdd)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
@@ -4912,11 +4912,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize(MolInsta
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -4995,11 +4995,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -5072,11 +5072,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -5174,7 +5174,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 		# convert the index matrix from bool to float
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Ebranches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		with tf.name_scope("EnergyNet"):
 			for e in range(len(self.eles)):
@@ -5206,7 +5206,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 					atom_outputs.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output = tf.add(output, ToAdd)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
@@ -5230,7 +5230,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Dbranches=[]
 		atom_outputs_charge = []
-		output_charge = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output_charge = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		dipole_wb = []
 		with tf.name_scope("DipoleNet"):
 			for e in range(len(self.eles)):
@@ -5268,15 +5268,15 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 					atom_outputs_charge.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(charge_index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output_charge = tf.add(output_charge, ToAdd)
 			tf.verify_tensor_all_finite(output_charge,"Nan in output!!!")
 			netcharge = tf.reshape(tf.reduce_sum(output_charge, axis=1), [self.batch_size])
 			delta_charge = tf.multiply(netcharge, natom)
-			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtoms])
+			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtom])
 			scaled_charge =  tf.subtract(output_charge, delta_charge_tile)
-			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtoms, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtoms, 1]))
-			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtoms, 3]), axis=1)
+			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtom, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtom, 1]))
+			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtom, 3]), axis=1)
 
 		def f1(): return TFCoulombEluSRDSFLR(xyzsInBohr, scaled_charge, Elu_Width*BOHRPERA, Reep, tf.cast(self.DSFAlpha, self.tf_prec), tf.cast(self.elu_alpha,self.tf_prec), tf.cast(self.elu_shift,self.tf_prec))
 		def f2(): return  tf.zeros([self.batch_size], dtype=self.tf_prec)
@@ -5546,9 +5546,9 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 		nmols = len(mol_set.mols)
 		dummy_energy = np.zeros((nmols))
 		dummy_dipole = np.zeros((nmols, 3))
-		xyzs = np.zeros((nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		dummy_grads = np.zeros((nmols, self.MaxNAtoms, 3), dtype = np.float64)
-		Zs = np.zeros((nmols, self.MaxNAtoms), dtype = np.int32)
+		xyzs = np.zeros((nmols, self.MaxNAtom, 3), dtype = np.float64)
+		dummy_grads = np.zeros((nmols, self.MaxNAtom, 3), dtype = np.float64)
+		Zs = np.zeros((nmols, self.MaxNAtom), dtype = np.int32)
 		natom = np.zeros((nmols), dtype = np.int32)
 		for i, mol in enumerate(mol_set.mols):
 			xyzs[i][:mol.NAtoms()] = mol.coords
@@ -5602,16 +5602,16 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 		self.set_symmetry_function_params()
 		print ("running john's symfunction\n...")
 		#print ("self.activation_function:\n\n", self.activation_function)
-		if (batch_data[0].shape[1] != self.MaxNAtoms):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare_Update()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare_Update()
 		feed_dict=self.fill_feed_dict(batch_data+[PARAMS["AddEcc"]]+[np.ones(self.nlayer+1)])
@@ -5627,11 +5627,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -5681,7 +5681,8 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 				self.run_metadata = tf.RunMetadata()
 				self.summary_writer.add_run_metadata(self.run_metadata, "init", global_step=None)
 			self.sess.graph.finalize()
-	def evaluate(self, batch_data):
+
+	def evaluate(self, batch_data, ToHess_=False):
 		"""
 		Evaluate the energy, atom energies, and IfGrad = True the gradients
 		of this Direct Behler-Parinello graph.
@@ -5691,24 +5692,26 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
 		#print ("self.activation_function:\n\n", self.activation_function)
-		if (batch_data[0].shape[1] != self.MaxNAtoms or self.batch_size != nmol):
-			self.MaxNAtoms = batch_data[0].shape[1]
-			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
-			print ("loading the session..")
-			self.EvalPrepare()
-		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
-		self.batch_size = nmol
+		MustPrepare = False
+		if (batch_data[0].shape[1] > self.MaxNAtom or batch_data[0].shape[0] > self.batch_size):
+			self.batch_size = batch_data[0].shape[0]
+			self.MaxNAtom = batch_data[0].shape[1]
+			MustPrepare = True
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			self.batch_size = nmol
+			self.MaxNAtom = batch_data[0].shape[1]
+			MustPrepare = True
+		if MustPrepare:
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		feed_dict=self.fill_feed_dict(batch_data+[PARAMS["AddEcc"]]+[np.ones(self.nlayer+1)])
-		Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient = self.sess.run([self.Etotal, self.Ebp, self.Ebp_atom, self.Ecc, self.Evdw, self.dipole, self.charge, self.gradient], feed_dict=feed_dict)
-		#Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient, bp_gradient, syms= self.sess.run([self.Etotal, self.Ebp, self.Ebp_atom, self.Ecc, self.Evdw, self.dipole, self.charge, self.gradient, self.bp_gradient, self.Scatter_Sym], feed_dict=feed_dict)
-		#print ("Etotal:", Etotal, " bp_gradient", bp_gradient)
-		#return Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient, bp_gradient, syms
-		return Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient
+		if (ToHess_):
+			Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient, hessian = self.sess.run([self.Etotal, self.Ebp, self.Ebp_atom, self.Ecc, self.Evdw, self.dipole, self.charge, self.gradient, self.hess], feed_dict=feed_dict)
+			return Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient, hessian
+		else:
+			Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient = self.sess.run([self.Etotal, self.Ebp, self.Ebp_atom, self.Ecc, self.Evdw, self.dipole, self.charge, self.gradient], feed_dict=feed_dict)
+			return Etotal, Ebp, Ebp_atom, Ecc, Evdw, mol_dipole, atom_charge, gradient
 
 	def EvalPrepare(self,  continue_training =False):
 		"""
@@ -5719,11 +5722,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -5759,6 +5762,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 			#self.Etotal,  self.energy_wb = self.inference(self.Scatter_Sym, self.Sym_Index, self.xyzs_pl, self.natom_pl, Ree_on, Ree_off, self.Reep_pl)
 			#self.check = tf.add_check_numerics_ops()
 			self.gradient  = tf.gradients(self.Etotal, self.xyzs_pl, name="BPEGrad")
+			self.hess  = tf.hessians(self.Etotal, self.xyzs_pl, name="BPHess")
 			self.bp_gradient  = tf.gradients(self.Ebp, self.xyzs_pl, name="BPGrad")
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
@@ -5889,7 +5893,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 			flat_dipole = tf.multiply(tf.reshape(xyzs_real,[self.batch_size*self.nreal, 3]), tf.reshape(scaled_charge,[self.batch_size*self.nreal, 1]))
 			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.nreal, 3]), axis=1)
 
-		ntess = tf.cast(tf.div(self.MaxNAtoms, self.nreal), dtype=tf.int32)
+		ntess = tf.cast(tf.div(self.MaxNAtom, self.nreal), dtype=tf.int32)
 		scaled_charge_all = tf.tile(scaled_charge, [1, ntess])
 		def f1(): return TFCoulombEluSRDSFLR(xyzsInBohr, scaled_charge_all, Elu_Width*BOHRPERA, Reep, tf.cast(self.DSFAlpha, self.tf_prec), tf.cast(self.elu_alpha,self.tf_prec), tf.cast(self.elu_shift,self.tf_prec))
 		def f2(): return  tf.zeros([self.batch_size], dtype=self.tf_prec)
@@ -5925,16 +5929,16 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 		self.nreal = nreal
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.AssignActivation()
-		if (batch_data[0].shape[1] != self.MaxNAtoms):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare_Periodic()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare_Periodic()
 		t0 = time.time()
@@ -5955,11 +5959,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout(
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -6041,11 +6045,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -6123,7 +6127,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 		# convert the index matrix from bool to float
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Ebranches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		prob_list = []
 		E_range = tf.reshape(tf.range(self.Emin, self.Emax, (self.Emax-self.Emin)/self.HiddenLayers[-1], dtype=tf.float64),[1,-1])
@@ -6163,7 +6167,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 					atom_outputs.append(rshp)
 					rshpflat = tf.reshape(Ebranches[-1][-1],[shp_out[0]])
 					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output = tf.add(output, ToAdd)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
@@ -6180,16 +6184,16 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 		"""
 		# Check sanity of input
 		nmol = batch_data[2].shape[0]
-		if (batch_data[0].shape[1] != self.MaxNAtoms):
-			self.MaxNAtoms = batch_data[0].shape[1]
+		if (batch_data[0].shape[1] != self.MaxNAtom):
+			self.MaxNAtom = batch_data[0].shape[1]
 			self.batch_size = nmol
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		LOGGER.debug("nmol: %i", batch_data[2].shape[0])
 		self.batch_size = nmol
 		if not self.sess:
-			print ("self.batch_size:", self.batch_size, "  self.MaxNAtoms:", self.MaxNAtoms)
+			print ("self.batch_size:", self.batch_size, "  self.MaxNAtom:", self.MaxNAtom)
 			print ("loading the session..")
 			self.EvalPrepare()
 		feed_dict=self.fill_feed_dict(batch_data+[PARAMS["AddEcc"]]+[np.ones(self.nlayer+1)])
@@ -6208,11 +6212,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -6284,11 +6288,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 
 	def GetAvgPrepare(self):
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -6332,11 +6336,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -6595,7 +6599,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 		# convert the index matrix from bool to float
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Ebranches=[]
-		output = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		atom_outputs = []
 		with tf.name_scope("EnergyNet"):
 			for e in range(len(self.eles)):
@@ -6635,7 +6639,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 					atom_outputs.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output = tf.add(output, ToAdd)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 			bp_energy = tf.reshape(tf.reduce_sum(output, axis=1), [self.batch_size])
@@ -6660,7 +6664,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 		xyzsInBohr = tf.multiply(xyzs,BOHRPERA)
 		Dbranches=[]
 		atom_outputs_charge = []
-		output_charge = tf.zeros([self.batch_size, self.MaxNAtoms], dtype=self.tf_prec)
+		output_charge = tf.zeros([self.batch_size, self.MaxNAtom], dtype=self.tf_prec)
 		with tf.name_scope("DipoleNet"):
 			for e in range(len(self.eles)):
 				Dbranches.append([])
@@ -6699,15 +6703,15 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 					atom_outputs_charge.append(rshp)
 					rshpflat = tf.reshape(cut,[shp_out[0]])
 					atom_indice = tf.slice(charge_index, [0,1], [shp_out[0],1])
-					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtoms]),[self.batch_size, self.MaxNAtoms])
+					ToAdd = tf.reshape(tf.scatter_nd(atom_indice, rshpflat, [self.batch_size*self.MaxNAtom]),[self.batch_size, self.MaxNAtom])
 					output_charge = tf.add(output_charge, ToAdd)
 			tf.verify_tensor_all_finite(output_charge,"Nan in output!!!")
 			netcharge = tf.reshape(tf.reduce_sum(output_charge, axis=1), [self.batch_size])
 			delta_charge = tf.multiply(netcharge, natom)
-			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtoms])
+			delta_charge_tile = tf.tile(tf.reshape(delta_charge,[self.batch_size,1]),[1, self.MaxNAtom])
 			scaled_charge =  tf.subtract(output_charge, delta_charge_tile)
-			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtoms, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtoms, 1]))
-			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtoms, 3]), axis=1)
+			flat_dipole = tf.multiply(tf.reshape(xyzsInBohr,[self.batch_size*self.MaxNAtom, 3]), tf.reshape(scaled_charge,[self.batch_size*self.MaxNAtom, 1]))
+			dipole = tf.reduce_sum(tf.reshape(flat_dipole,[self.batch_size, self.MaxNAtom, 3]), axis=1)
 
 		def f1(): return TFCoulombEluSRDSFLR(xyzsInBohr, scaled_charge, Elu_Width*BOHRPERA, Reep, tf.cast(self.DSFAlpha, self.tf_prec), tf.cast(self.elu_alpha,self.tf_prec), tf.cast(self.elu_shift,self.tf_prec))
 		def f2(): return  tf.zeros([self.batch_size], dtype=self.tf_prec)
@@ -6741,11 +6745,11 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="InputCoords")
-			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtoms]),name="InputZs")
+			self.xyzs_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="InputCoords")
+			self.Zs_pl=tf.placeholder(tf.int64, shape=tuple([self.batch_size, self.MaxNAtom]),name="InputZs")
 			self.Elabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size]),name="DesEnergy")
 			self.Dlabel_pl = tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, 3]),name="DesDipoles")
-			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtoms,3]),name="DesGrads")
+			self.grads_pl=tf.placeholder(self.tf_prec, shape=tuple([self.batch_size, self.MaxNAtom,3]),name="DesGrads")
 			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
 			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
 			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
@@ -7010,7 +7014,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 		return  test_loss
 
 	def loss_op(self, energy, dipole, Elabels, grads, Dlabels, natom):
-		maxatom=tf.cast(self.MaxNAtoms, self.tf_prec)
+		maxatom=tf.cast(self.MaxNAtom, self.tf_prec)
 		energy_diff  = tf.multiply(tf.subtract(energy, Elabels,name="EnDiff"), natom*maxatom)
 		energy_loss = tf.nn.l2_loss(energy_diff,name="EnL2")
 		dipole_diff = tf.multiply(tf.subtract(dipole, Dlabels,name="DipoleDiff"), tf.reshape(natom*maxatom,[self.batch_size,1]))
@@ -7022,7 +7026,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 		return tf.add_n(tf.get_collection('losses'), name='total_loss'), loss, energy_loss, dipole_loss
 
 	def loss_op_dipole(self, energy,  dipole, Elabels, grads, Dlabels, natom):
-		maxatom=tf.cast(self.MaxNAtoms, self.tf_prec)
+		maxatom=tf.cast(self.MaxNAtom, self.tf_prec)
 		energy_diff  = tf.multiply(tf.subtract(energy, Elabels), natom*maxatom)
 		energy_loss = tf.nn.l2_loss(energy_diff)
 		dipole_diff = tf.multiply(tf.subtract(dipole, Dlabels), tf.reshape(natom*maxatom,[self.batch_size,1]))
@@ -7033,7 +7037,7 @@ class MolInstance_DirectBP_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_
 		return tf.add_n(tf.get_collection('losses'), name='total_loss'), loss, energy_loss, dipole_loss
 
 	def loss_op_EandG(self, energy, dipole, Elabels, grads, Dlabels, natom):
-		maxatom=tf.cast(self.MaxNAtoms, self.tf_prec)
+		maxatom=tf.cast(self.MaxNAtom, self.tf_prec)
 		energy_diff  = tf.multiply(tf.subtract(energy, Elabels), natom*maxatom)
 		energy_loss = tf.nn.l2_loss(energy_diff)
 		dipole_diff = tf.multiply(tf.subtract(dipole, Dlabels), tf.reshape(natom*maxatom,[self.batch_size,1]))
