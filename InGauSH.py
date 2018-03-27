@@ -51,6 +51,9 @@ def CanonicalizeGS(dxyzs):
 	4A, the output will not be rotationally invariant, although
 	The axes will still be as invariant as possible.
 
+	The axes are also smooth WRT radial displacments, because they are
+	smoothly mixed with each other.
+
 	Args:
 		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
 		ie: ... X i X i = (0.,0.,0.))
@@ -62,36 +65,53 @@ def CanonicalizeGS(dxyzs):
 
 	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[1],3))
 	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[1]+3,3))
-	weights = tf.exp(-1.0*tf.norm(dxyzsandDef,axis=-1))
+	weights = tf.exp(-1.0*tf.norm(dxyzsandDef,axis=-1)) # Mol X MaxNAtom X MaxNAtom
 	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
 	#weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
 	#maskedDs = tf.where(tf.equal(weights,0.),tf.zeros_like(weights),weights)
 
 	# GS orth the first three vectors.
-	tosort= tf.reshape(maskedDs,(argshape[0]*argshape[1],-1))
 	vals, inds = tf.nn.top_k(maskedDs,k=3)
-	inds = tf.reshape(inds,(argshape[0]*argshape[1],3))
+
+#	inds = tf.Print(inds,[togather,maskedDs,inds,vals],"Masked weights inds vals: ", summarize=5)
+
+	inds = tf.reshape(inds,(argshape[0]*argshape[1],4))
+	vals = tf.reshape(vals,(argshape[0]*argshape[1],4))
 	v1i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,:1]],axis=-1)
 	v2i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,1:2]],axis=-1)
 	v3i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,2:3]],axis=-1)
-	v1 = tf.gather_nd(togather,v1i)
+	#v4i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,3:4]],axis=-1)
+	# Gather the weights as well and force the vectors to be smooth.
+	v10 = tf.gather_nd(togather,v1i)
+	v20 = tf.gather_nd(togather,v2i)
+	v30 = tf.gather_nd(togather,v3i)
+	#v40 = tf.gather_nd(togather,v4i)
+	w1 = tf.exp(-tf.clip_by_value(tf.norm(v10,axis=-1,keepdims=True),1e-36,1e36))
+	w2 = tf.exp(-tf.clip_by_value(tf.norm(v20,axis=-1,keepdims=True),1e-36,1e36))
+	w3 = tf.exp(-tf.clip_by_value(tf.norm(v30,axis=-1,keepdims=True),1e-36,1e36))
+	#w4 = tf.exp(-tf.clip_by_value(tf.norm(v40,axis=-1,keepdims=True),1e-36,1e36))
+#	v10 = tf.Print(v10,[tf.gather_nd(togather,v1i),v10],"vectors",summarize=12)
+#	v10 = tf.Print(v10,[w1],"VsWW",summarize=5)
+	# So the first axis continuously changes when 1,2 swap.
+	v1 = w1*v10 + w2*v20
 	v1 /= tf.clip_by_value(tf.norm(v1,axis=-1,keepdims=True),1e-36,1e36)
-	v2 = tf.gather_nd(togather,v2i)
+	v2 = w2*v10 + w1*v20 + w3*v30
 	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 	v2 /= tf.clip_by_value(tf.norm(v2,axis=-1,keepdims=True),1e-36,1e36)
-	v3 = tf.gather_nd(togather,v3i)
+	v3 = w2*v20 + w3*v30
 	v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
 	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
 	v3 /= tf.clip_by_value(tf.norm(v3,axis=-1,keepdims=True),1e-36,1e36)
 	vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
-
+	#vs = tf.Print(vs,[vs[0,0,:],vs[0,1,:],vs[0,2,:]],"Vs")
+	#vs = tf.Print(vs,[w1,w2,w3],"VsWW",summarize=100000)
 	tore = tf.einsum('ijk,ilk->ijl',realdata,vs)
 	return tf.reshape(tore,tf.shape(dxyzs))
 
 class InGauShBPNetwork:
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 256
+		self.batch_size = 512
 		self.MaxNAtom = 32
 		self.learning_rate = 0.0002
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
@@ -129,6 +149,8 @@ class InGauShBPNetwork:
 			xyzs[0,:m.NAtoms(),:] = xyz_
 			Zs[0,:m.NAtoms(),0] = m.atoms
 			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs}
+			print (self.sess.run([], feed_dict=feed_dict))
+
 			if (DoForce):
 				ens,fs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
 				return ens[0],fs[0][:m.NAtoms()]*(-JOULEPERHARTREE)
@@ -254,7 +276,7 @@ class InGauShBPNetwork:
 
 	def print_training(self, step, loss_):
 		if (step%10==0):
-			self.saver.save(self.sess, './networks/InGauSH',global_step=step, max_to_keep=5 )
+			self.saver.save(self.sess, './networks/InGauSH',global_step=step)
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
 			print(self.sess.run([self.gp_tf])[0])
 			feed_dict = self.NextBatch(self.mset)
@@ -364,7 +386,7 @@ class InGauShBPNetwork:
 		#self.sess.graph.finalize()
 
 net = InGauShBPNetwork(b)
-#net.Train()
+net.Train()
 mi = np.random.randint(len(b.mols))
 m = b.mols[mi]
 print m.atoms, m.coords
