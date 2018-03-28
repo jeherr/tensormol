@@ -2,9 +2,11 @@ from TensorMol import *
 import numpy as np
 
 #b = MSet("HNCO_small")
-#b = MSet("chemspider12_clean_maxatom35")
+c = MSet("chemspider12_clean_maxatom35")
 b = MSet("chemspider20_1_opt_all")
 b.Load()
+c.Load()
+b.mols=b.mols+(c.mols[:int(len(b.mols)*0.5)])
 MAX_ATOMIC_NUMBER = 55
 
 def MaskedReduceMean(masked,pair_mask,axis=-2):
@@ -114,13 +116,13 @@ class InGauShBPNetwork:
 		self.prec = tf.float64
 		self.batch_size = 180 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
-		self.learning_rate = 0.0001
+		self.learning_rate = 0.00005
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
 		self.AtomTypes = [1,6,7,8]
 		self.l_max = 3
 		#self.GaussParams = np.array([[0.35, 0.30], [0.70, 0.30], [1.05, 0.30], [1.40, 0.30], [1.75, 0.30], [2.10, 0.30], [2.45, 0.30],[2.80, 0.30], [3.15, 0.30], [3.50, 0.30], [3.85, 0.30], [4.20, 0.30], [4.55, 0.30], [4.90, 0.30]])
 		#self.GaussParams = np.array([[0.36, 0.25], [0.70, 0.24], [1.05, 0.24], [1.38, 0.23], [1.70, 0.23],[2.08, 0.23], [2.79, 0.23], [2.42, 0.23],[3.14, 0.23], [3.50, 0.23], [3.85, 0.23], [4.20, 0.23], [4.90, 0.23], [5.50, 0.22], [6.0, 0.22]])
-		self.GaussParams = np.array([[0.36, 0.25], [0.70, 0.24], [1.05, 0.24], [1.38, 0.23], [1.70, 0.23],[2.08, 0.23], [2.79, 0.23], [3.14, 0.23], [3.85, 0.23], [4.90, 0.23], [5.50, 0.22]])
+		self.GaussParams = np.array([[ 0.37477018,  0.25175677],[ 0.67658861,  0.23472445], [ 1.05008962,  0.23588795],[ 1.38640627,  0.22124612], [ 1.68125033,  0.21762672], [ 2.05397151,  0.21847124], [ 2.79472851,  0.15731322], [ 3.13242662,  0.19378809], [ 3.80189948,  0.18397461], [ 4.89845145,  0.13036654], [ 5.50038598,  0.11493009]])
 		self.nrad = len(self.GaussParams)
 		self.nang = (self.l_max+1)**2
 		self.ncodes = self.AtomCodes.shape[-1]
@@ -206,7 +208,8 @@ class InGauShBPNetwork:
 		# Perform each of the contractions.
 		SHRAD = tf.einsum('mijk,mijl->mijkl',SH,RAD)
 		CODES = tf.reshape(tf.gather(elecode, Zs, axis=0),(self.batch_size,self.MaxNAtom,self.ncodes)) # mol X maxNatom X 4
-		#CODES = tf.stop_gradient(CODES) # Can sig. save memory.
+		if (not self.DoCodeLearning):
+			CODES = tf.stop_gradient(CODES) # Can sig. save memory.
 		SHRADCODE = tf.einsum('mijkl,mjn->mikln',SHRAD,CODES)
 		return SHRADCODE
 
@@ -304,7 +307,7 @@ class InGauShBPNetwork:
 		train_op = optimizer.apply_gradients(capped_gvs, global_step=global_step)
 		return train_op
 
-	def Train(self,mxsteps=30000):
+	def Train(self,mxsteps=500000):
 		test_freq = 40
 		for step in range(1, mxsteps+1):
 			self.train_step(step)
@@ -312,8 +315,10 @@ class InGauShBPNetwork:
 
 	def Prepare(self):
 		tf.reset_default_graph()
+
 		self.DoRotGrad = False
 		self.DoForceLearning = False
+		self.DoCodeLearning = False
 
 		self.xyzs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = self.prec)
 		self.zs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,1), dtype = tf.int32)
@@ -321,8 +326,8 @@ class InGauShBPNetwork:
 		self.groundTruthE_pl = tf.placeholder(shape = (self.batch_size,1), dtype = tf.float64)
 		self.groundTruthG_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = tf.float64)
 
-		self.atom_codes = tf.Variable(self.AtomCodes,trainable=True)
-		self.gp_tf  = tf.Variable(self.GaussParams,trainable=True, dtype = self.prec)
+		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning)
+		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec)
 
 		if self.DoRotGrad:
 			thetas = tf.acos(2.0*tf.random_uniform([self.batch_size],dtype=tf.float64)-1.0)
@@ -397,11 +402,13 @@ class InGauShBPNetwork:
 		#self.sess.graph.finalize()
 
 net = InGauShBPNetwork(b)
+net.Load()
 net.Train()
-mi = np.random.randint(len(b.mols))
-m = b.mols[mi]
-print(m.atoms, m.coords)
-EF = net.GetEnergyForceRoutine(m)
-print(EF(m.coords))
-Opt = GeomOptimizer(EF)
-Opt.Opt(m)
+if 0:
+	mi = np.random.randint(len(b.mols))
+	m = b.mols[mi]
+	print(m.atoms, m.coords)
+	EF = net.GetEnergyForceRoutine(m)
+	print(EF(m.coords))
+	Opt = GeomOptimizer(EF)
+	Opt.Opt(m)
