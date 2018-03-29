@@ -1,3 +1,7 @@
+"""
+This version adds a smooth charge embedding and sparsity.
+"""
+
 from TensorMol import *
 import numpy as np
 
@@ -58,7 +62,7 @@ def CanonicalizeGS(dxyzs):
 	smoothly mixed with each other.
 
 	Args:
-		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
+		dxyz: a nMol X maxNatom X (MaxNeigh) X 3 tensor of atoms. (differenced from center of embedding
 		ie: ... X i X i = (0.,0.,0.))
 	"""
 	# Append orthogonal axes to dxyzs
@@ -66,8 +70,8 @@ def CanonicalizeGS(dxyzs):
 	defaultAxes = tf.tile(tf.reshape(4.0*tf.eye(3,dtype=tf.float64),(1,1,3,3)),[argshape[0],argshape[1],1,1])
 	dxyzsandDef = tf.concat([dxyzs,defaultAxes],axis=2)
 
-	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[1],3))
-	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[1]+3,3))
+	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
+	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[2]+3,3))
 	weights = tf.exp(-1.0*tf.norm(dxyzsandDef,axis=-1)) # Mol X MaxNAtom X MaxNAtom
 	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
 	#weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
@@ -75,9 +79,7 @@ def CanonicalizeGS(dxyzs):
 
 	# GS orth the first three vectors.
 	vals, inds = tf.nn.top_k(maskedDs,k=3)
-
 #	inds = tf.Print(inds,[togather,maskedDs,inds,vals],"Masked weights inds vals: ", summarize=5)
-
 	inds = tf.reshape(inds,(argshape[0]*argshape[1],3))
 	vals = tf.reshape(vals,(argshape[0]*argshape[1],3))
 	v1i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,:1]],axis=-1)
@@ -111,11 +113,12 @@ def CanonicalizeGS(dxyzs):
 	tore = tf.einsum('ijk,ilk->ijl',realdata,vs)
 	return tf.reshape(tore,tf.shape(dxyzs))
 
-class InGauShBPNetwork:
+class SparseCodedGauSHNetwork:
 	def __init__(self,aset=None):
 		self.prec = tf.float64
 		self.batch_size = 64 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
+		self.MaxNeigh = self.MaxNAtom
 		self.learning_rate = 0.00005
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
 		self.AtomTypes = [1,6,7,8]
@@ -132,6 +135,15 @@ class InGauShBPNetwork:
 		if (aset != None):
 			self.MaxNAtom = b.MaxNAtom()
 			self.AtomTypes = b.AtomTypes()
+			# Get a reasonable number of neighbors.
+			xyzs = np.zeros((100,self.MaxNAtom,3))
+			for i in range(100):
+				mi = np.random.randint(len(aset.mols))
+				m = aset.mols[mi]
+				xyzs[i,:m.NAtoms()] = m.coords
+			NLT = self.NLTensors(xyzs)
+			self.MaxNeigh = NLT.shape[2]+2
+			print("self.MaxNeigh = ", self.MaxNeigh)
 		self.sess = None
 		self.Prepare()
 		return
@@ -184,56 +196,68 @@ class InGauShBPNetwork:
 		xyzs = np.zeros((self.batch_size,self.MaxNAtom,3),dtype=np.float)
 		true_force = np.zeros((self.batch_size,self.MaxNAtom,3),dtype=np.float)
 		zs = np.zeros((self.batch_size,self.MaxNAtom),dtype=np.int32)
+		nls = np.zeros((self.batch_size,self.MaxNAtom,self.MaxNeigh),dtype=np.int32)
 		true_ae = np.zeros((self.batch_size,1),dtype=np.float)
 		for i in range(self.batch_size):
-			mi = np.random.randint(len(b.mols))
-			m = b.mols[mi]
+			mi = np.random.randint(len(aset.mols))
+			m = aset.mols[mi]
 			xyzs[i,:m.NAtoms()] = m.coords
 			zs[i,:m.NAtoms()] = m.atoms
 			true_ae[i]=m.properties["atomization"]
 			true_force[i,:m.NAtoms()]=m.properties["gradients"]
-		return {self.xyzs_pl:xyzs, self.zs_pl:zs[:,:,np.newaxis],self.groundTruthE_pl:true_ae, self.groundTruthG_pl:true_force}
+		nlt = self.NLTensors(xyzs)
+		nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
+		return {self.xyzs_pl:xyzs, self.zs_pl:zs[:,:,np.newaxis],self.nl_pl:nls,self.groundTruthE_pl:true_ae, self.groundTruthG_pl:true_force}
 
-	def Embed(self, dxyzs, Zs, pair_mask, gauss_params, elecode, l_max):
+	def Embed(self, dxyzs, jcodes, pair_mask, gauss_params, l_max):
 		"""
 		Returns the GauSH embedding of every atom.
-		as a
+		as a mol X maxNAtom X ang X rad X code tensor.
 
-		mol X maxNAtom X ang X rad X code tensor.
+		Args:
+			dxyzs: (nmol X maxnatom X maxneigh x 3) difference vector.
+			jcodes: (nmol X maxnatom x maxneigh X 4) atomic code tensor for atom j
+			pair_mask: (nmol X maxnatom X maxneigh x 1) multiplicative mask.
+			gauss_params: (nrad X 2) tensor of gaussian paramters.  (ang.)
+			l_max: max angular momentum of embedding.
 		"""
 		dist_tensor = tf.norm(dxyzs+1.e-36,axis=-1)
 		# NMOL X MAXNATOM X MAXNATOM X NSH
-		SH = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)*pair_mask
-		RAD = tf_gauss(dist_tensor, gauss_params)*pair_mask
+		SH = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)*pair_mask # mol X maxNatom X maxNeigh X nang.
+		RAD = tf_gauss(dist_tensor, gauss_params)*pair_mask # mol X maxNatom X maxNeigh X nrad.
 		# Perform each of the contractions.
-		SHRAD = tf.einsum('mijk,mijl->mijkl',SH,RAD)
-		CODES = tf.reshape(tf.gather(elecode, Zs, axis=0),(self.batch_size,self.MaxNAtom,self.ncodes)) # mol X maxNatom X 4
-		if (not self.DoCodeLearning):
-			CODES = tf.stop_gradient(CODES) # Can sig. save memory.
-		SHRADCODE = tf.einsum('mijkl,mjn->mikln',SHRAD,CODES)
+		SHRAD = tf.einsum('mijk,mijl->mijkl',SH,RAD) # mol X maxnatom X maxneigh X nang X nrad
+		#CODES = tf.reshape(tf.gather(elecode, Zs, axis=0),(self.batch_size,self.MaxNAtom,self.ncodes)) # mol X maxNatom X 4
+		SHRADCODE = tf.einsum('mijkl,mijn->mikln',SHRAD,jcodes)
 		return SHRADCODE
 
-	def AtomEmbToAtomEnergy(self,emb,Zs):
+	def NLTensors(self,xyzs_, Rcut = 15.0, ntodo_=None):
 		"""
-		Per-embedded vector, send each to an appropriate atom sub-net.
-		This is an Old-Style BP. To be superceded by a element-less
-		version which is demonstrated below.
+		Generate Neighborlist arrays for sparse version.
+
+		Args:
+			xyzs_ : a coordinate tensor nmol X Maxnatom X 3
+			Zs_ : a AN tensor nmol X Maxnatom X 1
+			ntodo_: For periodic (unused.)
+		Returns:
+			nlarray a nmol X Maxnatom X MaxNeighbors int32 array.
+				which is -1 = blank, 0 = atom zero is a neighbor within Rcut
 		"""
-		# Step 1: Mol X MaxNAtom X nsh X nrad X ncode
-		# => mol X
-		#embshp = tf.shape(emb)
-		#embdim = tf.reduce_prod(embshp[2:])
-		embf = tf.reshape(emb,(self.batch_size*self.MaxNAtom,-1))
-		Zrs = tf.cast(tf.reshape(Zs,(self.batch_size*self.MaxNAtom,-1)),self.prec)
-		branches=[]
-		for ele in self.AtomTypes:
-			msk = tf.where(tf.equal(Zrs,ele),tf.ones_like(Zrs),tf.zeros_like(Zrs))
-			l1 = tf.layers.dense(inputs=embf,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
-			l2 = tf.layers.dense(inputs=l1,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
-			l3 = tf.layers.dense(l2,units=1,activation=None,use_bias=True)
-			branches.append(l3*msk)
-		output = tf.reshape(tf.add_n(branches),(self.batch_size,self.MaxNAtom,1))
-		return output
+		RawLists=[]
+		for mi in range(xyzs_.shape[0]):
+			RawLists.append(Make_NListNaive(xyzs_[mi],Rcut,self.MaxNAtom,True))
+		maxneigh = 0
+		for rl in RawLists:
+			for a in rl:
+				if len(a) > maxneigh:
+					maxneigh = len(a)
+		tore = np.ones((xyzs_.shape[0],xyzs_.shape[1],maxneigh),dtype=np.int32)
+		tore *= -1
+		for i,rl in enumerate(RawLists):
+			for j,a in enumerate(rl):
+				for k,l in enumerate(a):
+					tore[i,j,k] = l
+		return tore
 
 	def AtomEmbToAtomEnergyChannel(self,emb,Zs):
 		"""
@@ -274,60 +298,6 @@ class InGauShBPNetwork:
 		# Finally allow for a simple 1-D linear filter based on element type.
 		return tf.reshape(l3,(self.batch_size,self.MaxNAtom,1))
 
-	def AtomEmbToAtomEnergyChannelMultiplexed(self,emb,Zs):
-		"""
-		This version which actually has atom dependent weights is quite expensive.
-
-		Args:
-			emb: # mol X maxNAtom X ang X rad X code tensor.
-			Zs: mol X maxNatom X 1 atomic number tensor.
-		"""
-		ncase = self.batch_size*self.MaxNAtom
-		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
-		nchan = self.AtomCodes.shape[1]
-		nembdim = self.nembdim
-		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # (mol * maxNatom) X 4
-		# Combine the codes of the main atom and the sensed atom
-		# Using a hinton-esque tensor decomposition.
-		CODEKERN1 = tf.get_variable(name="CodeKernel", shape=(nchan,nchan),dtype=self.prec)
-		CODEKERN2 = tf.get_variable(name="CodeKernel2", shape=(nchan,nchan),dtype=self.prec)
-		# combine the weight kernel with the codes.
-		mix1 = tf.matmul(CODES,CODEKERN1) # ncase X ncode
-		embrs = tf.reshape(emb,(ncase,-1,nchan))
-		# Ensure any zero cases don't contribute.
-		msk = tf.where(tf.equal(Zrs,0.0),tf.zeros_like(Zrs),tf.ones_like(Zrs))
-		embrs *= msk[:,:,tf.newaxis]
-		weighted = tf.einsum('ikj,ij->ikj',embrs,mix1)
-		weighted2 = tf.reshape(tf.einsum('ikj,jl->ikl',weighted,CODEKERN2),(ncase,-1))
-
-		# Create Weight Matrices and biases for three layers.
-		# Using the codes.
-		numunits1 = 512
-		inputs1 = nembdim
-		if 0:
-			CODESp =  tf.tile(tf.reshape(CODES,(ncase,1,1,4)),(1,inputs1,numunits1,1))
-			Kern11 = tf.tile(tf.get_variable(name="Kern11", shape=(1,inputs1,1,nchan),dtype=self.prec),(ncase,1,numunits1,1))
-			Kern12 = tf.tile(tf.get_variable(name="Kern12", shape=(1,1,numunits1,nchan),dtype=self.prec),(ncase,inputs1,1,1))
-			Bias1 =tf.get_variable(name="Bias1", shape=(nchan,numunits1),dtype=self.prec)
-			w1 = tf.reduce_sum(Kern11*CODESp*Kern12,axis=-1) # ncase X inputs1 X units1 X nchan
-			b1 = tf.matmul(CODES,Bias1)
-			l1 = sftpluswparam(tf.einsum('ij,ijk->ik',weighted2,w1)+b1)
-
-		Kern11 = tf.get_variable(name="Kern11", shape=(nchan,inputs1),dtype=self.prec)
-		Kern12 = tf.get_variable(name="Kern12", shape=(nchan,numunits1),dtype=self.prec)
-		Bias1 =tf.get_variable(name="Bias1", shape=(nchan,numunits1),dtype=self.prec)
-
-		w11 = tf.matmul(CODES,Kern11)
-		w12 = tf.matmul(CODES,Kern12)
-		w1 = tf.einsum('ij,ik->ijk',w11,w12)
-		b1 = tf.matmul(CODES,Bias1)
-		l1 = sftpluswparam(tf.einsum('ij,ijk->ik',weighted2,w1)+b1)
-
-		l2p = tf.concat([l1,CODES],axis=-1)
-		l3 = tf.layers.dense(l2p,units=1,activation=None,use_bias=True)*msk
-		# Finally allow for a simple 1-D linear filter based on element type.
-		return tf.reshape(l3,(self.batch_size,self.MaxNAtom,1))
-
 	def train_step(self,step):
 		feed_dict = self.NextBatch(self.mset)
 		_,train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
@@ -336,7 +306,7 @@ class InGauShBPNetwork:
 
 	def print_training(self, step, loss_):
 		if (step%10==0):
-			self.saver.save(self.sess, './networks/InGauSH',global_step=step)
+			self.saver.save(self.sess, './networks/SparseCodedGauSH',global_step=step)
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
 			print("Gauss Params: ",self.sess.run([self.gp_tf])[0])
 			print("AtomCodes: ",self.sess.run([self.atom_codes])[0])
@@ -375,7 +345,8 @@ class InGauShBPNetwork:
 		self.DoCodeLearning = False
 
 		self.xyzs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = self.prec)
-		self.zs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,1), dtype = tf.int32)
+		self.zs_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, 1), dtype = tf.int32)
+		self.nl_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, self.MaxNeigh), dtype = tf.int32)
 
 		self.groundTruthE_pl = tf.placeholder(shape = (self.batch_size,1), dtype = tf.float64)
 		self.groundTruthG_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = tf.float64)
@@ -383,21 +354,26 @@ class InGauShBPNetwork:
 		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning)
 		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec)
 
-		if self.DoRotGrad:
-			thetas = tf.acos(2.0*tf.random_uniform([self.batch_size],dtype=tf.float64)-1.0)
-			phis = tf.random_uniform([self.batch_size],dtype=tf.float64)*2*Pi
-			psis = tf.random_uniform([self.batch_size],dtype=tf.float64)*2*Pi
-			matrices = TF_RotationBatch(thetas,phis,psis)
-			self.xyzs_shifted = self.xyzs_pl - self.xyzs_pl[:,0,:][:,tf.newaxis,:]
-			tmpxyzs = tf.einsum('ijk,ikl->ijl',self.xyzs_shifted, matrices)
-			self.dxyzs = tf.expand_dims(tmpxyzs, axis=2) - tf.expand_dims(tmpxyzs, axis=1)
-		else:
-			self.dxyzs = tf.expand_dims(self.xyzs_pl, axis=2) - tf.expand_dims(self.xyzs_pl, axis=1)
-		self.z1z2 = tf.cast(tf.expand_dims(self.zs_pl, axis=2) * tf.expand_dims(self.zs_pl, axis=1),tf.float64)
-		self.pair_mask = BuildMultiplicativeZeroMask(self.z1z2)
+		# self.dxyzs now has shape nmol X maxnatom X maxneigh
+		nl = tf.reshape(self.nl_pl,(self.batch_size,self.MaxNAtom,self.MaxNeigh,1))
+		molis = tf.tile(tf.range(self.batch_size)[:,tf.newaxis,tf.newaxis],[1,self.MaxNAtom,self.MaxNeigh])[:,:,:,tf.newaxis]
+		gathis = tf.concat([molis,nl],axis=-1) # Mol X MaxNatom X maxN X 2
+		sparse_maski = tf.where(tf.equal(gathis[:,:,:,1:],-1),tf.zeros_like(nl),tf.ones_like(nl))
+		self.sparse_mask = tf.cast(sparse_maski,self.prec) # nmol X maxnatom X maxneigh X 1
+
+		# sparse version of dxyzs.
+		nxs = tf.gather_nd(self.xyzs_pl,gathis)*self.sparse_mask # mol X maxNatom X maxnieh  X 3???
+		zxs = tf.gather_nd(self.zs_pl,gathis)*sparse_maski # mol X maxNatom X maxnieh X 1
+		self.dxyzs = (tf.expand_dims(self.xyzs_pl, axis=2) - nxs)*self.sparse_mask
+
 		# Canonicalized difference Vectors.
-		self.cdxyzs = CanonicalizeGS(self.dxyzs*self.pair_mask)
-		self.embedded = self.Embed(self.cdxyzs, self.zs_pl, self.pair_mask, self.gp_tf, self.atom_codes, self.l_max)
+		self.cdxyzs = CanonicalizeGS(self.dxyzs)
+		# Sparse Embedding.
+		jcodes = tf.reshape(tf.gather(self.atom_codes,zxs),(self.batch_size,self.MaxNAtom,self.MaxNeigh,4))*self.sparse_mask # mol X maxNatom X maxnieh X 4
+		if (not self.DoCodeLearning):
+			tf.stop_gradient(jcodes)
+		self.embedded = self.Embed(self.cdxyzs, jcodes, self.sparse_mask, self.gp_tf, self.l_max)
+		# Sparse Energy.
 		self.AtomEnergies = self.AtomEmbToAtomEnergyChannel(self.embedded,self.zs_pl)
 		self.MolEnergies = tf.reduce_sum(self.AtomEnergies,axis=1,keepdims=False)
 
@@ -439,7 +415,7 @@ class InGauShBPNetwork:
 		self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 		self.init = tf.global_variables_initializer()
 		self.saver = tf.train.Saver()
-		self.writer = tf.summary.FileWriter('./networks/InGauSH', graph=tf.get_default_graph())
+		self.writer = tf.summary.FileWriter('./networks/SparseCodedGauSH', graph=tf.get_default_graph())
 		self.summary_op = tf.summary.merge_all()
 
 		if (True):
@@ -455,8 +431,8 @@ class InGauShBPNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = InGauShBPNetwork(b)
-net.Load()
+net = SparseCodedGauSHNetwork(b)
+#net.Load()
 net.Train()
 if 0:
 	mi = np.random.randint(len(b.mols))
