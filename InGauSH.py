@@ -1,9 +1,9 @@
 from TensorMol import *
 import numpy as np
 
-#b = MSet("HNCO_small")
+b = MSet("HNCO_small")
 #b = MSet("chemspider12_clean_maxatom35")
-b = MSet("chemspider20_1_opt_all")
+#b = MSet("chemspider20_1_opt_all")
 b.Load()
 MAX_ATOMIC_NUMBER = 55
 
@@ -112,7 +112,7 @@ def CanonicalizeGS(dxyzs):
 class InGauShBPNetwork:
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 180 # Force learning strongly modulates what you can do.
+		self.batch_size = 64 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.learning_rate = 0.0001
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
@@ -232,7 +232,7 @@ class InGauShBPNetwork:
 		output = tf.reshape(tf.add_n(branches),(self.batch_size,self.MaxNAtom,1))
 		return output
 
-	def AtomEmbToAtomEnergyChannel(self,emb,Zs):
+	def AtomEmbToAtomEnergyChannel_old(self,emb,Zs):
 		"""
 		This version creates a network to integrate weight information.
 		and then works like any ordinary network.
@@ -267,6 +267,60 @@ class InGauShBPNetwork:
 		l2 = tf.layers.dense(inputs=l1p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
 		# in the final layer use the atom code information.
 		l2p = tf.concat([l2,CODES],axis=-1)
+		l3 = tf.layers.dense(l2p,units=1,activation=None,use_bias=True)*msk
+		# Finally allow for a simple 1-D linear filter based on element type.
+		return tf.reshape(l3,(self.batch_size,self.MaxNAtom,1))
+
+	def AtomEmbToAtomEnergyChannelMultiplexed(self,emb,Zs):
+		"""
+		This version which actually has atom dependent weights is quite expensive. 
+
+		Args:
+			emb: # mol X maxNAtom X ang X rad X code tensor.
+			Zs: mol X maxNatom X 1 atomic number tensor.
+		"""
+		ncase = self.batch_size*self.MaxNAtom
+		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
+		nchan = self.AtomCodes.shape[1]
+		nembdim = self.nembdim
+		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # (mol * maxNatom) X 4
+		# Combine the codes of the main atom and the sensed atom
+		# Using a hinton-esque tensor decomposition.
+		CODEKERN1 = tf.get_variable(name="CodeKernel", shape=(nchan,nchan),dtype=self.prec)
+		CODEKERN2 = tf.get_variable(name="CodeKernel2", shape=(nchan,nchan),dtype=self.prec)
+		# combine the weight kernel with the codes.
+		mix1 = tf.matmul(CODES,CODEKERN1) # ncase X ncode
+		embrs = tf.reshape(emb,(ncase,-1,nchan))
+		# Ensure any zero cases don't contribute.
+		msk = tf.where(tf.equal(Zrs,0.0),tf.zeros_like(Zrs),tf.ones_like(Zrs))
+		embrs *= msk[:,:,tf.newaxis]
+		weighted = tf.einsum('ikj,ij->ikj',embrs,mix1)
+		weighted2 = tf.reshape(tf.einsum('ikj,jl->ikl',weighted,CODEKERN2),(ncase,-1))
+
+		# Create Weight Matrices and biases for three layers.
+		# Using the codes.
+		numunits1 = 512
+		inputs1 = nembdim
+		if 0:
+			CODESp =  tf.tile(tf.reshape(CODES,(ncase,1,1,4)),(1,inputs1,numunits1,1))
+			Kern11 = tf.tile(tf.get_variable(name="Kern11", shape=(1,inputs1,1,nchan),dtype=self.prec),(ncase,1,numunits1,1))
+			Kern12 = tf.tile(tf.get_variable(name="Kern12", shape=(1,1,numunits1,nchan),dtype=self.prec),(ncase,inputs1,1,1))
+			Bias1 =tf.get_variable(name="Bias1", shape=(nchan,numunits1),dtype=self.prec)
+			w1 = tf.reduce_sum(Kern11*CODESp*Kern12,axis=-1) # ncase X inputs1 X units1 X nchan
+			b1 = tf.matmul(CODES,Bias1)
+			l1 = sftpluswparam(tf.einsum('ij,ijk->ik',weighted2,w1)+b1)
+
+		Kern11 = tf.get_variable(name="Kern11", shape=(nchan,inputs1),dtype=self.prec)
+		Kern12 = tf.get_variable(name="Kern12", shape=(nchan,numunits1),dtype=self.prec)
+		Bias1 =tf.get_variable(name="Bias1", shape=(nchan,numunits1),dtype=self.prec)
+
+		w11 = tf.matmul(CODES,Kern11)
+		w12 = tf.matmul(CODES,Kern12)
+		w1 = tf.einsum('ij,ik->ijk',w11,w12)
+		b1 = tf.matmul(CODES,Bias1)
+		l1 = sftpluswparam(tf.einsum('ij,ijk->ik',weighted2,w1)+b1)
+
+		l2p = tf.concat([l1,CODES],axis=-1)
 		l3 = tf.layers.dense(l2p,units=1,activation=None,use_bias=True)*msk
 		# Finally allow for a simple 1-D linear filter based on element type.
 		return tf.reshape(l3,(self.batch_size,self.MaxNAtom,1))
