@@ -72,12 +72,8 @@ def CanonicalizeGS(dxyzs):
 	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
 	#weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
 	#maskedDs = tf.where(tf.equal(weights,0.),tf.zeros_like(weights),weights)
-
 	# GS orth the first three vectors.
 	vals, inds = tf.nn.top_k(maskedDs,k=3)
-
-#	inds = tf.Print(inds,[togather,maskedDs,inds,vals],"Masked weights inds vals: ", summarize=5)
-
 	inds = tf.reshape(inds,(argshape[0]*argshape[1],3))
 	vals = tf.reshape(vals,(argshape[0]*argshape[1],3))
 	v1i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,:1]],axis=-1)
