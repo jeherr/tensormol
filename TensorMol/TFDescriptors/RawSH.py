@@ -566,8 +566,7 @@ def tf_gaush_element_channel(xyzs, Zs, elements, gauss_params, l_max):
 	num_mols = Zs.get_shape().as_list()[0]
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 
-	dxyzs = tf.expand_dims(xyzs, axis=2) - tf.expand_dims(xyzs, axis=1)
-	dxyzs = tf.gather_nd(dxyzs, padding_mask)
+	dxyzs = tf.gather_nd(xyzs, padding_mask)
 	dist_tensor = tf.norm(dxyzs+1.e-16,axis=-1)
 	gauss = tf_gauss(dist_tensor, gauss_params)
 	# dxyzs has dimension NNZ X MaxNAtom X 3
@@ -1012,6 +1011,86 @@ def tf_dsf_potential(dists, cutoff_dist, dsf_alpha, return_grad=False):
 		return dsf_potential, dsf_gradient
 	else:
 		return dsf_potential
+
+def gs_canonicalize(xyzs, Zs):
+	"""
+	Canonicalize using nearest three atoms and Graham-Schmidt.
+	If there are not three linearly independent atoms within
+	4A, the output will not be rotationally invariant, although
+	The axes will still be as invariant as possible.
+	Args:
+		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
+		ie: ... X i X i = (0.,0.,0.))
+	"""
+	dxyzs = tf.expand_dims(xyzs, axis=2) - tf.expand_dims(xyzs, axis=1)
+	Z_product = tf.expand_dims(Zs, axis=2) * tf.expand_dims(Zs, axis=1)
+	mask = tf.where(tf.not_equal(Z_product, 0), tf.ones_like(Z_product, dtype=tf.float32),
+		tf.zeros_like(Z_product, dtype=tf.float32))
+	dxyzs = dxyzs * tf.expand_dims(mask, axis=-1)
+	# Append orthogonal axes to dxyzs
+	argshape = tf.shape(dxyzs)
+	defaultAxes = tf.tile(tf.reshape(4.0*tf.eye(3, dtype=eval(PARAMS["tf_prec"])),(1,1,3,3)),[argshape[0],argshape[1],1,1])
+	dxyzsandDef = tf.concat([dxyzs, defaultAxes],axis=2)
+
+	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[1],3))
+	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[1]+3,3))
+	weights = tf.exp(-1.0*tf.norm(dxyzsandDef, axis=-1))
+	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
+
+	# GS orth the first three vectors.
+	tosort= tf.reshape(maskedDs,(argshape[0]*argshape[1],-1))
+	vals, inds = tf.nn.top_k(maskedDs,k=3)
+	inds = tf.reshape(inds,(argshape[0]*argshape[1],3))
+	v1i = tf.stack([tf.range(argshape[0]*argshape[1]),inds[:,0]],axis=-1)
+	v2i = tf.stack([tf.range(argshape[0]*argshape[1]),inds[:,1]],axis=-1)
+	v3i = tf.stack([tf.range(argshape[0]*argshape[1]),inds[:,2]],axis=-1)
+	v1 = tf.gather_nd(togather,v1i)
+	v1 /= tf.norm(v1+1.e-16,axis=-1,keepdims=True)
+	v2 = tf.gather_nd(togather,v2i)
+	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
+	v2 /= tf.norm(v2+1.e-16,axis=-1,keepdims=True)
+	v3 = tf.gather_nd(togather,v3i)
+	v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
+	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
+	v3 /= tf.norm(v3+1.e-16,axis=-1,keepdims=True)
+	vs = tf.stack([v1, v2, v3], axis=1)
+	new_xyzs = tf.reshape(tf.einsum('ijk,ilk->ijl', realdata, vs), tf.shape(dxyzs))
+	return new_xyzs
+
+def gs_canonicalizev2(xyzs, Zs):
+	"""
+	Canonicalize using nearest three atoms and Graham-Schmidt.
+	If there are not three linearly independent atoms within
+	4A, the output will not be rotationally invariant, although
+	The axes will still be as invariant as possible.
+	Args:
+		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
+		ie: ... X i X i = (0.,0.,0.))
+	"""
+	padding_mask = tf.where(tf.not_equal(Zs, 0))
+	dxyzs = tf.expand_dims(tf.gather_nd(xyzs, padding_mask), axis=1) - tf.gather(xyzs, padding_mask[:,0])
+	Z_product = tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=1) * tf.gather(Zs, padding_mask[:,0])
+	mask = tf.expand_dims(tf.where(tf.not_equal(Z_product, 0), tf.ones_like(Z_product, dtype=eval(PARAMS["tf_prec"])),
+		tf.zeros_like(Z_product, dtype=eval(PARAMS["tf_prec"]))), axis=-1)
+	dxyzs = dxyzs * mask
+	dist_tensor = tf.norm(dxyzs, axis=-1, keep_dims=True)
+	norm_dxyzs = dxyzs / tf.where(tf.equal(dist_tensor, 0.0), tf.ones_like(dist_tensor), dist_tensor)
+	weights = tf.exp(-1.0 * dist_tensor)
+	weights = tf.where(tf.equal(weights, 1.), tf.zeros_like(weights), weights)
+	weighted_xyz = tf.reduce_sum(norm_dxyzs * weights, axis=-2)
+	first_axis = weighted_xyz / tf.norm(weighted_xyz, axis=-1, keep_dims=True)
+	mask = tf.where(tf.equal(dist_tensor, 0.0), tf.zeros_like(dist_tensor), tf.ones_like(dist_tensor))
+	rejection_xyzs = (norm_dxyzs - tf.expand_dims(first_axis, axis=-2)) * mask
+	rej_dist_tensor = tf.norm(dxyzs, axis=-1, keep_dims=True)
+	norm_rej_xyzs = rejection_xyzs / tf.where(tf.equal(rej_dist_tensor, 0.0), tf.ones_like(dist_tensor), dist_tensor)
+	weighted_rej_xyzs = tf.reduce_sum(norm_rej_xyzs * weights, axis=-2)
+	second_axis = weighted_rej_xyzs #/ tf.norm(weighted_rej_xyzs, axis=-1, keep_dims=True)
+	second_axis -= tf.expand_dims(tf.einsum('ij,ij->i',first_axis, second_axis), axis=-1) * first_axis
+	second_axis /= tf.norm(second_axis, axis=-1, keep_dims=True)
+	third_axis = tf.cross(first_axis, second_axis)
+	transform_matrix = tf.stack([first_axis, second_axis, third_axis], axis=1)
+	canon_xyzs = tf.einsum("lij,lkj->lki", transform_matrix, dxyzs)
+	return canon_xyzs
 
 def tf_neighbor_list(xyzs, Zs, cutoff):
 	with tf.device("/cpu:0"):

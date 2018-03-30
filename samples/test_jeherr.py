@@ -80,10 +80,10 @@ def test_md():
 	def force_field(coords, forces=True):
 		m=Mol(mol.atoms, coords)
 		if forces:
-			energy, forces = network.evaluate_mol(m, forces, avg_rots=True)
+			energy, forces = network.evaluate_mol(m, forces)
 			return energy, JOULEPERHARTREE*forces
 		else:
-			energy = network.evaluate_mol(m, forces, avg_rots=True)
+			energy = network.evaluate_mol(m, forces)
 			return energy
 	masses = np.array(map(lambda x: ATOMICMASSESAMU[x-1], mol.atoms))
 	print "Masses:", masses
@@ -298,7 +298,7 @@ def train_energy_GauSH(mset):
 def train_energy_GauSHv2(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_LMAX"] = 5
-	PARAMS["train_gradients"] = True
+	PARAMS["train_gradients"] = False
 	PARAMS["train_dipole"] = False
 	PARAMS["train_rotation"] = False
 	PARAMS["weight_decay"] = None
@@ -879,94 +879,101 @@ def minimize_ob():
 # metaopt_chemsp()
 # water_web()
 
-# PARAMS["tf_prec"] = "tf.float32"
-# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
-# PARAMS["SH_NRAD"] = 16
-# a = MSet("SmallMols_rand")
-# a.Load()
-# # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
-# # # # Tesselate that water to create a box
-# # ntess = 16
-# # latv = 2.8*np.eye(3)
-# # # # # Start with a water in a ten angstrom box.
-# # lat = Lattice(latv)
-# # mc = lat.CenteredInLattice(a.mols[0])
-# # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
-# # # # mt.WriteXYZfile()
-# b=MSet()
-# for i in range(1):
-# 	b.mols.append(a.mols[i])
-# maxnatoms = b.MaxNAtoms()
-# # for mol in a.mols:
-# # 	mol.make_neighbors(7.0)
-# # max_num_pairs = a.max_neighbors()
-#
-# zlist = []
-# xyzlist = []
-# # pairlist = []
-# # n_atoms_list = []
-# for i, mol in enumerate(b.mols):
-# 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
-# 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
-# 	paddedz = np.zeros((maxnatoms), dtype=np.int32)
-# 	paddedz[:mol.atoms.shape[0]] = mol.atoms
-# 	# paddedpairs = np.zeros((maxnatoms, max_num_pairs, 4), dtype=np.int32)
-# 	# for j, atom_pairs in enumerate(mol.neighbor_list):
-# 	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]),
-# 	# 			np.array([j for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]),
-# 	# 			mol.atoms[mol.neighbor_list[j]]]).T
-# 	# 	paddedpairs[j,:len(atom_pairs)] = molpair
-# 	xyzlist.append(paddedxyz)
-# 	zlist.append(paddedz)
-# 	# pairlist.append(paddedpairs)
-# 	# n_atoms_list.append(mol.NAtoms())
-# 	# if i == 1:
-# 	# 	break
-# xyzstack = tf.stack(xyzlist)
-# zstack = tf.stack(zlist)
-# # pairstack = tf.stack(pairlist)
-# # natomsstack = tf.stack(n_atoms_list)
-# # r_cutoff = 6.5
-# # gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
-# # elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
-# # tmp2 = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3)
-# # tmp = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3, rotation_params)
+PARAMS["tf_prec"] = "tf.float32"
+PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
+PARAMS["SH_NRAD"] = 16
+a = MSet("SmallMols_rand")
+a.Load()
+# a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
+# # # Tesselate that water to create a box
+# ntess = 16
+# latv = 2.8*np.eye(3)
+# # # # Start with a water in a ten angstrom box.
+# lat = Lattice(latv)
+# mc = lat.CenteredInLattice(a.mols[0])
+# mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
+# # # mt.WriteXYZfile()
+b=MSet()
+for i in range(2):
+	b.mols.append(a.mols[i])
+	# print b.mols[i].NAtoms()
+maxnatoms = b.MaxNAtom()
+# for mol in a.mols:
+# 	mol.make_neighbors(7.0)
+# max_num_pairs = a.max_neighbors()
+
+zlist = []
+xyzlist = []
+gradlist = []
+# pairlist = []
+# n_atoms_list = []
+for i, mol in enumerate(b.mols):
+	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
+	paddedxyz[:mol.atoms.shape[0]] = mol.coords
+	paddedz = np.zeros((maxnatoms), dtype=np.int32)
+	paddedz[:mol.atoms.shape[0]] = mol.atoms
+	# paddedgrad = np.zeros((maxnatoms,3), dtype=np.float32)
+	# paddedgrad[:mol.atoms.shape[0]] = mol.properties["gradients"]
+	# paddedpairs = np.zeros((maxnatoms, max_num_pairs, 4), dtype=np.int32)
+	# for j, atom_pairs in enumerate(mol.neighbor_list):
+	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]),
+	# 			np.array([j for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]),
+	# 			mol.atoms[mol.neighbor_list[j]]]).T
+	# 	paddedpairs[j,:len(atom_pairs)] = molpair
+	xyzlist.append(paddedxyz)
+	zlist.append(paddedz)
+	# gradlist.append(paddedgrad)
+	# pairlist.append(paddedpairs)
+	# n_atoms_list.append(mol.NAtoms())
+	# if i == 1:
+	# 	break
+xyzstack = tf.stack(xyzlist)
+zstack = tf.stack(zlist)
+# gradstack = tf.stack(gradlist)
+# pairstack = tf.stack(pairlist)
+# natomsstack = tf.stack(n_atoms_list)
+# r_cutoff = 6.5
+# gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
+# elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
+# tmp2 = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3)
+# tmp = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3, rotation_params)
 # rotation_params = tf.stack([np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
 # 	np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
 # 	tf.random_uniform([2, maxnatoms], minval=0.1, maxval=1.9, dtype=tf.float32)], axis=-1)
 # padding_mask = tf.where(tf.not_equal(zstack, 0))
 # centered_xyzs = tf.expand_dims(tf.gather_nd(xyzstack, padding_mask), axis=1) - tf.gather(xyzstack, padding_mask[:,0])
-# # tiled_Zs = tf.gather(zstack, padding_mask[:,0])
-# # reduce_pad = tf.expand_dims(tf.where(tf.not_equal(tiled_Zs, 0), tf.ones_like(tiled_Zs, dtype=tf.float32), tf.zeros_like(tiled_Zs, dtype=tf.float32)), axis=-1)
-# # centered_xyzs *= reduce_pad
+# tiled_Zs = tf.gather(zstack, padding_mask[:,0])
+# reduce_pad = tf.expand_dims(tf.where(tf.not_equal(tiled_Zs, 0), tf.ones_like(tiled_Zs, dtype=tf.float32), tf.zeros_like(tiled_Zs, dtype=tf.float32)), axis=-1)
+# centered_xyzs *= reduce_pad
 # rotation_params = tf.gather_nd(rotation_params, padding_mask)
 # rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
-# # tiled_Zs = tf.gather(zstack, padding_mask[:,0])
-# # centered_xyzs = tf.where(tf.not_equal(tiled_Zs, 0), centered_xyzs, tf.zeros_like(centered_xyzs))
-# tmp = Canonicalize(rotated_xyzs)
+# tiled_Zs = tf.gather(zstack, padding_mask[:,0])
+# centered_xyzs = tf.where(tf.not_equal(tiled_Zs, 0), centered_xyzs, tf.zeros_like(centered_xyzs))
+tmp = gs_canonicalizev2(xyzstack, zstack)
 # grad = tf.gradients(tmp, rotation_params)[0]
-# sess = tf.Session()
-# sess.run(tf.global_variables_initializer())
-# options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-# run_metadata = tf.RunMetadata()
-# # # for i in range(a.mols[0].atoms.shape[0]):
-# # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
-# @TMTiming("test")
-# def get_pairs():
-# 	tmp3 = sess.run(grad, options=options, run_metadata=run_metadata)
-# 	return tmp3
-# tmp5 = get_pairs()
-# print tmp5.shape
-# # m=Mol(zlist[0], xyzlist[0])
-# # m.WriteXYZfile(fname="tmp", mode="w")
-# # print tmp6.shape
-# # print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
-# # print np.allclose(tmp5, tmp6, 1e-01)
-# # print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
-# fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-# chrome_trace = fetched_timeline.generate_chrome_trace_format()
-# with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
-# 	f.write(chrome_trace)
+sess = tf.Session()
+sess.run(tf.global_variables_initializer())
+options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+run_metadata = tf.RunMetadata()
+# # for i in range(a.mols[0].atoms.shape[0]):
+# # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
+@TMTiming("test")
+def get_pairs():
+	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
+	return tmp3
+tmp5 = get_pairs()
+print tmp5
+print tmp5.shape
+m=Mol(zlist[0], tmp5[1])
+m.WriteXYZfile(fname="tmp", mode="w")
+# print tmp6.shape
+# print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
+# print np.allclose(tmp5, tmp6, 1e-01)
+# print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
+fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+chrome_trace = fetched_timeline.generate_chrome_trace_format()
+with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
+	f.write(chrome_trace)
 
 # a = MSet("water_dimer_rotate")
 # a.ReadXYZ()
@@ -995,10 +1002,17 @@ def minimize_ob():
 # 	new_m = Mol(m.atoms, new_coords)
 # 	new_m.WriteXYZfile(fname="tmp")
 
-md=np.loadtxt("./results/MDLog.txt")
-p=md[:,5]*2625.499638*1000/4183.9953
-k=md[:,4]*30/1000.0*1000/4183.9953
-f=open("energy_conserv3.dat", "w")
-for i in range(len(p)):
-	f.write(str(i*0.5/1000)+" "+str(p[i])+" "+str(k[i])+"\n")
-f.close
+# md=np.loadtxt("./results/MDLog.txt")
+# p=md[:,5]*2625.499638*1000/4183.9953
+# k=md[:,4]*30/1000.0*1000/4183.9953
+# f=open("energy_conserv4.dat", "w")
+# for i in range(len(p)):
+# 	f.write(str(i*0.5/1000)+" "+str(p[i])+" "+str(k[i])+"\n")
+# f.close
+
+# PARAMS["tf_prec"] = "tf.float32"
+# a = MSet("water10")
+# a.ReadXYZ()
+# mol = a.mols[1]
+# network = BehlerParinelloGauSHv2(name="BPGauSH_water_wb97xd_6311gss_Thu_Mar_15_16.29.21_2018")
+# network.evaluate_mol(mol, eval_forces=False, avg_rots=True)
