@@ -1,5 +1,6 @@
 """
-This version adds a smooth charge embedding and sparsity.
+This version adds sparsity.
+The old file is intended to be deleted after everything works here.
 """
 
 from TensorMol import *
@@ -171,7 +172,7 @@ def CanonicalizeGSSparse(dxyzs,msk):
 class SparseCodedGauSHNetwork:
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 64 # Force learning strongly modulates what you can do.
+		self.batch_size = 128 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.MaxNeigh = self.MaxNAtom
 		self.learning_rate = 0.00005
@@ -219,11 +220,12 @@ class SparseCodedGauSHNetwork:
 		def EF(xyz_,DoForce=True):
 			xyzs = np.zeros((self.batch_size,self.MaxNAtom,3))
 			Zs = np.zeros((self.batch_size,self.MaxNAtom,1))
+			nls = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh),dtype=np.int32)
 			xyzs[0,:m.NAtoms(),:] = xyz_
 			Zs[0,:m.NAtoms(),0] = m.atoms
-			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs}
-			print (self.sess.run([], feed_dict=feed_dict))
-
+			nlt = self.NLTensors(xyzs,Zs)
+			nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
+			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs,self.nl_pl:nls}
 			if (DoForce):
 				ens,fs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
 				return ens[0],fs[0][:m.NAtoms()]*(-JOULEPERHARTREE)
@@ -241,9 +243,12 @@ class SparseCodedGauSHNetwork:
 		def EFH(xyz_):
 			xyzs = np.zeros((self.batch_size,self.MaxNAtom,3))
 			Zs = np.zeros((self.batch_size,self.MaxNAtom,1))
+			nls = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh),dtype=np.int32)
 			xyzs[0,:m.NAtoms(),:] = xyz_
-			zs[0,:m.NAtoms(),0] = m.atoms
-			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:zs}
+			Zs[0,:m.NAtoms(),0] = m.atoms
+			nlt = self.NLTensors(xyzs,Zs)
+			nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
+			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs,self.nl_pl:nls}
 			ens,fs,hs = self.sess.run([self.MolEnergies,self.MolGrads,self.MolHess], feed_dict=feed_dict)
 			return ens[0], fs[0][:m.NAtoms()]*(-JOULEPERHARTREE), hs[0][:m.NAtoms()][:m.NAtoms()]*JOULEPERHARTREE*JOULEPERHARTREE
 		return EFH
@@ -367,15 +372,16 @@ class SparseCodedGauSHNetwork:
 		if (step%10==0):
 			self.saver.save(self.sess, './networks/SparseCodedGauSH',global_step=step)
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
-			print("Gauss Params: ",self.sess.run([self.gp_tf])[0])
-			print("AtomCodes: ",self.sess.run([self.atom_codes])[0])
+			#print("Gauss Params: ",self.sess.run([self.gp_tf])[0])
+			#print("AtomCodes: ",self.sess.run([self.atom_codes])[0])
 			feed_dict = self.NextBatch(self.mset)
 			ens,frcs,summary = self.sess.run([self.MolEnergies,self.MolGrads,self.summary_op], feed_dict=feed_dict, options=self.options, run_metadata=self.run_metadata)
-			for i in range(4):
+			for i in range(6):
 				#print("Zs:",feed_dict[self.zs_pl][i])
 				#print("xyz:",feed_dict[self.xyzs_pl][i])
 				#print("NL:",feed_dict[self.nl_pl][i])
-				print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i], frcs[i], feed_dict[self.groundTruthG_pl][i] )
+				#print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i], frcs[i], feed_dict[self.groundTruthG_pl][i] )
+				print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i])
 			print("Mean Abs Error: (Energy)", np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
 			print("Mean Abs Error (Force): ", np.average(np.abs(frcs-feed_dict[self.groundTruthG_pl])))
 			if (self.DoRotGrad):
