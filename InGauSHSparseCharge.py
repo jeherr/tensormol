@@ -549,8 +549,8 @@ class SparseCodedChargedGauSHNetwork:
 			nrm2 = tf.sqrt(tf.clip_by_value(tf.reduce_sum(t2*t2,axis=1),1e-36,1e36))
 			diff = nrm1-nrm2
 			num = tf.reduce_sum(t1*t2,axis=1)
-			self.Gloss1 = (1.0 - tf.reduce_mean(num/(nrm1*nrm2)))/40.
-			self.Gloss2 = (tf.reduce_mean(diff*diff))/40.
+			self.Gloss1 = (1.0 - tf.reduce_mean(num/(nrm1*nrm2)))/20.
+			self.Gloss2 = (tf.reduce_mean(diff*diff))/100.
 			#self.Gloss = tf.losses.mean_squared_error(self.MolGrads, self.groundTruthG_pl)
 			tf.summary.scalar('GLossDir',self.Gloss1)
 			tf.summary.scalar('GLossMag',self.Gloss2)
@@ -561,9 +561,9 @@ class SparseCodedChargedGauSHNetwork:
 			self.Tloss = self.Eloss
 
 		if (self.DoDipoleLearning):
-			self.Tloss += self.Dloss/20.
+			self.Tloss += self.Dloss
 		elif (self.DoChargeLearning):
-			self.Tloss += self.Qloss/20.
+			self.Tloss += self.Qloss/150.
 
 		tf.losses.add_loss(self.Tloss,loss_collection=tf.GraphKeys.LOSSES)
 		tf.summary.scalar('ELoss',self.Eloss)
