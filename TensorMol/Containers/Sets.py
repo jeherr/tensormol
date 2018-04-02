@@ -46,6 +46,41 @@ class MSet:
 		LOGGER.info("Loaded, "+str(len(self.mols))+" molecules "+str(self.NAtoms())+" Atoms total "+str(self.AtomTypes())+" Types ")
 		return
 
+	def RemoveElementAverages(self):
+		"""
+		Removes average from energies and charges returns dictionaries mapping
+		AN=> element averages useful for normalizing training.
+		It does this using least-sq. This eliminates the need for element
+		atomization energies.
+
+		Returns:
+			AvE,AvQ: dictionaries mapping Atomic number onto the averages.
+		"""
+		At = self.AtomTypes().tolist()
+		AvE = {x:0. for x in At}
+		AvQ = {x:0. for x in At}
+		nmols = len(self.mols)
+		nele = len(AvE)
+		b = np.zeros(nmols)
+		a = np.zeros((nmols,nele))
+		noa = np.zeros(nele)
+		coa = np.zeros(nele)
+		for i,m in enumerate(self.mols):
+			for j,e in enumerate(At):
+				a[i,j] = m.NumOfAtomsE(e)
+			b[i] = m.properties["energy"]
+			for atom in range(m.NAtoms()):
+				noa[At.index(m.atoms[atom])]+=1
+				coa[At.index(m.atoms[atom])]+=m.properties["charges"][atom]
+		x,r = np.linalg.lstsq(a,b)[:2]
+		averageqs = coa/noa
+		for i,e in enumerate(At):
+			AvE[e] = x[i]
+			AvQ[e] = averageqs[i]
+		self.AvE = AvE
+		self.AvQ = AvQ
+		return AvE,AvQ
+
 	def DistortAlongNormals(self, npts=8, random=True, disp=.2):
 		'''
 		Create a distorted copy of a set

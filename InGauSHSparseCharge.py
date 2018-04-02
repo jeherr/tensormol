@@ -10,6 +10,9 @@ b = MSet("HNCO_small")
 #b = MSet("chemspider12_clean_maxatom35")
 #b = MSet("chemspider20_1_opt_all")
 b.Load()
+# This removes any linear-stoichiometric contribution from these
+# properties to speed learning by keeping these as small as possible.
+# This network will specifically target these renomalized properties appropriately.
 #c.Load()
 #b.mols=b.mols+(c.mols[:int(len(b.mols)*0.5)])
 MAX_ATOMIC_NUMBER = 55
@@ -25,24 +28,26 @@ def safe_inv_norm(x_):
 
 def polykern(r):
 	"""
-	Polynomial cutoff 1/r obeying:
+	Polynomial cutoff 1/r (in BOHR) obeying:
 	kern = 1/r at SROuter and LRInner
 	d(kern) = d(1/r) (true force) at SROuter,LRInner
 	d**2(kern) = d**2(1/r) at SROuter and LRInner.
 	d(kern) = 0 (no force) at/beyond SRInner and LROuter
+
+	The hard cutoff is 15 Angstrom.
 	"""
-	SRInner = 4.5
-	SROuter = 7.0
-	LRInner = 13.
-	LROuter = 15.
-	a = -14.4612
-	b = 11.6244
-	c = -3.69317
-	d = 0.642583
-	e = -0.0661298
-	f = 0.00402661
-	g = -0.00013439
-	h = 1.89788e-6
+	SRInner = 4.5*1.889725989
+	SROuter = 6.5*1.889725989
+	LRInner = 13.*1.889725989
+	LROuter = 15.*1.889725989
+	a = -18.325
+	b = 7.89288
+	c = -1.35458
+	d = 0.126578
+	e = -0.00695692
+	f = 0.000225092
+	g = -3.97476e-6
+	h = 2.95926e-8
 	r2=r*r
 	r3=r2*r
 	r4=r3*r
@@ -134,6 +139,12 @@ class SparseCodedChargedGauSHNetwork:
 		if (aset != None):
 			self.MaxNAtom = b.MaxNAtom()
 			self.AtomTypes = b.AtomTypes()
+			AvE,AvQ = aset.RemoveElementAverages()
+			self.AverageElementEnergy = np.zeros((MAX_ATOMIC_NUMBER))
+			self.AverageElementCharge = np.zeros((MAX_ATOMIC_NUMBER))
+			for ele in AvE.keys():
+				self.AverageElementEnergy[ele] = AvE[ele]
+				self.AverageElementCharge[ele] = AvQ[ele]
 			# Get a reasonable number of neighbors.
 			xyzs = np.zeros((100,self.MaxNAtom,3))
 			zs = np.zeros((100,self.MaxNAtom,1))
@@ -210,7 +221,7 @@ class SparseCodedChargedGauSHNetwork:
 			m = aset.mols[mi]
 			xyzs[i,:m.NAtoms()] = m.coords
 			zs[i,:m.NAtoms()] = m.atoms
-			true_ae[i]=m.properties["atomization"]
+			true_ae[i]=m.properties["energy"]
 			true_force[i,:m.NAtoms()]=m.properties["gradients"]
 			qs[i,:m.NAtoms()]=m.properties["charges"]
 			ds[i]=m.properties["dipole"]
@@ -280,7 +291,7 @@ class SparseCodedChargedGauSHNetwork:
 		Returns:
 			 (nmol X 1) tensor of energies (atomic)
 		"""
-		return (1.889725989/2.0)*tf.reduce_sum(polykern(dxyzs_)*q1q2s_,axis=(1,2))[:,tf.newaxis]
+		return (1.0/2.0)*tf.reduce_sum(polykern(dxyzs_*1.889725989)*q1q2s_,axis=(1,2))[:,tf.newaxis]
 
 	def ChargeToDipole(self,xyzs_,zs_,qs_):
 		"""
@@ -301,12 +312,14 @@ class SparseCodedChargedGauSHNetwork:
 			Zs: mol X maxNatom X 1 atomic number tensor.
 
 		Returns:
-			(atom energies, atom charges)
+			mol X maxNatom X 1 tensor of atom energies.
+			these include constant shifts.
 		"""
 		ncase = self.batch_size*self.MaxNAtom
 		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
 		nchan = self.AtomCodes.shape[1]
 		nembdim = self.nembdim
+		AvEs = tf.reshape(tf.gather(self.AvE_tf, Zs, axis=0),(self.batch_size,self.MaxNAtom,1)) # (mol * maxNatom) X 1
 		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # (mol * maxNatom) X 4
 		# Combine the codes of the main atom and the sensed atom
 		# Using a hinton-esque tensor decomposition.
@@ -330,7 +343,7 @@ class SparseCodedChargedGauSHNetwork:
 		l2p = tf.concat([l2,CODES],axis=-1)
 		l3 = tf.layers.dense(l2p,units=1,activation=None,use_bias=True)*msk
 		# Finally allow for a simple 1-D linear filter based on element type.
-		return tf.reshape(l3,(self.batch_size,self.MaxNAtom,1))
+		return tf.reshape(l3,(self.batch_size,self.MaxNAtom,1))+AvEs
 
 	def AtomEmbToAtomCharge(self,emb,Zs):
 		"""
@@ -347,6 +360,7 @@ class SparseCodedChargedGauSHNetwork:
 		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
 		nchan = self.AtomCodes.shape[1]
 		nembdim = self.nembdim
+		AvQs = tf.reshape(tf.gather(self.AvQ_tf, Zs, axis=0),(self.batch_size,self.MaxNAtom)) # (mol * maxNatom) X 1
 		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # (mol * maxNatom) X 4
 		# Combine the codes of the main atom and the sensed atom
 		# Using a hinton-esque tensor decomposition.
@@ -374,7 +388,7 @@ class SparseCodedChargedGauSHNetwork:
 		excess_charges = tf.reduce_sum(charges,axis=[1])
 		n_atoms = tf.reduce_sum(tf.where(tf.equal(Zs,0),Zs,tf.ones_like(Zs)),axis=[1,2])
 		fix = -1.0*excess_charges/tf.cast(n_atoms,tf.float64)
-		return charges + fix[:,tf.newaxis]
+		return charges + fix[:,tf.newaxis] + AvQs
 
 	def train_step(self,step):
 		feed_dict = self.NextBatch(self.mset)
@@ -432,7 +446,7 @@ class SparseCodedChargedGauSHNetwork:
 		tf.reset_default_graph()
 
 		self.DoRotGrad = False
-		self.DoForceLearning = False
+		self.DoForceLearning = True
 		self.DoCodeLearning = False
 		self.DoDipoleLearning = False
 		self.DoChargeLearning = True
@@ -450,8 +464,11 @@ class SparseCodedChargedGauSHNetwork:
 		self.groundTruthD_pl = tf.placeholder(shape = (self.batch_size,3), dtype = tf.float64) # Dipoles.
 		self.groundTruthQ_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom), dtype = tf.float64) # Charges
 
+		# Constants
 		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning)
 		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec)
+		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec)
+		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec)
 
 		# self.dxyzs now has shape nmol X maxnatom X maxneigh
 		maskatom1 = tf.reshape(tf.where(tf.not_equal(self.zs_pl,0),tf.ones_like(self.zs_pl),self.zs_pl),(self.batch_size,self.MaxNAtom,1,1))
@@ -494,7 +511,6 @@ class SparseCodedChargedGauSHNetwork:
 
 		if (self.DoChargeEmbedding or self.DoChargeLearning or self.DoDipoleLearning):
 			self.AtomCharges = self.AtomEmbToAtomCharge(self.embedded,self.zs_pl) # (nmol X maxnatom X 1)
-			print("AtomCharges",self.AtomCharges)
 			self.MolDipoles = self.ChargeToDipole(self.xyzs_pl,self.zs_pl,self.AtomCharges)
 			self.Qloss = tf.nn.l2_loss(self.AtomCharges - self.groundTruthQ_pl,name='Qloss')/tf.cast(self.batch_size,self.prec)
 			self.Dloss = tf.nn.l2_loss(self.MolDipoles - self.groundTruthD_pl,name='Dloss')/tf.cast(self.batch_size,self.prec)
@@ -533,8 +549,8 @@ class SparseCodedChargedGauSHNetwork:
 			nrm2 = tf.sqrt(tf.clip_by_value(tf.reduce_sum(t2*t2,axis=1),1e-36,1e36))
 			diff = nrm1-nrm2
 			num = tf.reduce_sum(t1*t2,axis=1)
-			self.Gloss1 = (1.0 - tf.reduce_mean(num/(nrm1*nrm2)))/20.
-			self.Gloss2 = (tf.reduce_mean(diff*diff))/20.
+			self.Gloss1 = (1.0 - tf.reduce_mean(num/(nrm1*nrm2)))/40.
+			self.Gloss2 = (tf.reduce_mean(diff*diff))/40.
 			#self.Gloss = tf.losses.mean_squared_error(self.MolGrads, self.groundTruthG_pl)
 			tf.summary.scalar('GLossDir',self.Gloss1)
 			tf.summary.scalar('GLossMag',self.Gloss2)
@@ -545,9 +561,9 @@ class SparseCodedChargedGauSHNetwork:
 			self.Tloss = self.Eloss
 
 		if (self.DoDipoleLearning):
-			self.Tloss += self.Dloss
+			self.Tloss += self.Dloss/20.
 		elif (self.DoChargeLearning):
-			self.Tloss += self.Qloss
+			self.Tloss += self.Qloss/20.
 
 		tf.losses.add_loss(self.Tloss,loss_collection=tf.GraphKeys.LOSSES)
 		tf.summary.scalar('ELoss',self.Eloss)
@@ -576,7 +592,7 @@ class SparseCodedChargedGauSHNetwork:
 		#self.sess.graph.finalize()
 
 net = SparseCodedChargedGauSHNetwork(b)
-net.Load()
+#net.Load()
 net.Train()
 if 0:
 	mi = np.random.randint(len(b.mols))
