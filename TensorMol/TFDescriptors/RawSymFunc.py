@@ -3211,6 +3211,31 @@ def TFSymSet_Scattered_Linear_WithEle_ChannelHyb(R, Zs, eles_, SFPsR_, Rr_cut,  
 		IndexList.append(tf.concat([mol_index, atom_index], axis = -1))
 	return SymList, IndexList
 
+
+def TFSymSet_Scattered_Linear_WithEle_Channel_Multi(R, Zs, eles_, SFPsR_, Rr_cut,  eleps_, SFPsA_, zeta, eta, Ra_cut, RadpEle, AngtEle, mil_j, mil_jk, channel_eles, channel_eleps):
+	"""
+	A tensorflow implementation of the AN1 symmetry function for a set of molecule.
+	Args:
+		R: a nmol X maxnatom X 3 tensor of coordinates.
+		Zs : nmol X maxnatom X 1 tensor of atomic numbers.
+		eles_: a neles X 1 tensor of elements present in the data.
+		SFPsR_: A symmetry function parameter of radius part
+		Rr_cut: Radial Cutoff of radius part
+		eleps_: a nelepairs X 2 X 12tensor of elements pairs present in the data.
+		SFPsA_: A symmetry function parameter of angular part
+		RA_cut: Radial Cutoff of angular part
+	Returns:
+		Digested Mol. In the shape nmol X maxnatom X (Dimension of radius part + Dimension of angular part)
+	"""
+	inp_shp = tf.shape(R)
+	nmol = inp_shp[0]
+	natom = inp_shp[1]
+	GMA = tf.reshape(TFSymASet_Linear_WithEle_Channel3(R, Zs, eleps_, SFPsA_, zeta,  eta, Ra_cut,  AngtEle, mil_jk, channel_eleps),[nmol, natom,-1], name="FinishGMA")	
+	GMR = tf.reshape(TFSymRSet_Linear_WithEle_Channel3(R, Zs, eles_, SFPsR_, eta, Rr_cut, RadpEle, mil_j, channel_eles),[nmol, natom,-1], name="FinishGMR")
+	GM = tf.concat([GMR, GMA], axis=2, name="ConcatRadAngHyb")
+	return tf.reshape(GM,[nmol, natom, -1, tf.shape(channel_eles)[1]])
+
+
 def TFSymSet_Scattered_Linear_WithEle_UsingList(R, Zs, eles_, SFPsR_, Rr_cut,  eleps_, SFPsA_, zeta, eta, Ra_cut, RadpEle, AngtEle, mil_jk):
 	"""
 	A tensorflow implementation of the AN1 symmetry function for a set of molecule.
