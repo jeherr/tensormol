@@ -6,15 +6,21 @@ The old file is intended to be deleted after everything works here.
 from TensorMol import *
 import numpy as np
 
-b = MSet("HNCO_small")
-#b = MSet("chemspider12_clean_maxatom35")
+#b = MSet("HNCO_small")
+c = MSet("chemspider12_clean_maxatom35")
 #b = MSet("chemspider20_1_opt_all")
+b=MSet("chemspider20_1_opt_withcharge_all")
 b.Load()
+
+for m in b.mols: 
+	m.properties['charges'] = m.properties['mul_charge'].copy()
+b.Save()
+
 # This removes any linear-stoichiometric contribution from these
 # properties to speed learning by keeping these as small as possible.
 # This network will specifically target these renomalized properties appropriately.
-#c.Load()
-#b.mols=b.mols+(c.mols[:int(len(b.mols)*0.5)])
+c.Load()
+b.mols=b.mols+(c.mols[:int(len(b.mols)*0.5)])
 MAX_ATOMIC_NUMBER = 55
 
 def sftpluswparam(x):
