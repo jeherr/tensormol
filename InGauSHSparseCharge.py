@@ -1,5 +1,5 @@
 """
-This version adds sparsity.
+This version adds Coulombic Long-Range Forces.
 The old file is intended to be deleted after everything works here.
 """
 
@@ -22,6 +22,39 @@ def safe_inv_norm(x_):
 	nrm_ok = tf.not_equal(nrm,0.)
 	safe_nrm = tf.where(nrm_ok,nrm,tf.ones_like(nrm))
 	return tf.where(nrm_ok,1.0/safe_nrm,tf.zeros_like(nrm))
+
+def polykern(r):
+	"""
+	Polynomial cutoff 1/r obeying:
+	kern = 1/r at SROuter and LRInner
+	d(kern) = d(1/r) (true force) at SROuter,LRInner
+	d**2(kern) = d**2(1/r) at SROuter and LRInner.
+	d(kern) = 0 (no force) at/beyond SRInner and LROuter
+	"""
+	SRInner = 4.5
+	SROuter = 7.0
+	LRInner = 13.
+	LROuter = 15.
+	a = -14.4612
+	b = 11.6244
+	c = -3.69317
+	d = 0.642583
+	e = -0.0661298
+	f = 0.00402661
+	g = -0.00013439
+	h = 1.89788e-6
+	r2=r*r
+	r3=r2*r
+	r4=r3*r
+	r5=r4*r
+	r6=r5*r
+	r7=r6*r
+	kern = tf.where(tf.greater(r,LROuter),
+				1.0/LROuter*tf.ones_like(r),
+				tf.where(tf.less(r,SRInner),
+				1.0/SRInner*tf.ones_like(r),
+				(a+b*r+c*r2+d*r3+e*r4+f*r5+g*r6+h*r7)/r))
+	return kern
 
 def CanonicalizeGS(dxyzs):
 	"""
@@ -50,7 +83,6 @@ def CanonicalizeGS(dxyzs):
 	safe_nrm = tf.where(nrm_ok,nrm,tf.ones_like(nrm))
 	weights = tf.where(nrm_ok,tf.exp(nrm),tf.zeros_like(nrm)) # Mol X MaxNAtom X MaxNAtom
 	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
-
 	# GS orth the first three vectors.
 	vals, inds = tf.nn.top_k(maskedDs,k=3)
 	inds = tf.reshape(inds,(argshape[0]*argshape[1],3))
@@ -58,19 +90,12 @@ def CanonicalizeGS(dxyzs):
 	v1i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,:1]],axis=-1)
 	v2i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,1:2]],axis=-1)
 	v3i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,2:3]],axis=-1)
-	#v4i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,3:4]],axis=-1)
-	# Gather the weights as well and force the vectors to be smooth.
 	v10 = tf.gather_nd(togather,v1i)
 	v20 = tf.gather_nd(togather,v2i)
 	v30 = tf.gather_nd(togather,v3i)
-	#v40 = tf.gather_nd(togather,v4i)
 	w1 = tf.exp(-tf.clip_by_value(tf.norm(v10,axis=-1,keepdims=True),1e-36,1e36))
 	w2 = tf.exp(-tf.clip_by_value(tf.norm(v20,axis=-1,keepdims=True),1e-36,1e36))
 	w3 = tf.exp(-tf.clip_by_value(tf.norm(v30,axis=-1,keepdims=True),1e-36,1e36))
-	#w4 = tf.exp(-tf.clip_by_value(tf.norm(v40,axis=-1,keepdims=True),1e-36,1e36))
-#	v10 = tf.Print(v10,[tf.gather_nd(togather,v1i),v10],"vectors",summarize=12)
-#	v10 = tf.Print(v10,[w1],"VsWW",summarize=5)
-	# So the first axis continuously changes when 1,2 swap.
 	v1 = w1*v10 + w2*v20
 	v1 *= safe_inv_norm(v1)
 	v2 = w2*v10 + w1*v20 + w3*v30
@@ -81,12 +106,13 @@ def CanonicalizeGS(dxyzs):
 	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
 	v3 *= safe_inv_norm(v3)
 	vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
-	#vs = tf.Print(vs,[vs[0,0,:],vs[0,1,:],vs[0,2,:]],"Vs")
-	#vs = tf.Print(vs,[w1,w2,w3],"VsWW",summarize=100000)
 	tore = tf.einsum('ijk,ilk->ijl',realdata,vs)
 	return tf.reshape(tore,tf.shape(dxyzs))
 
-class SparseCodedGauSHNetwork:
+class SparseCodedChargedGauSHNetwork:
+	"""
+	This is the basic TensorMol0.2 model chemistry.
+	"""
 	def __init__(self,aset=None):
 		self.prec = tf.float64
 		self.batch_size = 128 # Force learning strongly modulates what you can do.
@@ -177,6 +203,8 @@ class SparseCodedGauSHNetwork:
 		zs = np.zeros((self.batch_size,self.MaxNAtom),dtype=np.int32)
 		nls = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh),dtype=np.int32)
 		true_ae = np.zeros((self.batch_size,1),dtype=np.float)
+		qs = np.zeros((self.batch_size,self.MaxNAtom),dtype=np.float64) # Charges.
+		ds = np.zeros((self.batch_size,3),dtype=np.float64) # Dipoles.
 		for i in range(self.batch_size):
 			mi = np.random.randint(len(aset.mols))
 			m = aset.mols[mi]
@@ -184,9 +212,11 @@ class SparseCodedGauSHNetwork:
 			zs[i,:m.NAtoms()] = m.atoms
 			true_ae[i]=m.properties["atomization"]
 			true_force[i,:m.NAtoms()]=m.properties["gradients"]
+			qs[i,:m.NAtoms()]=m.properties["charges"]
+			ds[i]=m.properties["dipole"]
 		nlt = self.NLTensors(xyzs,zs)
 		nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
-		return {self.xyzs_pl:xyzs, self.zs_pl:zs[:,:,np.newaxis],self.nl_pl:nls,self.groundTruthE_pl:true_ae, self.groundTruthG_pl:true_force}
+		return {self.xyzs_pl:xyzs, self.zs_pl:zs[:,:,np.newaxis],self.nl_pl:nls,self.groundTruthE_pl:true_ae, self.groundTruthG_pl:true_force, self.groundTruthQ_pl:qs, self.groundTruthD_pl:ds}
 
 	def Embed(self, dxyzs, jcodes, pair_mask, gauss_params, l_max):
 		"""
@@ -240,7 +270,27 @@ class SparseCodedGauSHNetwork:
 		#print tore
 		return tore
 
-	def AtomEmbToAtomEnergyChannel(self,emb,Zs):
+	def CoulombEnergies(self,dxyzs_,q1q2s_):
+		"""
+		Atom Coulomb energy calculated
+
+		Args:
+			dxyzs_: (nmol X MaxNAtom X MaxNeigh X 1) distances tensor (angstrom)
+			q1q2s_: charges (nmol X MaxNAtom X MaxNeigh X 1) charges tensor. (atomic)
+		Returns:
+			 (nmol X 1) tensor of energies (atomic)
+		"""
+		return (1.889725989/2.0)*tf.reduce_sum(polykern(dxyzs_)*q1q2s_,axis=(1,2))[:,tf.newaxis]
+
+	def ChargeToDipole(self,xyzs_,zs_,qs_):
+		"""
+		Calculate the dipole moment relative to center of atom.
+		"""
+		n_atoms = tf.clip_by_value(tf.cast(tf.reduce_sum(zs_,axis=(1,2)),tf.float64),1e-36,1e36)
+		COA = tf.reduce_sum(xyzs_,axis=1)/n_atoms[:,tf.newaxis]
+		return tf.reduce_sum((xyzs_ - COA[:,tf.newaxis,:])*qs_[:,:,tf.newaxis],axis=1)
+
+	def AtomEmbToAtomEnergy(self,emb,Zs):
 		"""
 		This version creates a network to integrate weight information.
 		and then works like any ordinary network.
@@ -249,6 +299,9 @@ class SparseCodedGauSHNetwork:
 		Args:
 			emb: # mol X maxNAtom X ang X rad X code tensor.
 			Zs: mol X maxNatom X 1 atomic number tensor.
+
+		Returns:
+			(atom energies, atom charges)
 		"""
 		ncase = self.batch_size*self.MaxNAtom
 		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
@@ -279,6 +332,50 @@ class SparseCodedGauSHNetwork:
 		# Finally allow for a simple 1-D linear filter based on element type.
 		return tf.reshape(l3,(self.batch_size,self.MaxNAtom,1))
 
+	def AtomEmbToAtomCharge(self,emb,Zs):
+		"""
+		Zero out the total charge.
+
+		Args:
+			emb: # mol X maxNAtom X ang X rad X code tensor.
+			Zs: mol X maxNatom X 1 atomic number tensor.
+
+		Returns:
+			(atom energies, atom charges)
+		"""
+		ncase = self.batch_size*self.MaxNAtom
+		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
+		nchan = self.AtomCodes.shape[1]
+		nembdim = self.nembdim
+		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # (mol * maxNatom) X 4
+		# Combine the codes of the main atom and the sensed atom
+		# Using a hinton-esque tensor decomposition.
+		CODEKERN1 = tf.get_variable(name="QCodeKernel", shape=(nchan,nchan),dtype=self.prec)
+		CODEKERN2 = tf.get_variable(name="QCodeKernel2", shape=(nchan,nchan),dtype=self.prec)
+		# combine the weight kernel with the codes.
+		mix1 = tf.matmul(CODES,CODEKERN1) # ncase X ncode
+		embrs = tf.reshape(emb,(ncase,-1,nchan))
+		# Ensure any zero cases don't contribute.
+		msk = tf.where(tf.equal(Zrs,0.0),tf.zeros_like(Zrs),tf.ones_like(Zrs))
+		embrs *= msk[:,:,tf.newaxis]
+		weighted = tf.einsum('ikj,ij->ikj',embrs,mix1)
+		weighted2 = tf.einsum('ikj,jl->ikl',weighted,CODEKERN2)
+		# Now pass it through as usual.
+		l0 = tf.reshape(weighted2,(ncase,-1))
+		l0p = tf.concat([l0,CODES],axis=-1)
+		l1 = tf.layers.dense(inputs=l0p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
+		l1p = tf.concat([l1,CODES],axis=-1)
+		l2 = tf.layers.dense(inputs=l1p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer)
+		# in the final layer use the atom code information.
+		l2p = tf.concat([l2,CODES],axis=-1)
+		l3 = tf.layers.dense(l2p,units=1,activation=None,use_bias=True)*msk
+		charges = tf.reshape(l3,(self.batch_size,self.MaxNAtom))
+		# Set the total charges to neutral by evenly distributing any excess charge.
+		excess_charges = tf.reduce_sum(charges,axis=[1])
+		n_atoms = tf.reduce_sum(tf.where(tf.equal(Zs,0),Zs,tf.ones_like(Zs)),axis=[1,2])
+		fix = -1.0*excess_charges/tf.cast(n_atoms,tf.float64)
+		return charges + fix[:,tf.newaxis]
+
 	def train_step(self,step):
 		feed_dict = self.NextBatch(self.mset)
 		_,train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
@@ -292,15 +389,24 @@ class SparseCodedGauSHNetwork:
 			#print("Gauss Params: ",self.sess.run([self.gp_tf])[0])
 			#print("AtomCodes: ",self.sess.run([self.atom_codes])[0])
 			feed_dict = self.NextBatch(self.mset)
-			ens,frcs,summary = self.sess.run([self.MolEnergies,self.MolGrads,self.summary_op], feed_dict=feed_dict, options=self.options, run_metadata=self.run_metadata)
+			if (self.DoChargeLearning or self.DoDipoleLearning):
+				ens, frcs, charges, dipoles, qens, summary = self.sess.run([self.MolEnergies,self.MolGrads,self.AtomCharges,self.MolDipoles,self.MolCoulEnergies,self.summary_op], feed_dict=feed_dict, options=self.options, run_metadata=self.run_metadata)
+			else:
+				ens,frcs,summary = self.sess.run([self.MolEnergies,self.MolGrads,self.summary_op], feed_dict=feed_dict, options=self.options, run_metadata=self.run_metadata)
 			for i in range(6):
 				#print("Zs:",feed_dict[self.zs_pl][i])
 				#print("xyz:",feed_dict[self.xyzs_pl][i])
 				#print("NL:",feed_dict[self.nl_pl][i])
 				#print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i], frcs[i], feed_dict[self.groundTruthG_pl][i] )
 				print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i])
+				if (self.DoChargeEmbedding):
+					print("MolCoulEnergy: ", qens[i])
 			print("Mean Abs Error: (Energy)", np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
 			print("Mean Abs Error (Force): ", np.average(np.abs(frcs-feed_dict[self.groundTruthG_pl])))
+			if (self.DoDipoleLearning):
+				print("Mean Abs Error (Dipole): ", np.average(np.abs(dipoles-feed_dict[self.groundTruthD_pl])))
+			if (self.DoChargeLearning):
+				print("Mean Abs Error (Charges): ", np.average(np.abs(charges-feed_dict[self.groundTruthQ_pl])))
 			if (self.DoRotGrad):
 				print("RotGrad:",self.sess.run([self.RotGrad], feed_dict=feed_dict))
 			self.writer.add_summary(summary,step)
@@ -329,6 +435,8 @@ class SparseCodedGauSHNetwork:
 		self.DoForceLearning = False
 		self.DoCodeLearning = False
 		self.DoDipoleLearning = False
+		self.DoChargeLearning = True
+		self.DoChargeEmbedding = True
 
 		self.xyzs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = self.prec)
 		self.zs_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, 1), dtype = tf.int32)
@@ -336,8 +444,11 @@ class SparseCodedGauSHNetwork:
 		tf.stop_gradient(self.nl_pl)
 		tf.stop_gradient(self.zs_pl)
 
-		self.groundTruthE_pl = tf.placeholder(shape = (self.batch_size,1), dtype = tf.float64)
-		self.groundTruthG_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = tf.float64)
+		# Learning targets.
+		self.groundTruthE_pl = tf.placeholder(shape = (self.batch_size,1), dtype = tf.float64) # Energies
+		self.groundTruthG_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = tf.float64) # Forces
+		self.groundTruthD_pl = tf.placeholder(shape = (self.batch_size,3), dtype = tf.float64) # Dipoles.
+		self.groundTruthQ_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom), dtype = tf.float64) # Charges
 
 		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning)
 		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec)
@@ -378,9 +489,32 @@ class SparseCodedGauSHNetwork:
 			tf.stop_gradient(jcodes)
 		self.embedded = self.Embed(self.cdxyzs, jcodes, self.sparse_mask, self.gp_tf, self.l_max)
 		# Sparse Energy.
-		self.AtomEnergies = self.AtomEmbToAtomEnergyChannel(self.embedded,self.zs_pl)
-		#self.AtomEnergies = tf.Print(self.AtomEnergies,[tf.gradients(self.AtomEnergies,self.xyzs_pl)[0]],"self.AtomEnergies",summarize=1000000)
+		self.AtomEnergies = self.AtomEmbToAtomEnergy(self.embedded,self.zs_pl)
 		self.MolEnergies = tf.reduce_sum(self.AtomEnergies,axis=1,keepdims=False)
+
+		if (self.DoChargeEmbedding or self.DoChargeLearning or self.DoDipoleLearning):
+			self.AtomCharges = self.AtomEmbToAtomCharge(self.embedded,self.zs_pl) # (nmol X maxnatom X 1)
+			print("AtomCharges",self.AtomCharges)
+			self.MolDipoles = self.ChargeToDipole(self.xyzs_pl,self.zs_pl,self.AtomCharges)
+			self.Qloss = tf.nn.l2_loss(self.AtomCharges - self.groundTruthQ_pl,name='Qloss')/tf.cast(self.batch_size,self.prec)
+			self.Dloss = tf.nn.l2_loss(self.MolDipoles - self.groundTruthD_pl,name='Dloss')/tf.cast(self.batch_size,self.prec)
+			tf.summary.scalar('Qloss',self.Qloss)
+			tf.summary.scalar('Dloss',self.Dloss)
+			tf.add_to_collection('losses', self.Qloss)
+			tf.add_to_collection('losses', self.Dloss)
+			if (self.DoChargeEmbedding):
+				q2 = tf.gather_nd(self.AtomCharges,gathis)
+				q1q2unmsk = (self.AtomCharges[:,:,tf.newaxis]*q2)
+				q1q2s = tf.where(boolmsk1[:,:,:,0],q1q2unmsk,tf.zeros_like(q1q2unmsk))
+				self.MolCoulEnergies = self.CoulombEnergies(tf.norm(self.dxyzs,axis=-1),q1q2s)
+			else:
+				self.MolCoulEnergies = tf.zeros_like(self.MolEnergies)
+		else:
+			self.MolCoulEnergies = tf.zeros_like(self.MolEnergies)
+
+		#self.AtomEnergies = tf.Print(self.AtomEnergies,[tf.gradients(self.AtomEnergies,self.xyzs_pl)[0]],"self.AtomEnergies",summarize=1000000)
+		if (self.DoChargeEmbedding):
+			self.MolEnergies += self.MolCoulEnergies
 
 		# Optional. Verify that the canonicalized differences are invariant.
 		if self.DoRotGrad:
@@ -410,6 +544,11 @@ class SparseCodedGauSHNetwork:
 		else:
 			self.Tloss = self.Eloss
 
+		if (self.DoDipoleLearning):
+			self.Tloss += self.Dloss
+		elif (self.DoChargeLearning):
+			self.Tloss += self.Qloss
+
 		tf.losses.add_loss(self.Tloss,loss_collection=tf.GraphKeys.LOSSES)
 		tf.summary.scalar('ELoss',self.Eloss)
 		tf.summary.scalar('TLoss',self.Tloss)
@@ -436,8 +575,8 @@ class SparseCodedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedGauSHNetwork(b)
-#net.Load()
+net = SparseCodedChargedGauSHNetwork(b)
+net.Load()
 net.Train()
 if 0:
 	mi = np.random.randint(len(b.mols))
