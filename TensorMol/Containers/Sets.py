@@ -164,6 +164,13 @@ class MSet:
 				cut_down_mols.append(mol)
 		self.mols = cut_down_mols
 
+	def cut_max_grad(self, max_grad=1.0):
+		cut_down_mols = []
+		for mol in self.mols:
+			if (np.max(np.abs(mol.properties['gradients']))<max_grad):
+				cut_down_mols.append(mol)
+		self.mols = cut_down_mols
+
 	def NAtoms(self):
 		nat=0
 		for m in self.mols:

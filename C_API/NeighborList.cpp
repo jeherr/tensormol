@@ -15,29 +15,41 @@ public:
 	Atom() {
 		setID(-1);
 		setN(0);
+		setXYZ(0,0,0);
 	}
-	Atom(int ID, int N) {
+	Atom(int ID, int N, double x, double y, double z) {
 		setID(ID);
 		setN(N);
+		setXYZ(x, y, z);
 	}
 	~Atom() {}
 
 	void setID(int ID) {this->ID = ID;}
 	void setN(int N) {this->N = N;}
+	void setXYZ(double x, double y, double z) {
+		XYZ[0] = x;
+		XYZ[1] = y;
+		XYZ[2] = z;
+	}
 
 	int getID(void) {return ID;}
 	int getN(void) {return N;}
+	vector<double> getXYZ(void) {return XYZ;}
+	double getX(void) {return XYZ[0];}
+	double getY(void) {return XYZ[1];}
+	double getZ(void) {return XYZ[2];}
 
 private:
 	int ID; // Atom identification number
 	int N;  // Atomic number
+	vector<double> XYZ;
 };
 
 // Typedefs and definitions
-typedef *(list<Atom>) cell_list_ptr;
-typedef vector<vector<vector<cell_list_ptr>>> grid;
+typedef list<Atom>* cell_list_ptr;
+typedef vector<vector<vector<cell_list_ptr> > > grid;
 
-#define R_CUT 1; // Cutoff radius. 1 Angstrom for now
+#define R_CUT 1 // Cutoff radius. 1 Angstrom for now
 
 // Prototypes
 int get_atomic_number(string);
@@ -52,20 +64,17 @@ int main() {
 
 	// n_atoms x 4 vector that holds each atom's coordinates i=[0-2]
 	// and the atomic number of the atom i=[3]
-	vector<vector<double>> xyzs(natoms, {0,0,0,0});
-
-	// xbuckets x ybuckets x zbuckets grid that holds the pointers
-	// to the list of atoms that are inside of that bucket
-	grid Heads;
+	vector<double> zerovector(4, 0.0);
+	vector<vector<double> > xyzs(n_atoms, zerovector);
 
 	// Read in the atom coordinates
 	double xmax, xmin, ymax, ymin, zmax, zmin;
 
+	// Build xyzs vector, determine max/min xyz values
 	for (int i = 0; i < n_atoms; i++) {
-		// Build xyzs vector, determine max/min xyz values
 		string atom_name;
 		cin >> atom_name >> xyzs[i][0] >> xyzs[i][1] >> xyzs[i][2];
-		xyzs[3] = get_atomic_number(atom_name);
+		xyzs[i][3] = get_atomic_number(atom_name);
 		if (i == 0 || xyzs[i][0] > xmax) xmax = xyzs[i][0];
 		if (i == 0 || xyzs[i][1] > ymax) ymax = xyzs[i][1];
 		if (i == 0 || xyzs[i][2] > zmax) zmax = xyzs[i][2];
@@ -91,26 +100,49 @@ int main() {
 	int ybuckets = (ymax / R_CUT) + 1;
 	int zbuckets = (zmax / R_CUT) + 1;
 
+	// xbuckets x ybuckets x zbuckets grid that holds the pointers
+	// to the list of atoms that are inside of that bucket
+	grid Heads;
+
 	// Create a pointer to an empty list of atoms
 	// for each cell in the Heads grid
+	cout << xbuckets << ' ' << ybuckets << ' ' << zbuckets << '\n';
 	for (int z = 0; z < zbuckets; z++) {
+		cout << "Z: " << z << '\n';
 		for (int y = 0; y < ybuckets; y++) {
+			cout << "Y: " << y << '\n';
 			for (int x = 0; x < xbuckets; x++) {
-				cell_list_ptr p;
-				Heads[x][y][z] = p;
+				cout << "X: " << x << '\n';
+				list<Atom> p;
+				cout << "Got to here" << '\n';
+				Heads[x][y][z] = &p;
 			}
 		}
 	}
 
 	// ==== Construct all lists in grid ====
-	for (int i = 0; i < n_atoms; i++) {
-		Atom atom(i, xyzs[i][3]);
+	/*for (int i = 0; i < n_atoms; i++) {
+		Atom atom(i, xyzs[i][3], xyzs[i][0], xyzs[i][1], xyzs[i][2]);
 		int xtarget = xyzs[i][0] / R_CUT;
 		int ytarget = xyzs[i][1] / R_CUT;
 		int ztarget = xyzs[i][2] / R_CUT;
 
 		Heads[xtarget][ytarget][ztarget]->push_back(atom);
 	}
+
+	/*==== Testing ====
+	for (size_t i = 0; i < Heads.size(); i++) {
+		cout << "i = " << i << '\n';
+		for (size_t j = 0; j < Heads[i].size(); j++) {
+			cout << "j = " << j << '\n';
+			for (size_t k = 0; k < Heads[i][j].size(); k++) {
+				cout << "k = " << k << '\n';
+				for (auto it = Heads[i][j][k]->begin(); it != Heads[i][j][k]->end(); it++) {
+					cout << it->getX() << " " << it->getY() << " " << it-> getZ() << "\n\n";
+				}
+			}
+		}
+	}*/
 }
 
 int get_atomic_number(string s) {
