@@ -766,6 +766,7 @@ def tf_random_rotate(xyzs, rot_params, labels = None, return_matrix = False):
 	R3 = tf.stack([zero_tensor, zero_tensor, tf.ones_like(rot_params[...,1])], axis=-1)
 	R = tf.stack([R1, R2, R3], axis=-2)
 	M = tf.matmul((tf.expand_dims(v, axis=-2) * tf.expand_dims(v, axis=-1)) - tf.eye(3, dtype=eval(PARAMS["tf_prec"])), R)
+	# return xyzs
 	new_xyzs = tf.einsum("lij,lkj->lki", M, xyzs)
 	if labels != None:
 		new_labels = tf.einsum("lij,lkj->lki",M, (xyzs + labels)) - new_xyzs
@@ -1057,6 +1058,9 @@ def gs_canonicalize(xyzs, Zs):
 	new_xyzs = tf.reshape(tf.einsum('ijk,ilk->ijl', realdata, vs), tf.shape(dxyzs))
 	return new_xyzs
 
+def norm(x):
+	return tf.reduce_sum(tf.square(x), axis=-1, keep_dims=True)
+
 def gs_canonicalizev2(xyzs, Zs):
 	"""
 	Canonicalize using nearest three atoms and Graham-Schmidt.
@@ -1073,24 +1077,24 @@ def gs_canonicalizev2(xyzs, Zs):
 	mask = tf.expand_dims(tf.where(tf.not_equal(Z_product, 0), tf.ones_like(Z_product, dtype=eval(PARAMS["tf_prec"])),
 		tf.zeros_like(Z_product, dtype=eval(PARAMS["tf_prec"]))), axis=-1)
 	dxyzs = dxyzs * mask
-	dist_tensor = tf.norm(dxyzs, axis=-1, keep_dims=True)
-	norm_dxyzs = dxyzs / tf.where(tf.equal(dist_tensor, 0.0), tf.ones_like(dist_tensor), dist_tensor)
-	weights = tf.exp(-1.0 * dist_tensor)
+	dist_tensor = tf.norm(dxyzs+1.e-16, axis=-1, keep_dims=True)
+	norm_dxyzs = dxyzs / tf.where(tf.less(dist_tensor, 1.e-12), tf.ones_like(dist_tensor), dist_tensor)
+	weights = tf.exp(-1.0 * norm(dxyzs))
 	weights = tf.where(tf.equal(weights, 1.), tf.zeros_like(weights), weights)
 	weighted_xyz = tf.reduce_sum(norm_dxyzs * weights, axis=-2)
-	first_axis = weighted_xyz / tf.norm(weighted_xyz, axis=-1, keep_dims=True)
-	mask = tf.where(tf.equal(dist_tensor, 0.0), tf.zeros_like(dist_tensor), tf.ones_like(dist_tensor))
+	first_axis = weighted_xyz / tf.norm(weighted_xyz+1.e-16, axis=-1, keep_dims=True)
+	mask = tf.where(tf.less(dist_tensor, 1.e-12), tf.zeros_like(dist_tensor), tf.ones_like(dist_tensor))
 	rejection_xyzs = (norm_dxyzs - tf.expand_dims(first_axis, axis=-2)) * mask
-	rej_dist_tensor = tf.norm(dxyzs, axis=-1, keep_dims=True)
-	norm_rej_xyzs = rejection_xyzs / tf.where(tf.equal(rej_dist_tensor, 0.0), tf.ones_like(dist_tensor), dist_tensor)
+	rej_dist_tensor = tf.norm(dxyzs+1.e-16, axis=-1, keep_dims=True)
+	norm_rej_xyzs = rejection_xyzs / tf.where(tf.less(rej_dist_tensor, 1.e-12), tf.ones_like(dist_tensor), dist_tensor)
 	weighted_rej_xyzs = tf.reduce_sum(norm_rej_xyzs * weights, axis=-2)
 	second_axis = weighted_rej_xyzs #/ tf.norm(weighted_rej_xyzs, axis=-1, keep_dims=True)
 	second_axis -= tf.expand_dims(tf.einsum('ij,ij->i',first_axis, second_axis), axis=-1) * first_axis
-	second_axis /= tf.norm(second_axis, axis=-1, keep_dims=True)
+	second_axis /= tf.norm(second_axis+1.e-16, axis=-1, keep_dims=True)
 	third_axis = tf.cross(first_axis, second_axis)
 	transform_matrix = tf.stack([first_axis, second_axis, third_axis], axis=1)
 	canon_xyzs = tf.einsum("lij,lkj->lki", transform_matrix, dxyzs)
-	return canon_xyzs
+	return canon_xyzs, transform_matrix
 
 def tf_neighbor_list(xyzs, Zs, cutoff):
 	with tf.device("/cpu:0"):
