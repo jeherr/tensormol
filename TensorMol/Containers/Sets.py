@@ -46,6 +46,41 @@ class MSet:
 		LOGGER.info("Loaded, "+str(len(self.mols))+" molecules "+str(self.NAtoms())+" Atoms total "+str(self.AtomTypes())+" Types ")
 		return
 
+	def RemoveElementAverages(self):
+		"""
+		Removes average from energies and charges returns dictionaries mapping
+		AN=> element averages useful for normalizing training.
+		It does this using least-sq. This eliminates the need for element
+		atomization energies.
+
+		Returns:
+			AvE,AvQ: dictionaries mapping Atomic number onto the averages.
+		"""
+		At = self.AtomTypes().tolist()
+		AvE = {x:0. for x in At}
+		AvQ = {x:0. for x in At}
+		nmols = len(self.mols)
+		nele = len(AvE)
+		b = np.zeros(nmols)
+		a = np.zeros((nmols,nele))
+		noa = np.zeros(nele)
+		coa = np.zeros(nele)
+		for i,m in enumerate(self.mols):
+			for j,e in enumerate(At):
+				a[i,j] = m.NumOfAtomsE(e)
+			b[i] = m.properties["energy"]
+			for atom in range(m.NAtoms()):
+				noa[At.index(m.atoms[atom])]+=1
+				coa[At.index(m.atoms[atom])]+=m.properties["charges"][atom]
+		x,r = np.linalg.lstsq(a,b)[:2]
+		averageqs = coa/noa
+		for i,e in enumerate(At):
+			AvE[e] = x[i]
+			AvQ[e] = averageqs[i]
+		self.AvE = AvE
+		self.AvQ = AvQ
+		return AvE,AvQ
+
 	def DistortAlongNormals(self, npts=8, random=True, disp=.2):
 		'''
 		Create a distorted copy of a set
@@ -305,38 +340,31 @@ class MSet:
 		""" Return some energy information about the samples we have... """
 		print("Set Statistics----")
 		print("Nmol: ", len(self.mols))
-		sampfrac = 0.1;
-		np.random.seed(int(time.time()))
-		ord=np.random.permutation(int(len(self.mols)*sampfrac))
-		if len(ord)==0:
-			return
-		ens = np.zeros(len(ord))
-		rmsd = np.zeros(len(ord))
-		n=0
-		for j in ord:
-			if ("energy" in self.mols[j].properties.keys()):
-				ens[n] = self.mols[j].properties["energy"]
-			else :
-				ens[n] = self.mols[j].GoEnergy(self.mols[j].coords.flatten())
-				tmp = MolEmb.Make_DistMat(self.mols[j].coords) - self.mols[j].DistMatrix
-				rmsd[n] = np.sum(tmp*tmp)/len(self.mols[j].coords)
-				n=n+1
-		print("Mean and Std. Energy", np.average(ens), np.std(ens))
-		print("Energy Histogram", np.histogram(ens, 100))
-		print("RMSD Histogram", np.histogram(rmsd, 100))
+		natoms = [m.NAtoms() for m in self.mols]
+		print("Ave Num of atoms: ", np.mean(natoms))
+		print("Max Num of atoms: ", np.max(natoms), " mol num: ",natoms.index(np.max(natoms)))
+		print(self.mols[natoms.index(np.max(natoms))])
+		print("Min Num of atoms: ", np.min(natoms), " mol num: ",natoms.index(np.min(natoms)))
+		print(self.mols[natoms.index(np.min(natoms))])
+		print(np.histogram(natoms))
+		if 'energy' in self.mols[0].properties:
+			energies = [m.properties['energy'] for m in self.mols]
+			print("Average Energy: ",np.mean(energies))
+		if 'gradients' in self.mols[0].properties:
+			avgrad = [np.mean(m.properties['gradients'],axis=0) for m in self.mols]
+			avgradnorm = [np.mean(np.linalg.norm(m.properties['gradients'],axis=-1)) for m in self.mols]
+			print('AverageGrad',np.mean(avgrad))
+			print('AverageGradNorm',np.mean(avgradnorm))
+			print('StdGradNorm',np.std(avgradnorm))
+			print('MaxGradNorm',np.max(avgradnorm))
+		if 'charges' in self.mols[0].properties:
+			charges = [np.mean(m.properties['charges'],axis=0) for m in self.mols]
+			abscharges = [np.max(np.abs(m.properties['charges']),axis=0) for m in self.mols]
+			print('AverageCharge',np.mean(charges))
+			print('AverageMaxAbsCharge',np.mean(abscharges))
+			print('StdMaxAbsCharge',np.std(abscharges))
+			print('MaxMaxAbsCharge',np.max(abscharges))
 		return
-
-	def Clean_GDB9(self):
-		s = MSet(self.name+"_cleaned")
-		s.path = self.path
-		for mol in self.mols:
-			if float('inf') in mol.Bonds_Between:
-				print("disconnected atoms in mol.. discard")
-			elif -1 in mol.bond_type or 0 in mol.bond_type:
-				print("allowed bond type in mol... discard")
-			else:
-				s.mols.append(mol)
-		return s
 
 	def WriteSmiles(self):
 		for mol in self.mols:
