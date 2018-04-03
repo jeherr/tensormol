@@ -19,10 +19,30 @@ if 0:
 	b.Save("Hybrid1")
 #b.mols=b.mols+(c.mols[:int(len(b.mols)*0.5)])
 
-b=MSet("Hybrid1")
+b=MSet("Hybrid130")
+
+# If you want to test a linear molecule.
+if (0):
+	m=Mol()
+	m.FromXYZString("""5
+	Comment:
+	C   0.1506907344  0.0  0.0
+	C   -1.1550766934  0.0  0.0
+	S   -2.7208105787  0.0  0.0
+	C   1.4245508222  0.0  0.0
+	S   2.9488539653  0.0  0.0""")
+	m.properties["energy"]=-1000.0
+	m.properties["charges"]=np.array([0.,0.,0.,0.,0.])
+	m.properties["gradients"]=np.zeros((5,3))
+	m.properties["dipole"]=np.zeros((3))
+	for i in range(300):
+		b.mols.append(m)
+
 b.Load()
 #b.Statistics()
-b.cut_max_num_atoms(40)
+b.cut_max_num_atoms(30)
+b.cut_max_grad(1.0)
+#b.Save("Hybrid130")
 MAX_ATOMIC_NUMBER = 55
 
 def sftpluswparam(x):
@@ -30,7 +50,7 @@ def sftpluswparam(x):
 
 def safe_inv_norm(x_):
 	nrm = tf.clip_by_value(tf.norm(x_,axis=-1,keepdims=True),1e-36,1e36)
-	nrm_ok = tf.not_equal(nrm,0.)
+	nrm_ok = tf.logical_and(tf.not_equal(nrm,0.),tf.logical_not(tf.is_nan(nrm)))
 	safe_nrm = tf.where(nrm_ok,nrm,tf.ones_like(nrm))
 	return tf.where(nrm_ok,1.0/safe_nrm,tf.zeros_like(nrm))
 
@@ -105,11 +125,11 @@ def CanonicalizeGS(dxyzs):
 	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
 	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[2]+3,3))
 
-	nrm = tf.clip_by_value(-1.0*tf.norm(dxyzsandDef,axis=-1),1e-36,1e36)
-	nrm_ok = tf.not_equal(nrm,0.)
-	safe_nrm = tf.where(nrm_ok,nrm,tf.ones_like(nrm))
+	nrm = tf.clip_by_value(-1.0*tf.norm(dxyzsandDef,axis=-1),-16.0,16.0)
+	nrm_ok = tf.logical_and(tf.logical_not(tf.is_nan(nrm)),tf.not_equal(nrm,0.))
 	weights = tf.where(nrm_ok,tf.exp(nrm),tf.zeros_like(nrm)) # Mol X MaxNAtom X MaxNAtom
-	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
+	maskedDs = tf.where(nrm_ok,weights,tf.zeros_like(weights))
+
 	# GS orth the first three vectors.
 	vals, inds = tf.nn.top_k(maskedDs,k=3)
 	inds = tf.reshape(inds,(argshape[0]*argshape[1],3))
@@ -120,15 +140,25 @@ def CanonicalizeGS(dxyzs):
 	v10 = tf.gather_nd(togather,v1i)
 	v20 = tf.gather_nd(togather,v2i)
 	v30 = tf.gather_nd(togather,v3i)
-	w1 = tf.exp(-tf.clip_by_value(tf.norm(v10,axis=-1,keepdims=True),1e-36,1e36))
-	w2 = tf.exp(-tf.clip_by_value(tf.norm(v20,axis=-1,keepdims=True),1e-36,1e36))
-	w3 = tf.exp(-tf.clip_by_value(tf.norm(v30,axis=-1,keepdims=True),1e-36,1e36))
-	v1 = w1*v10 + w2*v20
+
+	d1 = tf.zeros_like(v10)
+	d2 = tf.zeros_like(v10)
+	d3 = tf.zeros_like(v10)
+	Im = tf.eye(3,dtype=tf.float64)
+	#on = tf.ones_like(v10[:,0])*1e-15
+	d1 += Im[0][tf.newaxis,:]
+	d2 += Im[1][tf.newaxis,:]
+	d3 += Im[2][tf.newaxis,:]
+
+	w1 = tf.exp(-tf.clip_by_value(tf.norm(v10,axis=-1,keepdims=True),-16.0,16.0))
+	w2 = tf.exp(-tf.clip_by_value(tf.norm(v20,axis=-1,keepdims=True),-16.0,16.0))
+	w3 = tf.exp(-tf.clip_by_value(tf.norm(v30,axis=-1,keepdims=True),-16.0,16.0))
+	v1 = w1*v10 + w2*v20 + d1
 	v1 *= safe_inv_norm(v1)
-	v2 = w2*v10 + w1*v20 + w3*v30
+	v2 = w2*v10 + w1*v20 + w3*v30 + d2
 	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 	v2 *= safe_inv_norm(v2)
-	v3 = w2*v20 + w3*v30
+	v3 = w2*v20 + w3*v30 + d3
 	v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
 	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
 	v3 *= safe_inv_norm(v3)
@@ -397,7 +427,7 @@ class SparseCodedChargedGauSHNetwork:
 
 		l2q = tf.layers.dense(inputs=l1p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2q")
 		l2pq = tf.concat([l2q,CODES],axis=-1)
-		l3q = tf.layers.dense(l2pq,units=1,activation=None,use_bias=True,name="Dense3q")*msk
+		l3q = tf.layers.dense(l2pq,units=1,activation=None,use_bias=False,name="Dense3q")*msk
 		charges = tf.reshape(l3q,(self.batch_size,self.MaxNAtom))
 		# Set the total charges to neutral by evenly distributing any excess charge.
 		excess_charges = tf.reduce_sum(charges,axis=[1])
@@ -409,18 +439,22 @@ class SparseCodedChargedGauSHNetwork:
 		l2e = tf.layers.dense(inputs=l1p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2e")
 		# in the final layer use the atom code information.
 		l2pe = tf.concat([l2e,CODES],axis=-1)
-		l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=True,name="Dense3e")*msk
+		l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
 		AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))+AvEs
 
 		return AtomEnergies, AtomCharges
 
 	def train_step(self,step):
 		feed_dict, mols = self.NextBatch(self.mset)
-		DEBUGFLEARNING = self.sess.run(tf.gradients(self.Gloss,tf.trainable_variables()), feed_dict=feed_dict)
-		for t in DEBUGFLEARNING:
-			if (np.any(np.isnan(t))):
-				print("NanLearning!!!", t)
-		_,train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
+		#DEBUGFLEARNING = self.sess.run(tf.gradients(self.Gloss,tf.trainable_variables()), feed_dict=feed_dict)[0]
+		#print(DEBUGFLEARNING)
+		#for t in DEBUGFLEARNING:
+		#	if (np.any(np.isnan(t))):
+		#		print("NanLearning!!!", t)
+		#tvars = tf.trainable_variables()
+		#for var in tvars:
+			#print("var", var)
+		_ , train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
 		self.print_training(step, train_loss)
 		return
 
@@ -444,10 +478,11 @@ class SparseCodedChargedGauSHNetwork:
 				if (self.DoChargeEmbedding):
 					print("MolCoulEnergy: ", qens[i])
 			MAEF = np.average(np.abs(frcs-feed_dict[self.groundTruthG_pl]))
-			if (MAEF > 1.0):
+			if (MAEF > 1.0 or np.any(np.isnan(MAEF))):
 				# locate the problem case.
 				for i,m in enumerate(mols):
-					if (np.average(np.abs(frcs[i] - feed_dict[self.groundTruthG_pl][i]))>1.0):
+					MAEFm = np.average(np.abs(frcs[i] - feed_dict[self.groundTruthG_pl][i]))
+					if (MAEFm>1.0 or np.any(np.isnan(MAEFm))):
 						print("--------------")
 						print(m)
 						print(frcs[i])
@@ -489,17 +524,17 @@ class SparseCodedChargedGauSHNetwork:
 		self.DoChargeLearning = True
 		self.DoChargeEmbedding = True
 
-		self.xyzs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = self.prec)
-		self.zs_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, 1), dtype = tf.int32)
-		self.nl_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, self.MaxNeigh), dtype = tf.int32)
+		self.xyzs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = self.prec, name="InputCoords")
+		self.zs_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, 1), dtype = tf.int32, name="InputZs")
+		self.nl_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, self.MaxNeigh), dtype = tf.int32,name="InputNL")
 		tf.stop_gradient(self.nl_pl)
 		tf.stop_gradient(self.zs_pl)
 
 		# Learning targets.
-		self.groundTruthE_pl = tf.placeholder(shape = (self.batch_size,1), dtype = tf.float64) # Energies
-		self.groundTruthG_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = tf.float64) # Forces
-		self.groundTruthD_pl = tf.placeholder(shape = (self.batch_size,3), dtype = tf.float64) # Dipoles.
-		self.groundTruthQ_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom), dtype = tf.float64) # Charges
+		self.groundTruthE_pl = tf.placeholder(shape = (self.batch_size,1), dtype = tf.float64,name="GTEs") # Energies
+		self.groundTruthG_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = tf.float64,name="GTFs") # Forces
+		self.groundTruthD_pl = tf.placeholder(shape = (self.batch_size,3), dtype = tf.float64,name="GTDs") # Dipoles.
+		self.groundTruthQ_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom), dtype = tf.float64,name="GTQs") # Charges
 
 		# Constants
 		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning)
@@ -577,15 +612,16 @@ class SparseCodedChargedGauSHNetwork:
 		self.MolGrads = tf.gradients(self.MolEnergies,self.xyzs_pl)[0]
 		self.MolHess = tf.hessians(self.MolEnergies,self.xyzs_pl)[0]
 
-		self.Tloss = (1.0 + self.Eloss)
+		t1 = tf.reshape(self.MolGrads,(self.batch_size,-1))
+		t2 = tf.reshape(self.groundTruthG_pl,(self.batch_size,-1))
+		diff = t1 - t2
+		self.Gloss = tf.reduce_sum(tf.clip_by_value(diff*diff,1e-36,1.0))
+		tf.losses.add_loss(self.Gloss,loss_collection=tf.GraphKeys.LOSSES)
+		tf.summary.scalar('Gloss',self.Gloss)
+		tf.add_to_collection('losses', self.Gloss)
 
+		self.Tloss = (1.0 + self.Eloss)
 		if (self.DoForceLearning):
-			t1 = tf.reshape(self.MolGrads,(self.batch_size,-1))
-			t2 = tf.reshape(self.groundTruthG_pl,(self.batch_size,-1))
-			diff = t1 - t2
-			self.Gloss = tf.reduce_sum(tf.clip_by_value(diff*diff,1e-36,1.0))
-			tf.summary.scalar('GLoss',self.Gloss)
-			tf.add_to_collection('losses', self.Gloss)
 			self.Tloss *= (1.0+self.Gloss/tf.cast(self.batch_size*self.MaxNAtom*3,self.prec))
 
 		if (self.DoDipoleLearning):
