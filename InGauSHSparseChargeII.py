@@ -583,7 +583,7 @@ class SparseCodedChargedGauSHNetwork:
 
 		if (self.DoChargeEmbedding or self.DoChargeLearning or self.DoDipoleLearning):
 			self.MolDipoles = self.ChargeToDipole(self.xyzs_pl,self.zs_pl,self.AtomCharges)
-			self.Qloss = tf.nn.l2_loss(self.AtomCharges - self.groundTruthQ_pl,name='Qloss')/tf.cast(self.batch_size,self.prec)
+			self.Qloss = tf.nn.l2_loss(self.AtomCharges - self.groundTruthQ_pl,name='Qloss')/tf.cast(self.batch_size*self.MaxNAtom,self.prec)
 			self.Dloss = tf.nn.l2_loss(self.MolDipoles - self.groundTruthD_pl,name='Dloss')/tf.cast(self.batch_size,self.prec)
 			tf.summary.scalar('Qloss',self.Qloss)
 			tf.summary.scalar('Dloss',self.Dloss)
@@ -615,19 +615,18 @@ class SparseCodedChargedGauSHNetwork:
 		t1 = tf.reshape(self.MolGrads,(self.batch_size,-1))
 		t2 = tf.reshape(self.groundTruthG_pl,(self.batch_size,-1))
 		diff = t1 - t2
-		self.Gloss = tf.reduce_sum(tf.clip_by_value(diff*diff,1e-36,1.0))
+		self.Gloss = tf.reduce_sum(tf.clip_by_value(diff*diff,1e-36,1.0))/tf.cast(self.batch_size*self.MaxNAtom*3,self.prec)
 		tf.losses.add_loss(self.Gloss,loss_collection=tf.GraphKeys.LOSSES)
 		tf.summary.scalar('Gloss',self.Gloss)
 		tf.add_to_collection('losses', self.Gloss)
 
 		self.Tloss = (1.0 + self.Eloss)
 		if (self.DoForceLearning):
-			self.Tloss *= (1.0+self.Gloss/tf.cast(self.batch_size*self.MaxNAtom*3,self.prec))
-
+			self.Tloss *= (1.0+self.Gloss)
 		if (self.DoDipoleLearning):
 			self.Tloss *= (1.0+self.Dloss)
 		elif (self.DoChargeLearning):
-			self.Tloss *= (1.0+self.Qloss/tf.cast(self.batch_size*self.MaxNAtom,self.prec))
+			self.Tloss *= (1.0+self.Qloss)
 
 		tf.losses.add_loss(self.Tloss,loss_collection=tf.GraphKeys.LOSSES)
 		tf.summary.scalar('ELoss',self.Eloss)
