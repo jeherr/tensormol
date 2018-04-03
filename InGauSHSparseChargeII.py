@@ -620,13 +620,13 @@ class SparseCodedChargedGauSHNetwork:
 		tf.summary.scalar('Gloss',self.Gloss)
 		tf.add_to_collection('losses', self.Gloss)
 
-		self.Tloss = (1.0 + self.Eloss)
+		self.Tloss = (1.0+2.0*self.Eloss)
 		if (self.DoForceLearning):
 			self.Tloss *= (1.0+self.Gloss)
 		if (self.DoDipoleLearning):
 			self.Tloss *= (1.0+self.Dloss)
 		elif (self.DoChargeLearning):
-			self.Tloss *= (1.0+self.Qloss)
+			self.Tloss *= (1.0+0.5*self.Qloss)
 
 		tf.losses.add_loss(self.Tloss,loss_collection=tf.GraphKeys.LOSSES)
 		tf.summary.scalar('ELoss',self.Eloss)
