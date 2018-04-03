@@ -1094,7 +1094,7 @@ def gs_canonicalizev2(xyzs, Zs):
 	third_axis = tf.cross(first_axis, second_axis)
 	transform_matrix = tf.stack([first_axis, second_axis, third_axis], axis=1)
 	canon_xyzs = tf.einsum("lij,lkj->lki", transform_matrix, dxyzs)
-	return canon_xyzs, transform_matrix
+	return canon_xyzs
 
 def tf_neighbor_list(xyzs, Zs, cutoff):
 	with tf.device("/cpu:0"):

@@ -1437,7 +1437,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			# 				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
 			# 				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
-			canon_xyzs, transform_matrix = gs_canonicalizev2(self.xyzs_pl, self.Zs_pl)
+			canon_xyzs = gs_canonicalizev2(self.xyzs_pl, self.Zs_pl)
 			# centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
 			# rotation_params = tf.gather_nd(rotation_params, padding_mask)
 			# rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
@@ -1455,18 +1455,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
 			self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
 			self.total_energy = self.bp_energy
-			# self.xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
-			# tmp = tf.Variable(tf.zeros([self.batch_size, self.max_num_atoms, 3], dtype=tf.float32))
-			# self.xyz_grad = tf.scatter_add(tmp, tf.cast(self.xyz_grad.indices, tf.int64), self.xyz_grad.values)
-			# self.xyz_grad = tf.scatter_add(tf.cast(self.xyz_grad.indices, tf.int64), self.xyz_grad.values, tf.cast(self.xyz_grad.dense_shape, tf.int64))
-			xyz_grad = tf.gradients(self.total_energy, canon_xyzs)[0]
-			dxyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
-			Z_product = tf.expand_dims(tf.gather_nd(self.Zs_pl, padding_mask), axis=1) * tf.gather(self.Zs_pl, padding_mask[:,0])
-			mask = tf.expand_dims(tf.where(tf.not_equal(Z_product, 0), tf.ones_like(Z_product, dtype=self.tf_precision),
-				tf.zeros_like(Z_product, dtype=self.tf_precision)), axis=-1)
-			dxyzs = dxyzs * mask
-			xyz_grad = tf.einsum("lij,lkj->lki", tf.transpose(transform_matrix, perm=[0, 2, 1]), xyz_grad - canon_xyzs) + dxyzs
-			xyz_grad = tf.reduce_sum(tf.scatter_nd(padding_mask, xyz_grad, [self.batch_size, self.max_num_atoms, self.max_num_atoms, 3]), axis=2)
+			xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 			self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 			self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
 			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
