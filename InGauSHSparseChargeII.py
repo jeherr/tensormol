@@ -18,8 +18,8 @@ if 0:
 	b.mols = b.mols+c.mols
 	b.Save("Hybrid1")
 #b.mols=b.mols+(c.mols[:int(len(b.mols)*0.5)])
-#b=MSet("Hybrid130")
-b=MSet("HybridSet")
+b=MSet("Hybrid130")
+#b=MSet("HybridSet")
 # If you want to test a linear molecule.
 if (0):
 	m=Mol()
@@ -120,6 +120,7 @@ def CanonicalizeGS(dxyzs):
 	argshape = tf.shape(dxyzs)
 	defaultAxes = tf.tile(tf.reshape(4.0*tf.eye(3,dtype=tf.float64),(1,1,3,3)),[argshape[0],argshape[1],1,1])
 	dxyzsandDef = tf.concat([dxyzs,defaultAxes],axis=2)
+	dxyzsandDef += tf.random_normal(shape=(argshape[0],argshape[1],argshape[2]+3,3), mean=0.0, stddev=1e-10,dtype=tf.float64)
 
 	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
 	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[2]+3,3))
@@ -140,23 +141,15 @@ def CanonicalizeGS(dxyzs):
 	v20 = tf.gather_nd(togather,v2i)
 	v30 = tf.gather_nd(togather,v3i)
 
-	d1 = tf.zeros_like(v10)
-	d2 = tf.zeros_like(v10)
-	d3 = tf.zeros_like(v10)
-	Im = tf.eye(3,dtype=tf.float64)*1e-14
-	d1 += Im[0][tf.newaxis,:]
-	d2 += Im[1][tf.newaxis,:]
-	d3 += Im[2][tf.newaxis,:]
-
 	w1 = tf.exp(-tf.clip_by_value(tf.norm(v10,axis=-1,keepdims=True),-16.0,16.0))
 	w2 = tf.exp(-tf.clip_by_value(tf.norm(v20,axis=-1,keepdims=True),-16.0,16.0))
 	w3 = tf.exp(-tf.clip_by_value(tf.norm(v30,axis=-1,keepdims=True),-16.0,16.0))
-	v1 = w1*v10 + w2*v20 + d1
+	v1 = w1*v10 + w2*v20
 	v1 *= safe_inv_norm(v1)
-	v2 = w2*v10 + w1*v20 + w3*v30 + d2
+	v2 = w2*v10 + w1*v20 + w3*v30
 	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 	v2 *= safe_inv_norm(v2)
-	v3 = w2*v20 + w3*v30 + d3
+	v3 = w2*v20 + w3*v30
 	v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
 	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
 	v3 *= safe_inv_norm(v3)
@@ -607,7 +600,9 @@ class SparseCodedChargedGauSHNetwork:
 			tf.summary.scalar('RotGrad',tf.reduce_sum(self.RotGrad))
 
 		self.Eloss = tf.nn.l2_loss(self.MolEnergies - self.groundTruthE_pl,name='Eloss')/tf.cast(self.batch_size,self.prec)
-		self.MolGrads = tf.gradients(self.MolEnergies,self.xyzs_pl)[0]
+		self.MolGradsRaw = tf.gradients(self.MolEnergies,self.xyzs_pl)[0]
+		msk = tf.tile(tf.not_equal(self.zs_pl,0),[1,1,3])
+		self.MolGrads = tf.where(msk,self.MolGradsRaw,tf.zeros_like(self.MolGradsRaw))
 		self.MolHess = tf.hessians(self.MolEnergies,self.xyzs_pl)[0]
 
 		t1 = tf.reshape(self.MolGrads,(self.batch_size,-1))
