@@ -18,9 +18,8 @@ if 0:
 	b.mols = b.mols+c.mols
 	b.Save("Hybrid1")
 #b.mols=b.mols+(c.mols[:int(len(b.mols)*0.5)])
-
-b=MSet("Hybrid130")
-
+#b=MSet("Hybrid130")
+b=MSet("HybridSet")
 # If you want to test a linear molecule.
 if (0):
 	m=Mol()
@@ -77,7 +76,7 @@ def polykern(r):
 	f = 0.00260868
 	g = -0.0000590516
 	h = 5.67472e-7
-	if 0:
+	if 1:
 		SRInner = 4.5*1.889725989
 		SROuter = 6.5*1.889725989
 		LRInner = 13.*1.889725989
@@ -144,8 +143,7 @@ def CanonicalizeGS(dxyzs):
 	d1 = tf.zeros_like(v10)
 	d2 = tf.zeros_like(v10)
 	d3 = tf.zeros_like(v10)
-	Im = tf.eye(3,dtype=tf.float64)
-	#on = tf.ones_like(v10[:,0])*1e-15
+	Im = tf.eye(3,dtype=tf.float64)*1e-14
 	d1 += Im[0][tf.newaxis,:]
 	d2 += Im[1][tf.newaxis,:]
 	d3 += Im[2][tf.newaxis,:]
@@ -172,11 +170,11 @@ class SparseCodedChargedGauSHNetwork:
 	"""
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 128 # Force learning strongly modulates what you can do.
+		self.batch_size = 256 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.MaxNeigh = self.MaxNAtom
-		self.learning_rate = 0.00005
-		self.RCut = 11.0
+		self.learning_rate = 0.0001
+		self.RCut = 15.0
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
 		self.AtomTypes = [1,6,7,8]
 		self.l_max = 3
@@ -655,7 +653,7 @@ class SparseCodedChargedGauSHNetwork:
 		#self.sess.graph.finalize()
 
 net = SparseCodedChargedGauSHNetwork(b)
-#net.Load()
+net.Load()
 net.Train()
 if 0:
 	mi = np.random.randint(len(b.mols))
