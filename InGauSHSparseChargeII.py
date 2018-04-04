@@ -131,49 +131,71 @@ def CanonicalizeGS(dxyzs):
 	"""
 	# Append orthogonal axes to dxyzs
 	argshape = tf.shape(dxyzs)
-	defaultAxes = tf.tile(tf.reshape(4.0*tf.eye(3,dtype=tf.float64),(1,1,3,3)),[argshape[0],argshape[1],1,1])
+	ax0 = tf.constant(np.array([[4.9,0.,0.],[0.,5.,0.],[0.,0.,5.1]]),dtype=tf.float64)*128.0
+	defaultAxes = tf.tile(tf.reshape(ax0,(1,1,3,3)),[argshape[0],argshape[1],1,1])
 	dxyzsandDef = tf.concat([dxyzs,defaultAxes],axis=2)
 
 	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
 	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[2]+3,3))
-	togather += tf.random_normal(shape=(argshape[0]*argshape[1],argshape[2]+3,3), mean=0.0, stddev=1e-20,dtype=tf.float64)
+#	togather += tf.random_normal(shape=(argshape[0]*argshape[1],argshape[2]+3,3), mean=0.0, stddev=1e-13,dtype=tf.float64)
 
-	weights = tf.exp(-1.0*tf.norm(dxyzsandDef,axis=-1)) # Mol X MaxNAtom X MaxNAtom
-	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
-	#weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
-	#maskedDs = tf.where(tf.equal(weights,0.),tf.zeros_like(weights),weights)
-	# GS orth the first three vectors.
-	vals, inds = tf.nn.top_k(maskedDs,k=3)
-	inds = tf.reshape(inds,(argshape[0]*argshape[1],3))
-	vals = tf.reshape(vals,(argshape[0]*argshape[1],3))
-	v1i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,:1]],axis=-1)
-	v2i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,1:2]],axis=-1)
-	v3i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,2:3]],axis=-1)
-	#v4i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,3:4]],axis=-1)
-	# Gather the weights as well and force the vectors to be smooth.
-	v10 = tf.gather_nd(togather,v1i)
-	v20 = tf.gather_nd(togather,v2i)
-	v30 = tf.gather_nd(togather,v3i)
-	#v40 = tf.gather_nd(togather,v4i)
-	w1 = tf.exp(-tf.clip_by_value(tf.norm(v10,axis=-1,keepdims=True),1e-36,1e36))
-	w2 = tf.exp(-tf.clip_by_value(tf.norm(v20,axis=-1,keepdims=True),1e-36,1e36))
-	w3 = tf.exp(-tf.clip_by_value(tf.norm(v30,axis=-1,keepdims=True),1e-36,1e36))
-	#w4 = tf.exp(-tf.clip_by_value(tf.norm(v40,axis=-1,keepdims=True),1e-36,1e36))
-#	v10 = tf.Print(v10,[tf.gather_nd(togather,v1i),v10],"vectors",summarize=12)
-#	v10 = tf.Print(v10,[w1],"VsWW",summarize=5)
-	# So the first axis continuously changes when 1,2 swap.
-	v1 = w1*v10 + w2*v20
+	rsq0 = tf.reduce_sum(togather*togather,axis=-1,keepdims=True)
+	#weights0 = tf.exp(-1.0*tf.clip_by_value(rsq0*rsq0,0.0,20.0)) # Mol X MaxNAtom X MaxNAtom
+	weights0 = 1.0/(rsq0*rsq0+1.0) # Mol X MaxNAtom X MaxNAtom
+	maskedD0s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights0)
+	# Above is (argshape[0]*argshape[1],argshape[2]+3,1)
+	v1 = tf.reduce_sum(togather*maskedD0s,axis=1)
 	v1 *= safe_inv_norm(v1)
-	v2 = w2*v10 + w1*v20 + w3*v30
+
+	#weights1 = tf.exp(-1.0*tf.clip_by_value((rsq0-0.75)*(rsq0-0.75),0.0,20.0)) # Mol X MaxNAtom X MaxNAtom
+	weights1 = 1.0/((rsq0-1.1)*(rsq0-1.1)+1.0)
+	maskedD1s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights1)
+	v2 = tf.reduce_sum(togather*maskedD1s,axis=1)
 	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 	v2 *= safe_inv_norm(v2)
-	v3 = w2*v20 + w3*v30
+
+	#weights2 = tf.exp(-1.0*tf.clip_by_value((rsq0-1.5)*(rsq0-1.5),0.0,20.0)) # Mol X MaxNAtom X MaxNAtom
+	weights2 = 1.0/((rsq0-1.8)*(rsq0-1.8)+1.0)
+	maskedD2s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights2)
+	v3 = tf.reduce_sum(togather*maskedD2s,axis=1)
 	v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
 	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
 	v3 *= safe_inv_norm(v3)
+
+	if (0):
+		# This old sorting version isn't functional. 
+		#weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
+		#maskedDs = tf.where(tf.equal(weights,0.),tf.zeros_like(weights),weights)
+		# GS orth the first three vectors.
+		vals, inds = tf.nn.top_k(maskedDs,k=4)
+		inds = tf.reshape(inds,(argshape[0]*argshape[1],4))
+		vals = tf.reshape(vals,(argshape[0]*argshape[1],4))
+		tf.stop_gradient(inds)
+		tf.stop_gradient(vals)
+		v1i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,:1]],axis=-1)
+		v2i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,1:2]],axis=-1)
+		v3i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,2:3]],axis=-1)
+		v4i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,3:4]],axis=-1)
+		# Gather the weights as well and force the vectors to be smooth.
+		v10 = tf.gather_nd(togather,v1i)
+		v20 = tf.gather_nd(togather,v2i)
+		v30 = tf.gather_nd(togather,v3i)
+		v40 = tf.gather_nd(togather,v4i)
+		w1 = tf.exp(-tf.clip_by_value(tf.reduce_sum(v10*v10,axis=-1,keepdims=True),0.,20.))
+		w2 = tf.exp(-tf.clip_by_value(tf.reduce_sum(v20*v20,axis=-1,keepdims=True),0.,20.))
+		w3 = tf.exp(-tf.clip_by_value(tf.reduce_sum(v30*v30,axis=-1,keepdims=True),0.,20.))
+		w4 = tf.exp(-tf.clip_by_value(tf.reduce_sum(v40*v40,axis=-1,keepdims=True),0.,20.))
+		# So the first axis continuously changes when 1,2 swap.
+		v1 = w1*v10 + w2*v20
+		v1 *= safe_inv_norm(v1)
+		v2 = w2*v20 + w3*v30
+		v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
+		v2 *= safe_inv_norm(v2)
+		v3 = w2*v20 + w3*v30 + w4*v40
+		v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
+		v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
+		v3 *= safe_inv_norm(v3)
 	vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
-	#vs = tf.Print(vs,[vs[0,0,:],vs[0,1,:],vs[0,2,:]],"Vs")
-	#vs = tf.Print(vs,[w1,w2,w3],"VsWW",summarize=100000)
 	tore = tf.einsum('ijk,ilk->ijl',realdata,vs)
 	return tf.reshape(tore,tf.shape(dxyzs))
 
@@ -567,6 +589,13 @@ class SparseCodedChargedGauSHNetwork:
 		gather_inds0p = tf.concat([molis,it1],axis=-1)
 		gather_inds = tf.where(Atom12Real2, gather_inds0, gather_inds0p) # Mol X MaxNatom X maxN X 2
 		self.sparse_mask = tf.cast(Atom12Real,self.prec) # nmol X maxnatom X maxneigh X 1
+		tf.stop_gradient(Atom12Real)
+		tf.stop_gradient(Atom12Real2)
+		tf.stop_gradient(Atom12Real3)
+		tf.stop_gradient(Atom12Real4)
+		tf.stop_gradient(gather_inds)
+		tf.stop_gradient(self.sparse_mask)
+
 
 		# sparse version of dxyzs.
 		if self.DoRotGrad:
