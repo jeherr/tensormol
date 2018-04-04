@@ -18,7 +18,7 @@ if 0:
 	b.mols = b.mols+c.mols
 	b.Save("Hybrid1")
 #b.mols=b.mols+(c.mols[:int(len(b.mols)*0.5)])
-b=MSet("Hybrid130")
+#b=MSet("Hybrid130")
 #b=MSet("HybridSet")
 # If you want to test a linear molecule.
 if (0):
@@ -37,11 +37,18 @@ if (0):
 	for i in range(300):
 		b.mols.append(m)
 
+a = MSet("chemspider20_1_opt_withcharge_noerror_all")
+b = MSet("chemspider20_1_meta_withcharge_noerror_all")
+c = MSet("chemspider12_clean_maxatom35")
+a.Load()
 b.Load()
+c.Load()
+b.mols = a.mols+b.mols+c.mols[:len(b.mols)]
 #b.Statistics()
-b.cut_max_num_atoms(30)
-b.cut_max_grad(1.0)
-#b.Save("Hybrid130")
+b.cut_max_num_atoms(40)
+b.cut_max_grad(2.0)
+b.Save("Hybrid1")
+
 MAX_ATOMIC_NUMBER = 55
 
 def sftpluswparam(x):
@@ -163,10 +170,10 @@ class SparseCodedChargedGauSHNetwork:
 	"""
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 256 # Force learning strongly modulates what you can do.
+		self.batch_size = 128 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.MaxNeigh = self.MaxNAtom
-		self.learning_rate = 0.0001
+		self.learning_rate = 0.00005
 		self.RCut = 15.0
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
 		self.AtomTypes = [1,6,7,8]
@@ -647,7 +654,7 @@ class SparseCodedChargedGauSHNetwork:
 		#self.sess.graph.finalize()
 
 net = SparseCodedChargedGauSHNetwork(b)
-net.Load()
+#net.Load()
 net.Train()
 if 0:
 	mi = np.random.randint(len(b.mols))
