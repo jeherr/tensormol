@@ -1437,35 +1437,39 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			# 				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
 			# 				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
-			canon_xyzs = gs_canonicalizev2(self.xyzs_pl, self.Zs_pl)
+			with tf.name_scope('canonicalization'):
+				canon_xyzs = gs_canonicalizev2(self.xyzs_pl, self.Zs_pl)
 			# centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
 			# rotation_params = tf.gather_nd(rotation_params, padding_mask)
 			# rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
 			# self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
-			if self.train_sparse:
-				embed, mol_idx = tf_sparse_gaush_element_channel(self.xyzs_pl, self.Zs_pl,
-											self.pairs_pl, elements, self.gaussian_params, self.l_max)
-			else:
-				embed, mol_idx = tf_gaush_element_channelv3(canon_xyzs, self.Zs_pl,
-											elements, self.gaussian_params, self.l_max)
+			with tf.name_scope('embedding'):
+				if self.train_sparse:
+					embed, mol_idx = tf_sparse_gaush_element_channel(self.xyzs_pl, self.Zs_pl,
+												self.pairs_pl, elements, self.gaussian_params, self.l_max)
+				else:
+					embed, mol_idx = tf_gaush_element_channelv3(canon_xyzs, self.Zs_pl,
+												elements, self.gaussian_params, self.l_max)
 			# for element in range(len(self.elements)):
 			# 	embed[element] -= embed_mean[element]
 			# 	embed[element] /= embed_stddev[element]
-			atom_energies, energy_variables = self.energy_inference(embed, mol_idx)
-			norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
-			self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
-			self.total_energy = self.bp_energy
-			xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
-			self.gradients = tf.gather_nd(xyz_grad, padding_mask)
-			self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
-			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
-			tf.summary.scalar("energy loss", self.energy_loss)
-			tf.add_to_collection('energy_losses', self.energy_loss)
-			self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+			with tf.name_scope('energy_inference'):
+				atom_energies, energy_variables = self.energy_inference(embed, mol_idx)
+				norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
+				self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
+				self.total_energy = self.bp_energy
+				self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
+				tf.summary.scalar("energy loss", self.energy_loss)
+				tf.add_to_collection('energy_losses', self.energy_loss)
+			with tf.name_scope('gradients'):
+				xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
+				self.gradients = tf.gather_nd(xyz_grad, padding_mask)
+				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
+				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+				if self.train_gradients:
+					tf.add_to_collection('energy_losses', self.gradient_loss)
+					tf.summary.scalar("gradient loss", self.gradient_loss)
 			# self.rotation_loss = self.loss_op(rot_grad)
-			if self.train_gradients:
-				tf.add_to_collection('energy_losses', self.gradient_loss)
-				tf.summary.scalar("gradient loss", self.gradient_loss)
 			# if self.train_rotation:
 			# 	tf.add_to_collection('energy_losses', self.rotation_loss)
 			# 	tf.summary.scalar("rotational loss", self.rotation_loss)
