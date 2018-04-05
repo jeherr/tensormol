@@ -50,17 +50,21 @@ if (0):
 	for i in range(300):
 		b.mols.append(m)
 
-a = MSet("chemspider20_1_opt_withcharge_noerror_all")
-b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-c = MSet("chemspider12_clean_maxatom35")
-a.Load()
+if (0): 
+	a = MSet("chemspider20_1_opt_withcharge_noerror_all")
+	b = MSet("chemspider20_1_meta_withcharge_noerror_all")
+	c = MSet("chemspider12_clean_maxatom35")
+	a.Load()
+	b.Load()
+	c.Load()
+	b.mols = a.mols+b.mols+c.mols[:len(b.mols)]
+	#b.Statistics()
+	b.cut_max_num_atoms(40)
+	b.cut_max_grad(2.0)
+	b.Save("Hybrid1")
+
+b = MSet("Hybrid1")
 b.Load()
-c.Load()
-b.mols = a.mols+b.mols+c.mols[:len(b.mols)]
-#b.Statistics()
-b.cut_max_num_atoms(40)
-b.cut_max_grad(2.0)
-b.Save("Hybrid1")
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -138,7 +142,7 @@ def CanonicalizeGS(dxyzs):
 	"""
 	# Append orthogonal axes to dxyzs
 	argshape = tf.shape(dxyzs)
-	ax0 = tf.constant(np.array([[4.9,0.,0.],[0.,5.,0.],[0.,0.,5.1]]),dtype=tf.float64)*128.0
+	ax0 = tf.constant(np.array([[4.9,0.,0.],[0.,5.,0.],[0.,0.,5.1]]),dtype=tf.float64)*512.0
 	defaultAxes = tf.tile(tf.reshape(ax0,(1,1,3,3)),[argshape[0],argshape[1],1,1])
 	dxyzsandDef = tf.concat([dxyzs,defaultAxes],axis=2)
 
@@ -212,7 +216,7 @@ class SparseCodedChargedGauSHNetwork:
 	"""
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 128 # Force learning strongly modulates what you can do.
+		self.batch_size = 256 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.MaxNeigh = self.MaxNAtom
 		self.learning_rate = 0.00005
@@ -462,10 +466,10 @@ class SparseCodedChargedGauSHNetwork:
 		# Now pass it through as usual.
 		l0 = tf.reshape(weighted2,(ncase,-1))
 		l0p = tf.concat([l0,CODES],axis=-1)
-		l1 = tf.layers.dense(inputs=l0p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1")
+		l1 = tf.layers.dense(inputs=l0p,units=1024,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1")
 		l1p = tf.concat([l1,CODES],axis=-1)
 
-		l2q = tf.layers.dense(inputs=l1p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2q")
+		l2q = tf.layers.dense(inputs=l1p,units=1024,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2q")
 		l2pq = tf.concat([l2q,CODES],axis=-1)
 		l3q = tf.layers.dense(l2pq,units=1,activation=None,use_bias=False,name="Dense3q")*msk
 		charges = tf.reshape(l3q,(self.batch_size,self.MaxNAtom))
@@ -476,7 +480,7 @@ class SparseCodedChargedGauSHNetwork:
 		AtomCharges = charges + fix[:,tf.newaxis] + AvQs
 		# TODO: use these in the energies. :)
 
-		l2e = tf.layers.dense(inputs=l1p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2e")
+		l2e = tf.layers.dense(inputs=l1p,units=1024,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2e")
 		# in the final layer use the atom code information.
 		l2pe = tf.concat([l2e,CODES],axis=-1)
 		l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
@@ -557,7 +561,7 @@ class SparseCodedChargedGauSHNetwork:
 	def Prepare(self):
 		tf.reset_default_graph()
 
-		self.DoRotGrad = True
+		self.DoRotGrad = False
 		self.DoForceLearning = True
 		self.Canonicalize = True
 		self.DoCodeLearning = False
@@ -679,13 +683,13 @@ class SparseCodedChargedGauSHNetwork:
 		tf.summary.scalar('Gloss',self.Gloss)
 		tf.add_to_collection('losses', self.Gloss)
 
-		self.Tloss = (1.0+2.0*self.Eloss)
+		self.Tloss = (1.0+5.0*self.Eloss)
 		if (self.DoForceLearning):
-			self.Tloss *= (1.0+self.Gloss)
+			self.Tloss += (1.0+self.Gloss)
 		if (self.DoDipoleLearning):
-			self.Tloss *= (1.0+self.Dloss)
+			self.Tloss += (1.0+self.Dloss)
 		elif (self.DoChargeLearning):
-			self.Tloss *= (1.0+0.5*self.Qloss)
+			self.Tloss += (1.0+0.5*self.Qloss)
 
 		tf.losses.add_loss(self.Tloss,loss_collection=tf.GraphKeys.LOSSES)
 		tf.summary.scalar('ELoss',self.Eloss)
