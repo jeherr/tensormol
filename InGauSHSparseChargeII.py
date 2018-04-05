@@ -6,35 +6,8 @@ It's a little recurrent-y.
 from TensorMol import *
 import numpy as np
 
-if 0:
-	# Build giant master set.
-	a = MSet("chemspider20_1_opt_withcharge_noerror_all")
-	b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	c = MSet("chemspider9_metady_force")
-	a.Load()
-	a.Statistics()
-	b.Load()
-	b.Statistics()
-	c.Load()
-	c.Statistics()
-
-
-if 0:
-	c = MSet("HNCO_small")
-	#c = MSet("chemspider12_clean_maxatom35")
-	#b = MSet("chemspider20_1_opt_all")
-	b=MSet("chemspider20_1_opt_withcharge_all")
-	b.Load()
-	c.Load()
-	for m in b.mols:
-		m.properties['charges'] = m.properties['mul_charge'].copy()
-	b.mols = b.mols+c.mols
-	b.Save("Hybrid1")
-#b.mols=b.mols+(c.mols[:int(len(b.mols)*0.5)])
-#b=MSet("Hybrid130")
-#b=MSet("HybridSet")
-# If you want to test a linear molecule.
 if (0):
+	# Linear molecules are a good test.
 	m=Mol()
 	m.FromXYZString("""5
 	Comment:
@@ -50,7 +23,7 @@ if (0):
 	for i in range(300):
 		b.mols.append(m)
 
-if (0): 
+if (0):
 	a = MSet("chemspider20_1_opt_withcharge_noerror_all")
 	b = MSet("chemspider20_1_meta_withcharge_noerror_all")
 	c = MSet("chemspider12_clean_maxatom35")
@@ -65,6 +38,8 @@ if (0):
 
 b = MSet("Hybrid1")
 b.Load()
+b.cut_max_num_atoms(40)
+b.cut_max_grad(2.0)
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -88,31 +63,32 @@ def polykern(r):
 	The hard cutoff is LROuter
 	"""
 	# This one is pretty slutty, 11A cutoff.
-	SRInner = 4.5*1.889725989
-	SROuter = 6.5*1.889725989
-	LRInner = 10.*1.889725989
-	LROuter = 11.*1.889725989
-	a = -73.6568
-	b = 37.1829
-	c = -7.86634
-	d = 0.9161
-	e = -0.0634132
-	f = 0.00260868
-	g = -0.0000590516
-	h = 5.67472e-7
-	if 1:
+	if 0:
 		SRInner = 4.5*1.889725989
 		SROuter = 6.5*1.889725989
-		LRInner = 13.*1.889725989
-		LROuter = 15.*1.889725989
-		a = -18.325
-		b = 7.89288
-		c = -1.35458
-		d = 0.126578
-		e = -0.00695692
-		f = 0.000225092
-		g = -3.97476e-6
-		h = 2.95926e-8
+		LRInner = 10.*1.889725989
+		LROuter = 11.*1.889725989
+		a = -73.6568
+		b = 37.1829
+		c = -7.86634
+		d = 0.9161
+		e = -0.0634132
+		f = 0.00260868
+		g = -0.0000590516
+		h = 5.67472e-7
+
+	SRInner = 4.5*1.889725989
+	SROuter = 6.5*1.889725989
+	LRInner = 13.*1.889725989
+	LROuter = 15.*1.889725989
+	a = -18.325
+	b = 7.89288
+	c = -1.35458
+	d = 0.126578
+	e = -0.00695692
+	f = 0.000225092
+	g = -3.97476e-6
+	h = 2.95926e-8
 	r2=r*r
 	r3=r2*r
 	r4=r3*r
@@ -128,7 +104,7 @@ def polykern(r):
 
 def CanonicalizeGS(dxyzs):
 	"""
-	Canonicalize using nearest three atoms and Graham-Schmidt.
+	Canonicalize using nearest atoms and Graham-Schmidt.
 	If there are not three linearly independent atoms within
 	4A, the output will not be rotationally invariant, although
 	The axes will still be as invariant as possible.
@@ -174,7 +150,7 @@ def CanonicalizeGS(dxyzs):
 	v3 *= safe_inv_norm(v3)
 
 	if (0):
-		# This old sorting version isn't functional. 
+		# This old sorting version doesn't have good second derivatives.
 		#weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
 		#maskedDs = tf.where(tf.equal(weights,0.),tf.zeros_like(weights),weights)
 		# GS orth the first three vectors.
@@ -219,7 +195,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.batch_size = 256 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.MaxNeigh = self.MaxNAtom
-		self.learning_rate = 0.00005
+		self.learning_rate = 0.00008
 		self.RCut = 15.0
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
 		self.AtomTypes = [1,6,7,8]
@@ -412,15 +388,20 @@ class SparseCodedChargedGauSHNetwork:
 
 	def CoulombEnergies(self,dxyzs_,q1q2s_):
 		"""
-		Atom Coulomb energy calculated
+		Atom Coulomb energy with polynomial cutoff.
+		Zero of energy is set so that if all atom pairs are outside the cutoff the energy is zero.
 
 		Args:
 			dxyzs_: (nmol X MaxNAtom X MaxNeigh X 1) distances tensor (angstrom)
+			# NOTE: This has no self-energy because of the way dxyzs_ is neighbored.
 			q1q2s_: charges (nmol X MaxNAtom X MaxNeigh X 1) charges tensor. (atomic)
 		Returns:
 			 (nmol X 1) tensor of energies (atomic)
 		"""
-		return (1.0/2.0)*tf.reduce_sum(polykern(dxyzs_*1.889725989)*q1q2s_,axis=(1,2))[:,tf.newaxis]
+		EMR = (1.0/2.0)*tf.reduce_sum(polykern(dxyzs_*1.889725989)*q1q2s_,axis=(1,2))[:,tf.newaxis]
+		KLR = tf.ones_like(dxyzs_)*(1.0/self.RCut)
+		ELR = (1.0/2.0)*tf.reduce_sum(KLR*q1q2s_,axis=(1,2))[:,tf.newaxis]
+		return EMR-ELR
 
 	def ChargeToDipole(self,xyzs_,zs_,qs_):
 		"""
@@ -466,10 +447,10 @@ class SparseCodedChargedGauSHNetwork:
 		# Now pass it through as usual.
 		l0 = tf.reshape(weighted2,(ncase,-1))
 		l0p = tf.concat([l0,CODES],axis=-1)
-		l1 = tf.layers.dense(inputs=l0p,units=1024,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1")
-		l1p = tf.concat([l1,CODES],axis=-1)
 
-		l2q = tf.layers.dense(inputs=l1p,units=1024,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2q")
+		l1q = tf.layers.dense(inputs=l0p,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1q")
+		l1pq = tf.concat([l1q,CODES],axis=-1)
+		l2q = tf.layers.dense(inputs=l1pq,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2q")
 		l2pq = tf.concat([l2q,CODES],axis=-1)
 		l3q = tf.layers.dense(l2pq,units=1,activation=None,use_bias=False,name="Dense3q")*msk
 		charges = tf.reshape(l3q,(self.batch_size,self.MaxNAtom))
@@ -480,9 +461,11 @@ class SparseCodedChargedGauSHNetwork:
 		AtomCharges = charges + fix[:,tf.newaxis] + AvQs
 		# TODO: use these in the energies. :)
 
-		l2e = tf.layers.dense(inputs=l1p,units=1024,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2e")
+		l1e = tf.layers.dense(inputs=l0p,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1e")
+		l1pe = tf.concat([l1e,CODES,tf.reshape(AtomCharges,(ncase,1))],axis=-1)
+		l2e = tf.layers.dense(inputs=l1pe,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2e")
 		# in the final layer use the atom code information.
-		l2pe = tf.concat([l2e,CODES],axis=-1)
+		l2pe = tf.concat([l2e,CODES,tf.reshape(AtomCharges,(ncase,1))],axis=-1)
 		l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
 		AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))+AvEs
 
@@ -503,8 +486,8 @@ class SparseCodedChargedGauSHNetwork:
 		return
 
 	def print_training(self, step, loss_):
-		if (step%10==0):
-			self.saver.save(self.sess, './networks/SparseCodedGauSH',global_step=step)
+		if (step%15==0):
+			self.saver.save(self.sess, './networks/SparseCodedGauSH', global_step=step)
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
 			#print("Gauss Params: ",self.sess.run([self.gp_tf])[0])
 			#print("AtomCodes: ",self.sess.run([self.atom_codes])[0])
@@ -683,7 +666,7 @@ class SparseCodedChargedGauSHNetwork:
 		tf.summary.scalar('Gloss',self.Gloss)
 		tf.add_to_collection('losses', self.Gloss)
 
-		self.Tloss = (1.0+5.0*self.Eloss)
+		self.Tloss = (1.0+10.0*self.Eloss)
 		if (self.DoForceLearning):
 			self.Tloss += (1.0+self.Gloss)
 		if (self.DoDipoleLearning):
