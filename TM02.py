@@ -461,6 +461,7 @@ class SparseCodedChargedGauSHNetwork:
 		AtomCharges = charges + fix[:,tf.newaxis] + AvQs
 		# TODO: use these in the energies. :)
 
+		# Energy network.
 		l1e = tf.layers.dense(inputs=l0p,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1e")
 		l1pe = tf.concat([l1e,CODES,tf.reshape(AtomCharges,(ncase,1))],axis=-1)
 		l2e = tf.layers.dense(inputs=l1pe,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2e")
