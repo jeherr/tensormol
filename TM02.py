@@ -202,7 +202,8 @@ class SparseCodedChargedGauSHNetwork:
 		self.l_max = 3
 		#self.GaussParams = np.array([[0.35, 0.30], [0.70, 0.30], [1.05, 0.30], [1.40, 0.30], [1.75, 0.30], [2.10, 0.30], [2.45, 0.30],[2.80, 0.30], [3.15, 0.30], [3.50, 0.30], [3.85, 0.30], [4.20, 0.30], [4.55, 0.30], [4.90, 0.30]])
 		#self.GaussParams = np.array([[0.36, 0.25], [0.70, 0.24], [1.05, 0.24], [1.38, 0.23], [1.70, 0.23],[2.08, 0.23], [2.79, 0.23], [2.42, 0.23],[3.14, 0.23], [3.50, 0.23], [3.85, 0.23], [4.20, 0.23], [4.90, 0.23], [5.50, 0.22], [6.0, 0.22]])
-		self.GaussParams = np.array([[ 0.37477018,  0.25175677],[ 0.67658861,  0.23472445], [ 1.05008962,  0.23588795],[ 1.38640627,  0.22124612], [ 1.68125033,  0.21762672], [ 2.05397151,  0.21847124], [ 2.79472851,  0.15731322], [ 3.13242662,  0.19378809], [ 3.80189948,  0.18397461], [ 4.89845145,  0.13036654], [ 5.50038598,  0.11493009]])
+		#self.GaussParams = np.array([[ 0.37477018,  0.25175677],[ 0.67658861,  0.23472445], [ 1.05008962,  0.23588795],[ 1.38640627,  0.22124612], [ 1.68125033,  0.21762672], [ 2.05397151,  0.21847124], [ 2.79472851,  0.15731322], [ 3.13242662,  0.19378809], [ 3.80189948,  0.18397461], [ 4.89845145,  0.13036654], [ 5.50038598,  0.11493009]])
+		self.GaussParams = np.array([[ 0.38013613,  0.25685447],[ 0.67603647,  0.23431556], [ 1.04691905,  0.23425959],[ 1.38447442,  0.21977644], [ 1.69198147,  0.21479645], [ 2.03830524,  0.20928990], [ 2.79550466,  0.15506908], [ 3.12586145,  0.18069188], [ 3.80089228,  0.17213186], [ 4.90006247, 0.12377406], [ 5.50127822, 0.11079252]])
 		self.nrad = len(self.GaussParams)
 		self.nang = (self.l_max+1)**2
 		self.ncodes = self.AtomCodes.shape[-1]
@@ -490,8 +491,9 @@ class SparseCodedChargedGauSHNetwork:
 		if (step%15==0):
 			self.saver.save(self.sess, './networks/SparseCodedGauSH', global_step=step)
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
-			#print("Gauss Params: ",self.sess.run([self.gp_tf])[0])
-			#print("AtomCodes: ",self.sess.run([self.atom_codes])[0])
+			if (self.DoCodeLearning):
+				print("Gauss Params: ",self.sess.run([self.gp_tf])[0])
+				print("AtomCodes: ",self.sess.run([self.atom_codes])[0])
 			feed_dict, mols = self.NextBatch(self.mset)
 			if (self.DoChargeLearning or self.DoDipoleLearning):
 				ens, frcs, charges, dipoles, qens, summary = self.sess.run([self.MolEnergies,self.MolGrads,self.AtomCharges,self.MolDipoles,self.MolCoulEnergies,self.summary_op], feed_dict=feed_dict, options=self.options, run_metadata=self.run_metadata)
