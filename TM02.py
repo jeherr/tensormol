@@ -591,7 +591,6 @@ class SparseCodedChargedGauSHNetwork:
 		tf.stop_gradient(gather_inds)
 		tf.stop_gradient(self.sparse_mask)
 
-
 		# sparse version of dxyzs.
 		if self.DoRotGrad:
 			thetas = tf.acos(2.0*tf.random_uniform([self.batch_size],dtype=tf.float64)-1.0)
@@ -667,7 +666,7 @@ class SparseCodedChargedGauSHNetwork:
 		tf.summary.scalar('Gloss',self.Gloss)
 		tf.add_to_collection('losses', self.Gloss)
 
-		self.Tloss = (1.0+10.0*self.Eloss)
+		self.Tloss = (1.0+40.0*self.Eloss)
 		if (self.DoForceLearning):
 			self.Tloss += (1.0+self.Gloss)
 		if (self.DoDipoleLearning):
@@ -702,8 +701,8 @@ class SparseCodedChargedGauSHNetwork:
 
 net = SparseCodedChargedGauSHNetwork(b)
 net.Load()
-#net.Train()
-if 1:
+net.Train()
+if 0:
 	mi = np.random.randint(len(b.mols))
 	m = b.mols[mi]
 	print(m.atoms, m.coords)
