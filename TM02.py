@@ -703,14 +703,14 @@ class SparseCodedChargedGauSHNetwork:
 
 net = SparseCodedChargedGauSHNetwork(b)
 net.Load()
-net.Train()
-if 0:
+net.Train(60)
+if 1:
 	mi = np.random.randint(len(b.mols))
 	m = b.mols[mi]
 	print(m.atoms, m.coords)
 	EF = net.GetEnergyForceRoutine(m)
 	print(EF(m.coords))
 	Opt = GeomOptimizer(EF)
-	m=Opt.Opt(m)
+	m=Opt.OptGD(m)
 	m.Distort(0.2)
-	m=Opt.Opt(m,"FromDistorted")
+	m=Opt.OptGD(m,"FromDistorted")
