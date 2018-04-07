@@ -36,10 +36,11 @@ if (0):
 	b.cut_max_grad(2.0)
 	b.Save("Hybrid1")
 
-b = MSet("Hybrid1")
-b.Load()
-b.cut_max_num_atoms(40)
-b.cut_max_grad(2.0)
+if 0:
+	b = MSet("Hybrid1")
+	b.Load()
+	b.cut_max_num_atoms(40)
+	b.cut_max_grad(2.0)
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -124,7 +125,9 @@ def CanonicalizeGS(dxyzs):
 
 	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
 	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[2]+3,3))
-#	togather += tf.random_normal(shape=(argshape[0]*argshape[1],argshape[2]+3,3), mean=0.0, stddev=1e-13,dtype=tf.float64)
+	#togather += tf.random_normal(shape=(argshape[0]*argshape[1],argshape[2]+3,3), mean=0.0, stddev=1e-13,dtype=tf.float64)
+	pbreaker0 = tf.tile(tf.reshape(1+tf.range(argshape[2]),(1,1,argshape[2],1)),(argshape[0],argshape[1],1,1))
+	pbreaker = (1e-13)/tf.cast(pbreaker0,tf.float64)
 
 	rsq0 = tf.reduce_sum(togather*togather,axis=-1,keepdims=True)
 	#weights0 = tf.exp(-1.0*tf.clip_by_value(rsq0*rsq0,0.0,20.0)) # Mol X MaxNAtom X MaxNAtom
@@ -149,39 +152,6 @@ def CanonicalizeGS(dxyzs):
 	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
 	v3 *= safe_inv_norm(v3)
 
-	if (0):
-		# This old sorting version doesn't have good second derivatives.
-		#weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
-		#maskedDs = tf.where(tf.equal(weights,0.),tf.zeros_like(weights),weights)
-		# GS orth the first three vectors.
-		vals, inds = tf.nn.top_k(maskedDs,k=4)
-		inds = tf.reshape(inds,(argshape[0]*argshape[1],4))
-		vals = tf.reshape(vals,(argshape[0]*argshape[1],4))
-		tf.stop_gradient(inds)
-		tf.stop_gradient(vals)
-		v1i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,:1]],axis=-1)
-		v2i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,1:2]],axis=-1)
-		v3i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,2:3]],axis=-1)
-		v4i = tf.concat([tf.range(argshape[0]*argshape[1])[:,tf.newaxis],inds[:,3:4]],axis=-1)
-		# Gather the weights as well and force the vectors to be smooth.
-		v10 = tf.gather_nd(togather,v1i)
-		v20 = tf.gather_nd(togather,v2i)
-		v30 = tf.gather_nd(togather,v3i)
-		v40 = tf.gather_nd(togather,v4i)
-		w1 = tf.exp(-tf.clip_by_value(tf.reduce_sum(v10*v10,axis=-1,keepdims=True),0.,20.))
-		w2 = tf.exp(-tf.clip_by_value(tf.reduce_sum(v20*v20,axis=-1,keepdims=True),0.,20.))
-		w3 = tf.exp(-tf.clip_by_value(tf.reduce_sum(v30*v30,axis=-1,keepdims=True),0.,20.))
-		w4 = tf.exp(-tf.clip_by_value(tf.reduce_sum(v40*v40,axis=-1,keepdims=True),0.,20.))
-		# So the first axis continuously changes when 1,2 swap.
-		v1 = w1*v10 + w2*v20
-		v1 *= safe_inv_norm(v1)
-		v2 = w2*v20 + w3*v30
-		v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
-		v2 *= safe_inv_norm(v2)
-		v3 = w2*v20 + w3*v30 + w4*v40
-		v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
-		v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
-		v3 *= safe_inv_norm(v3)
 	vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 	tore = tf.einsum('ijk,ilk->ijl',realdata,vs)
 	return tf.reshape(tore,tf.shape(dxyzs))
@@ -225,7 +195,7 @@ class SparseCodedChargedGauSHNetwork:
 			zs = np.zeros((50,self.MaxNAtom,1))
 			natoms = [m.NAtoms() for m in aset.mols]
 			mol_order = np.argsort(natoms)[::-1]
-			for i in range(50):
+			for i in range(min(50,len(aset.mols))):
 				mi = mol_order[i]
 				m = aset.mols[mi]
 				xyzs[i,:m.NAtoms()] = m.coords
@@ -250,6 +220,35 @@ class SparseCodedChargedGauSHNetwork:
 		chkpt = tf.train.latest_checkpoint('./networks/')
 		self.saver.restore(self.sess, chkpt)
 		return
+
+	def GetDebugRoutine(self,m):
+		if (m.NAtoms() > self.MaxNAtom):
+			self.MaxNAtom = m.NAtoms()
+		self.batch_size=1
+		self.Prepare()
+		self.Load()
+		def EF(xyz_):
+			xyzs = np.zeros((self.batch_size,self.MaxNAtom,3))
+			Zs = np.zeros((self.batch_size,self.MaxNAtom,1))
+			nls = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh),dtype=np.int32)
+			xyzs[0,:m.NAtoms(),:] = xyz_
+			Zs[0,:m.NAtoms(),0] = m.atoms
+			nlt,MaxNeigh = self.NLTensors(xyzs,Zs)
+			if (MaxNeigh > self.MaxNeigh):
+	 			print("Too Many Neighbors.")
+				raise Exception('NeighborOverflow')
+			nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
+			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs,self.nl_pl:nls}
+			print("FEED:",feed_dict)
+			print("--- Debug Gradient ---")
+			print("D-dxyzs",self.sess.run(tf.gradients(self.dxyzs,self.xyzs_pl), feed_dict=feed_dict))
+			print("D-cdxyzs",self.sess.run(tf.gradients(self.cdxyzs,self.xyzs_pl), feed_dict=feed_dict))
+			print("D-cdxyzs",self.sess.run(tf.gradients(self.cdxyzs,self.xyzs_pl), feed_dict=feed_dict))
+			print("D-self.AtomNetEnergies",self.sess.run(tf.gradients(self.AtomNetEnergies,self.xyzs_pl), feed_dict=feed_dict))
+			print("D-self.AtomNetEnergies",self.sess.run(tf.gradients(self.AtomCharges,self.xyzs_pl), feed_dict=feed_dict))
+			ens,fs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
+			return ens[0],fs[0][:m.NAtoms()]*(-JOULEPERHARTREE)
+		return EF
 
 	def GetEnergyForceRoutine(self,m):
 		if (m.NAtoms() > self.MaxNAtom):
@@ -371,8 +370,9 @@ class SparseCodedChargedGauSHNetwork:
 			and the number of maximum neighbors found in its argument.
 		"""
 		RawLists=[]
+		natom = np.sum(np.where(zs_ > 0,np.ones_like(zs_),np.zeros_like(zs_)),axis=(1,2)).astype(np.int32)
 		for mi in range(xyzs_.shape[0]):
-			RawLists.append(Make_NListNaive(xyzs_[mi],self.RCut,self.MaxNAtom,True))
+			RawLists.append(Make_NListNaive(xyzs_[mi],self.RCut,natom[mi],True))
 		maxneigh = 0
 		for rl in RawLists:
 			for a in rl:
@@ -380,14 +380,15 @@ class SparseCodedChargedGauSHNetwork:
 					maxneigh = len(a)
 		tore = np.ones((xyzs_.shape[0],xyzs_.shape[1],maxneigh),dtype=np.int32)
 		tore *= -1
-		for i,rl in enumerate(RawLists):
+		for i,rl in enumerate(RawLists): # mol
 			for j,a in enumerate(rl):
-				if (zs_[i,j] != 0):
-					for k,l in enumerate(a):
-						tore[i,j,k] = l
+				if (zs_[i,j] != 0): # atom
+					for k,l in enumerate(a): #atom
+						if (l < natom[i]):
+							tore[i,j,k] = l
 		return tore, maxneigh
 
-	def CoulombEnergies(self,dxyzs_,q1q2s_):
+	def CoulombAtomEnergies(self,dxyzs_,q1q2s_):
 		"""
 		Atom Coulomb energy with polynomial cutoff.
 		Zero of energy is set so that if all atom pairs are outside the cutoff the energy is zero.
@@ -399,9 +400,9 @@ class SparseCodedChargedGauSHNetwork:
 		Returns:
 			 (nmol X 1) tensor of energies (atomic)
 		"""
-		EMR = (1.0/2.0)*tf.reduce_sum(polykern(dxyzs_*1.889725989)*q1q2s_,axis=(1,2))[:,tf.newaxis]
+		EMR = (1.0/2.0)*tf.reduce_sum(polykern(dxyzs_*1.889725989)*q1q2s_,axis=(2))[:,:,tf.newaxis]
 		KLR = tf.ones_like(dxyzs_)*(1.0/self.RCut)
-		ELR = (1.0/2.0)*tf.reduce_sum(KLR*q1q2s_,axis=(1,2))[:,tf.newaxis]
+		ELR = (1.0/2.0)*tf.reduce_sum(KLR*q1q2s_,axis=(2))[:,:,tf.newaxis]
 		return EMR-ELR
 
 	def ChargeToDipole(self,xyzs_,zs_,qs_):
@@ -573,7 +574,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec)
 		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec)
 
-		Atom1Real = tf.tile(tf.not_equal(self.zs_pl,0)[:,:,tf.newaxis,:],(1,1,self.MaxNeigh,1))
+		Atom1Real = tf.tile(tf.greater(self.zs_pl,0)[:,:,tf.newaxis,:],(1,1,self.MaxNeigh,1))
 		nl = tf.reshape(self.nl_pl,(self.batch_size,self.MaxNAtom,self.MaxNeigh,1))
 		Atom12Real = tf.logical_and(Atom1Real,tf.greater_equal(nl,0))
 		Atom12Real2 = tf.tile(Atom12Real,[1,1,1,2])
@@ -624,8 +625,7 @@ class SparseCodedChargedGauSHNetwork:
 			tf.stop_gradient(jcodes)
 		self.embedded = self.Embed(self.cdxyzs, jcodes, self.sparse_mask, self.gp_tf, self.l_max)
 		# Sparse Energy.
-		self.AtomEnergies,self.AtomCharges = self.AtomEmbToAtomEnergyAndCharge(self.embedded,self.zs_pl)
-		self.MolEnergies = tf.reduce_sum(self.AtomEnergies,axis=1,keepdims=False)
+		self.AtomNetEnergies,self.AtomCharges = self.AtomEmbToAtomEnergyAndCharge(self.embedded,self.zs_pl)
 
 		if (self.DoChargeEmbedding or self.DoChargeLearning or self.DoDipoleLearning):
 			self.MolDipoles = self.ChargeToDipole(self.xyzs_pl,self.zs_pl,self.AtomCharges)
@@ -639,15 +639,18 @@ class SparseCodedChargedGauSHNetwork:
 				q2 = tf.gather_nd(self.AtomCharges,gather_inds)
 				q1q2unmsk = (self.AtomCharges[:,:,tf.newaxis]*q2)
 				q1q2s = tf.where(Atom12Real[:,:,:,0],q1q2unmsk,tf.zeros_like(q1q2unmsk))
-				self.MolCoulEnergies = self.CoulombEnergies(tf.norm(self.dxyzs,axis=-1),q1q2s)
+				self.AtomCoulEnergies = tf.where(tf.greater(self.zs_pl,0),self.CoulombAtomEnergies(tf.norm(self.dxyzs,axis=-1),q1q2s),tf.zeros_like(self.AtomNetEnergies))
 			else:
-				self.MolCoulEnergies = tf.zeros_like(self.MolEnergies)
+				self.AtomCoulEnergies = tf.zeros_like(self.AtomNetEnergies)
 		else:
-			self.MolCoulEnergies = tf.zeros_like(self.MolEnergies)
+			self.AtomCoulEnergies = tf.zeros_like(self.AtomNetEnergies)
 
 		#self.AtomEnergies = tf.Print(self.AtomEnergies,[tf.gradients(self.AtomEnergies,self.xyzs_pl)[0]],"self.AtomEnergies",summarize=1000000)
 		if (self.DoChargeEmbedding):
-			self.MolEnergies += self.MolCoulEnergies
+			self.AtomEnergies = self.AtomNetEnergies + self.AtomCoulEnergies
+		else:
+			self.AtomEnergies = self.AtomNetEnergies
+		self.MolEnergies = tf.reduce_sum(self.AtomEnergies,axis=1,keepdims=False)
 
 		# Optional. Verify that the canonicalized differences are invariant.
 		if self.DoRotGrad:
@@ -701,10 +704,37 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
+
+def MethCoords(R1,R2,R3):
+	angle = 2*Pi*(35.25/360.)
+	c = np.cos(angle)
+	s = np.sin(angle)
+	return ("""5
+
+C  0. 0. 0.
+H """+str(-R1*c)+" "+str(R1*s)+""" 0.
+H """+str(R2*c)+" "+str(R2*s)+""" 0.
+H 0. """+str(-R3*s)+" "+str(-R3*c)+"""
+H 0. """+str(-R3*s)+" "+str(R3*c))
+
+b = MSet()
+for i in np.linspace(-.3,.3,30):
+	m = Mol()
+	m.FromXYZString(MethCoords(1.+i,1.-i,1.+i))
+	b.mols.append(m)
+
 net = SparseCodedChargedGauSHNetwork(b)
 net.Load()
-net.Train(60)
-if 1:
+#net.Train()
+
+EF = net.GetEnergyForceRoutine(b.mols[-1])
+for i,d in enumerate(np.linspace(-.3,.3,30)):
+	print d,EF(b.mols[i].coords)[0][0]
+print "------------------------"
+for i,d in enumerate(np.linspace(-.3,.3,30)):
+	print d,EF(b.mols[i].coords)[1]
+
+if 0:
 	mi = np.random.randint(len(b.mols))
 	m = b.mols[mi]
 	print(m.atoms, m.coords)

@@ -56,6 +56,8 @@ class MSet:
 		Returns:
 			AvE,AvQ: dictionaries mapping Atomic number onto the averages.
 		"""
+		if (not "energy" in self.mols[-1].properties.keys()):
+			return {},{}
 		At = self.AtomTypes().tolist()
 		AvE = {x:0. for x in At}
 		AvQ = {x:0. for x in At}
