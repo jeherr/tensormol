@@ -230,7 +230,7 @@ class BehlerParinelloNetwork(object):
 		if self.train_quadrupole:
 			self.quadrupole_data = np.zeros((self.num_molecules, 2, 3), dtype = np.float64)
 		if self.train_sparse:
-			self.pairs_data = np.zeros((self.num_molecules, self.max_num_atoms, self.max_num_pairs, 4), dtype=np.uint16)
+			self.pairs_data = np.zeros((self.num_molecules, self.max_num_atoms, self.max_num_pairs, 2), dtype=np.uint16)
 		for i, mol in enumerate(self.mol_set.mols):
 			self.xyz_data[i][:mol.NAtoms()] = mol.coords
 			self.Z_data[i][:mol.NAtoms()] = mol.atoms
@@ -243,8 +243,7 @@ class BehlerParinelloNetwork(object):
 				self.quadrupole_data[i] = mol.properties["quadrupole"]
 			if self.train_sparse:
 				for j, atom_pairs in enumerate(mol.neighbor_list):
-					self.pairs_data[i,j,:len(atom_pairs)] = np.stack([np.array([i for _ in range(len(atom_pairs))]),
-						np.array([j for _ in range(len(atom_pairs))]), np.array(atom_pairs), mol.atoms[atom_pairs]]).T
+					self.pairs_data[i,j,:len(atom_pairs)] = np.stack([np.array([i for _ in range(len(atom_pairs))]), np.array(atom_pairs)]).T
 			self.num_atoms_data[i] = mol.NAtoms()
 		return
 
@@ -610,7 +609,6 @@ class BehlerParinelloNetwork(object):
 				_, summaries, total_loss, energy_loss, gradient_loss = self.sess.run([self.energy_train_op,
 				self.summary_op, self.energy_losses, self.energy_loss, self.gradient_loss], feed_dict=feed_dict)
 				train_gradient_loss += gradient_loss
-				# print(gradient_loss/100)
 			elif self.train_rotation:
 				_, summaries, total_loss, energy_loss, rotation_loss = self.sess.run([self.energy_train_op,
 				self.summary_op, self.energy_losses, self.energy_loss, self.rotation_loss], feed_dict=feed_dict)
@@ -627,10 +625,6 @@ class BehlerParinelloNetwork(object):
 				else:
 					_, summaries, total_loss, energy_loss = self.sess.run([self.energy_train_op,
 					self.summary_op, self.energy_losses, self.energy_loss], feed_dict=feed_dict)
-			# grad1, grad2 = self.sess.run([self.untrans_grads, self.xyz_grad], feed_dict=feed_dict)
-			# print(grad1, grad2)
-			# print(grad1.shape)
-			# exit(0)
 			train_loss += total_loss
 			train_energy_loss += energy_loss
 			num_mols += self.batch_size
@@ -1425,7 +1419,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			self.keep_prob_pl = tf.placeholder(self.tf_precision, shape=())
 			self.training_pl = tf.placeholder(tf.bool, shape=())
 			if self.train_sparse:
-				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
+				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 2])
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
 			# embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
