@@ -639,6 +639,8 @@ class SparseCodedChargedGauSHNetwork:
 		else:
 			self.AtomCoulEnergies = tf.zeros_like(self.AtomNetEnergies)
 
+		self.MolCoulEnergies = tf.reduce_sum(self.AtomCoulEnergies,axis=1,keepdims=False)
+
 		#self.AtomEnergies = tf.Print(self.AtomEnergies,[tf.gradients(self.AtomEnergies,self.xyzs_pl)[0]],"self.AtomEnergies",summarize=1000000)
 		if (self.DoChargeEmbedding):
 			self.AtomEnergies = self.AtomNetEnergies + self.AtomCoulEnergies
