@@ -141,9 +141,9 @@ def CanonicalizeGS(dxyzs,z2s):
 	weights1 = 1.0/((rsq0-1.1)*(rsq0-1.1)+1.0)
 	maskedD1s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights1)
 	v2 = tf.reduce_sum(togather*maskedD1s,axis=1)
-	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
-	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 	v2 += 1e-6*tf.reshape(dxyzs[:,:,1:2,:],(argshape[0]*argshape[1],3))
+	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
+	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 	v2 *= safe_inv_norm(v2)
 
 	v3 = tf.cross(v1,v2)
