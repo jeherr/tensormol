@@ -103,7 +103,7 @@ def polykern(r):
 				(a+b*r+c*r2+d*r3+e*r4+f*r5+g*r6+h*r7)/r))
 	return kern
 
-def CanonicalizeGS(dxyzs):
+def CanonicalizeGS(dxyzs,z2s):
 	"""
 	Canonicalize using nearest atoms and Graham-Schmidt.
 	If there are not three linearly independent atoms within
@@ -115,26 +115,26 @@ def CanonicalizeGS(dxyzs):
 
 	Args:
 		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
+		zs: a nMol X maxNatom X maxNatom X 1 tensor of atomic number pairs.
 		ie: ... X i X i = (0.,0.,0.))
 	"""
 	# Append orthogonal axes to dxyzs
 	argshape = tf.shape(dxyzs)
-	ax0 = tf.constant(np.array([[4.9,0.,0.],[0.,5.,0.],[0.,0.,5.1]]),dtype=tf.float64)*512.0
+	ax0 = tf.constant(np.array([[4.9,0.,0.],[0.,5.,0.],[0.,0.,5.1]]),dtype=tf.float64)*2048.0
 	defaultAxes = tf.tile(tf.reshape(ax0,(1,1,3,3)),[argshape[0],argshape[1],1,1])
-	dxyzsandDef = tf.concat([dxyzs,defaultAxes],axis=2)
+#	z2s = tf.Print(z2s,[z2s],"-Zs-",summarize=1000)
+	dxyzsandDef = tf.concat([dxyzs*tf.cast(z2s,tf.float64),defaultAxes],axis=2)
 
 	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
 	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[2]+3,3))
-	#togather += tf.random_normal(shape=(argshape[0]*argshape[1],argshape[2]+3,3), mean=0.0, stddev=1e-13,dtype=tf.float64)
-	pbreaker0 = tf.tile(tf.reshape(1+tf.range(argshape[2]),(1,1,argshape[2],1)),(argshape[0],argshape[1],1,1))
-	pbreaker = (1e-13)/tf.cast(pbreaker0,tf.float64)
 
 	rsq0 = tf.reduce_sum(togather*togather,axis=-1,keepdims=True)
-	#weights0 = tf.exp(-1.0*tf.clip_by_value(rsq0*rsq0,0.0,20.0)) # Mol X MaxNAtom X MaxNAtom
-	weights0 = 1.0/(rsq0*rsq0+1.0) # Mol X MaxNAtom X MaxNAtom
+	weights0 = 1.0/(rsq0*rsq0+1.0) # Mol X MaxNAtom X MaxNAtom X 1
 	maskedD0s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights0)
 	# Above is (argshape[0]*argshape[1],argshape[2]+3,1)
-	v1 = tf.reduce_sum(togather*maskedD0s,axis=1)
+	v1 = tf.reduce_sum(togather*maskedD0s,axis=1) # (argshape[0]*argshape[1],3)
+	# Add in a small amount of the ordered vectors
+	v1 += 1e-6*tf.reshape(dxyzs[:,:,:1,:],(argshape[0]*argshape[1],3))
 	v1 *= safe_inv_norm(v1)
 
 	#weights1 = tf.exp(-1.0*tf.clip_by_value((rsq0-0.75)*(rsq0-0.75),0.0,20.0)) # Mol X MaxNAtom X MaxNAtom
@@ -142,19 +142,15 @@ def CanonicalizeGS(dxyzs):
 	maskedD1s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights1)
 	v2 = tf.reduce_sum(togather*maskedD1s,axis=1)
 	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
+	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
+	v2 += 1e-6*tf.reshape(dxyzs[:,:,1:2,:],(argshape[0]*argshape[1],3))
 	v2 *= safe_inv_norm(v2)
 
-	#weights2 = tf.exp(-1.0*tf.clip_by_value((rsq0-1.5)*(rsq0-1.5),0.0,20.0)) # Mol X MaxNAtom X MaxNAtom
-	weights2 = 1.0/((rsq0-1.8)*(rsq0-1.8)+1.0)
-	maskedD2s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights2)
-	v3 = tf.reduce_sum(togather*maskedD2s,axis=1)
-	v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
-	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
+	v3 = tf.cross(v1,v2)
 	v3 *= safe_inv_norm(v3)
-
 	vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 	tore = tf.einsum('ijk,ilk->ijl',realdata,vs)
-	return tf.reshape(tore,tf.shape(dxyzs))
+	return tf.reshape(tore,tf.shape(dxyzs)) , vs
 
 class SparseCodedChargedGauSHNetwork:
 	"""
@@ -240,12 +236,13 @@ class SparseCodedChargedGauSHNetwork:
 			nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
 			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs,self.nl_pl:nls}
 			print("FEED:",feed_dict)
-			print("--- Debug Gradient ---")
-			print("D-dxyzs",self.sess.run(tf.gradients(self.dxyzs,self.xyzs_pl), feed_dict=feed_dict))
-			print("D-cdxyzs",self.sess.run(tf.gradients(self.cdxyzs,self.xyzs_pl), feed_dict=feed_dict))
-			print("D-cdxyzs",self.sess.run(tf.gradients(self.cdxyzs,self.xyzs_pl), feed_dict=feed_dict))
-			print("D-self.AtomNetEnergies",self.sess.run(tf.gradients(self.AtomNetEnergies,self.xyzs_pl), feed_dict=feed_dict))
-			print("D-self.AtomNetEnergies",self.sess.run(tf.gradients(self.AtomCharges,self.xyzs_pl), feed_dict=feed_dict))
+			if 0:
+				print("--- Debug Gradient ---")
+				print("D-dxyzs",self.sess.run(tf.gradients(self.dxyzs,self.xyzs_pl), feed_dict=feed_dict))
+				print("D-cdxyzs",self.sess.run(tf.gradients(self.cdxyzs,self.xyzs_pl), feed_dict=feed_dict))
+				print("D-cdxyzs",self.sess.run(tf.gradients(self.cdxyzs,self.xyzs_pl), feed_dict=feed_dict))
+				print("D-self.AtomNetEnergies",self.sess.run(tf.gradients(self.AtomNetEnergies,self.xyzs_pl), feed_dict=feed_dict))
+				print("D-self.AtomNetEnergies",self.sess.run(tf.gradients(self.AtomCharges,self.xyzs_pl), feed_dict=feed_dict))
 			ens,fs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
 			return ens[0],fs[0][:m.NAtoms()]*(-JOULEPERHARTREE)
 		return EF
@@ -268,6 +265,8 @@ class SparseCodedChargedGauSHNetwork:
 				raise Exception('NeighborOverflow')
 			nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
 			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs,self.nl_pl:nls}
+			if (self.DoRotGrad):
+				print("RotGrad:",self.sess.run([self.RotGrad], feed_dict=feed_dict))
 			if (DoForce):
 				ens,fs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
 				return ens[0],fs[0][:m.NAtoms()]*(-JOULEPERHARTREE)
@@ -382,8 +381,9 @@ class SparseCodedChargedGauSHNetwork:
 		tore *= -1
 		for i,rl in enumerate(RawLists): # mol
 			for j,a in enumerate(rl):
+				sa = sorted(a)
 				if (zs_[i,j] != 0): # atom
-					for k,l in enumerate(a): #atom
+					for k,l in enumerate(sa): #atom
 						if (l < natom[i]):
 							tore[i,j,k] = l
 		return tore, maxneigh
@@ -559,8 +559,6 @@ class SparseCodedChargedGauSHNetwork:
 		self.xyzs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = self.prec, name="InputCoords")
 		self.zs_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, 1), dtype = tf.int32, name="InputZs")
 		self.nl_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, self.MaxNeigh), dtype = tf.int32,name="InputNL")
-		tf.stop_gradient(self.nl_pl)
-		tf.stop_gradient(self.zs_pl)
 
 		# Learning targets.
 		self.groundTruthE_pl = tf.placeholder(shape = (self.batch_size,1), dtype = tf.float64,name="GTEs") # Energies
@@ -587,12 +585,6 @@ class SparseCodedChargedGauSHNetwork:
 		gather_inds0p = tf.concat([molis,it1],axis=-1)
 		gather_inds = tf.where(Atom12Real2, gather_inds0, gather_inds0p) # Mol X MaxNatom X maxN X 2
 		self.sparse_mask = tf.cast(Atom12Real,self.prec) # nmol X maxnatom X maxneigh X 1
-		tf.stop_gradient(Atom12Real)
-		tf.stop_gradient(Atom12Real2)
-		tf.stop_gradient(Atom12Real3)
-		tf.stop_gradient(Atom12Real4)
-		tf.stop_gradient(gather_inds)
-		tf.stop_gradient(self.sparse_mask)
 
 		# sparse version of dxyzs.
 		if self.DoRotGrad:
@@ -611,10 +603,12 @@ class SparseCodedChargedGauSHNetwork:
 		coord1 = tf.expand_dims(tmpxyzs, axis=2) # mol X maxnatom X 1 X 3
 		coord2 = tf.gather_nd(tmpxyzs,gather_inds)
 		diff0 = (coord1-coord2)
+
 		self.dxyzs = tf.where(Atom12Real3, diff0, tf.zeros_like(diff0))
 
 		if (self.Canonicalize):
-			self.cdxyzs = tf.where(Atom12Real3, CanonicalizeGS(self.dxyzs) , tf.zeros_like(diff0))
+			self.cdxyzs, self.CanonicalAxes =  CanonicalizeGS(self.dxyzs, zxs)
+			#self.cdxyzs, self.CanonicalAxes = tf.where(Atom12Real3, CanonicalizeGS(self.dxyzs, zxs) , tf.zeros_like(diff0))
 		else:
 			self.cdxyzs = self.dxyzs
 
@@ -712,15 +706,29 @@ def MethCoords(R1,R2,R3):
 	return ("""5
 
 C  0. 0. 0.
-H """+str(-R1*c)+" "+str(R1*s)+""" 0.
-H """+str(R2*c)+" "+str(R2*s)+""" 0.
-H 0. """+str(-R3*s)+" "+str(-R3*c)+"""
-H 0. """+str(-R3*s)+" "+str(R3*c))
+H """+str(-R1*c)+" "+str(R1*s)+""" 0.0
+H """+str(R2*c)+" "+str(R2*s)+""" 0.0
+H 0.0 """+str(-R3*s)+" "+str(-R3*c)+"""
+H 0.0 """+str(-R3*s)+" "+str(R3*c))
 
+
+def MethCoords2(R1,R2,R3=1.):
+	angle = 2*Pi*(35.25/360.)
+	c = np.cos(angle)
+	s = np.sin(angle)
+	return ("""5
+
+C  0. 0. 0.
+H """+str(-R1+c)+" "+str(R2+s)+""" 0.0
+H """+str(c)+" "+str(s)+""" 0.0
+H 0.0 """+str(-R3*s)+" "+str(-R3*c)+"""
+H 0.0 """+str(-R3*s)+" "+str(R3*c))
+
+npts = 30
 b = MSet()
-for i in np.linspace(-.3,.3,30):
+for i in np.linspace(-.3,.3,npts):
 	m = Mol()
-	m.FromXYZString(MethCoords(1.+i,1.-i,1.+i))
+	m.FromXYZString(MethCoords2(1.+i,1.-i,1.+i))
 	b.mols.append(m)
 
 net = SparseCodedChargedGauSHNetwork(b)
@@ -728,10 +736,10 @@ net.Load()
 #net.Train()
 
 EF = net.GetEnergyForceRoutine(b.mols[-1])
-for i,d in enumerate(np.linspace(-.3,.3,30)):
+for i,d in enumerate(np.linspace(-.3,.3,npts)):
 	print d,EF(b.mols[i].coords)[0][0]
 print "------------------------"
-for i,d in enumerate(np.linspace(-.3,.3,30)):
+for i,d in enumerate(np.linspace(-.3,.3,npts)):
 	print d,EF(b.mols[i].coords)[1]
 
 if 0:
