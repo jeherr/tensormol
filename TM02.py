@@ -36,7 +36,7 @@ if (0):
 	b.cut_max_grad(2.0)
 	b.Save("Hybrid1")
 
-if 0:
+if 1:
 	b = MSet("Hybrid1")
 	b.Load()
 	b.cut_max_num_atoms(40)
@@ -309,7 +309,7 @@ class SparseCodedChargedGauSHNetwork:
 		"""
 		xyzs = np.zeros((self.batch_size,self.MaxNAtom,3),dtype=np.float)
 		true_force = np.zeros((self.batch_size,self.MaxNAtom,3),dtype=np.float)
-		zs = np.zeros((self.batch_size,self.MaxNAtom),dtype=np.int32)
+		zs = np.zeros((self.batch_size,self.MaxNAtom,1),dtype=np.int32)
 		nls = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh),dtype=np.int32)
 		true_ae = np.zeros((self.batch_size,1),dtype=np.float)
 		qs = np.zeros((self.batch_size,self.MaxNAtom),dtype=np.float64) # Charges.
@@ -320,7 +320,7 @@ class SparseCodedChargedGauSHNetwork:
 			m = aset.mols[mi]
 			mols.append(m)
 			xyzs[i,:m.NAtoms()] = m.coords
-			zs[i,:m.NAtoms()] = m.atoms
+			zs[i,:m.NAtoms(),0] = m.atoms
 			true_ae[i]=m.properties["energy"]
 			true_force[i,:m.NAtoms()]=m.properties["gradients"]
 			qs[i,:m.NAtoms()]=m.properties["charges"]
@@ -330,7 +330,7 @@ class SparseCodedChargedGauSHNetwork:
  			print("Too Many Neighbors.")
 			raise Exception('NeighborOverflow')
 		nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
-		return {self.xyzs_pl:xyzs, self.zs_pl:zs[:,:,np.newaxis],self.nl_pl:nls,self.groundTruthE_pl:true_ae, self.groundTruthG_pl:true_force, self.groundTruthQ_pl:qs, self.groundTruthD_pl:ds}, mols
+		return {self.xyzs_pl:xyzs, self.zs_pl:zs,self.nl_pl:nls,self.groundTruthE_pl:true_ae, self.groundTruthG_pl:true_force, self.groundTruthQ_pl:qs, self.groundTruthD_pl:ds}, mols
 
 	def Embed(self, dxyzs, jcodes, pair_mask, gauss_params, l_max):
 		"""
@@ -698,6 +698,9 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
+net = SparseCodedChargedGauSHNetwork(b)
+net.Load()
+net.Train()
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
@@ -724,23 +727,24 @@ H """+str(c)+" "+str(s)+""" 0.0
 H 0.0 """+str(-R3*s)+" "+str(-R3*c)+"""
 H 0.0 """+str(-R3*s)+" "+str(R3*c))
 
-npts = 30
-b = MSet()
-for i in np.linspace(-.3,.3,npts):
-	m = Mol()
-	m.FromXYZString(MethCoords2(1.+i,1.-i,1.+i))
-	b.mols.append(m)
+if 0:
+	npts = 30
+	b = MSet()
+	for i in np.linspace(-.3,.3,npts):
+		m = Mol()
+		m.FromXYZString(MethCoords2(1.+i,1.-i,1.+i))
+		b.mols.append(m)
 
-net = SparseCodedChargedGauSHNetwork(b)
-net.Load()
-#net.Train()
+	net = SparseCodedChargedGauSHNetwork(b)
+	net.Load()
+	net.Train()
 
-EF = net.GetEnergyForceRoutine(b.mols[-1])
-for i,d in enumerate(np.linspace(-.3,.3,npts)):
-	print d,EF(b.mols[i].coords)[0][0]
-print "------------------------"
-for i,d in enumerate(np.linspace(-.3,.3,npts)):
-	print d,EF(b.mols[i].coords)[1]
+	EF = net.GetEnergyForceRoutine(b.mols[-1])
+	for i,d in enumerate(np.linspace(-.3,.3,npts)):
+		print d,EF(b.mols[i].coords)[0][0]
+	print "------------------------"
+	for i,d in enumerate(np.linspace(-.3,.3,npts)):
+		print d,EF(b.mols[i].coords)[1]
 
 if 0:
 	mi = np.random.randint(len(b.mols))
