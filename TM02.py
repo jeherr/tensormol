@@ -134,14 +134,14 @@ def CanonicalizeGS(dxyzs,z2s):
 	# Above is (argshape[0]*argshape[1],argshape[2]+3,1)
 	v1 = tf.reduce_sum(togather*maskedD0s,axis=1) # (argshape[0]*argshape[1],3)
 	# Add in a small amount of the ordered vectors
-	v1 += 1e-6*tf.reshape(dxyzs[:,:,:1,:],(argshape[0]*argshape[1],3))
+	v1 += 1e-1*tf.reshape(dxyzs[:,:,:1,:],(argshape[0]*argshape[1],3))
 	v1 *= safe_inv_norm(v1)
 
 	#weights1 = tf.exp(-1.0*tf.clip_by_value((rsq0-0.75)*(rsq0-0.75),0.0,20.0)) # Mol X MaxNAtom X MaxNAtom
 	weights1 = 1.0/((rsq0-1.1)*(rsq0-1.1)+1.0)
 	maskedD1s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights1)
 	v2 = tf.reduce_sum(togather*maskedD1s,axis=1)
-	v2 += 1e-6*tf.reshape(dxyzs[:,:,1:2,:],(argshape[0]*argshape[1],3))
+	v2 += 1e-1*tf.reshape(dxyzs[:,:,1:2,:],(argshape[0]*argshape[1],3))
 	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 	v2 *= safe_inv_norm(v2)
@@ -213,8 +213,11 @@ class SparseCodedChargedGauSHNetwork:
 		return
 
 	def Load(self):
-		chkpt = tf.train.latest_checkpoint('./networks/')
-		self.saver.restore(self.sess, chkpt)
+		try:
+			chkpt = tf.train.latest_checkpoint('./networks/')
+			self.saver.restore(self.sess, chkpt)
+		except Exception as Ex:
+			pass
 		return
 
 	def GetDebugRoutine(self,m):
@@ -450,9 +453,9 @@ class SparseCodedChargedGauSHNetwork:
 		l0 = tf.reshape(weighted2,(ncase,-1))
 		l0p = tf.concat([l0,CODES],axis=-1)
 
-		l1q = tf.layers.dense(inputs=l0p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1q")
+		l1q = tf.layers.dense(inputs=l0p,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1q")
 		l1pq = tf.concat([l1q,CODES],axis=-1)
-		l2q = tf.layers.dense(inputs=l1pq,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2q")
+		l2q = tf.layers.dense(inputs=l1pq,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2q")
 		l2pq = tf.concat([l2q,CODES],axis=-1)
 		l3q = tf.layers.dense(l2pq,units=1,activation=None,use_bias=False,name="Dense3q")*msk
 		charges = tf.reshape(l3q,(self.batch_size,self.MaxNAtom))
@@ -464,9 +467,9 @@ class SparseCodedChargedGauSHNetwork:
 		# TODO: use these in the energies. :)
 
 		# Energy network.
-		l1e = tf.layers.dense(inputs=l0p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1e")
+		l1e = tf.layers.dense(inputs=l0p,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1e")
 		l1pe = tf.concat([l1e,CODES,tf.reshape(AtomCharges,(ncase,1))],axis=-1)
-		l2e = tf.layers.dense(inputs=l1pe,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2e")
+		l2e = tf.layers.dense(inputs=l1pe,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2e")
 		# in the final layer use the atom code information.
 		l2pe = tf.concat([l2e,CODES,tf.reshape(AtomCharges,(ncase,1))],axis=-1)
 		l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
@@ -702,7 +705,7 @@ class SparseCodedChargedGauSHNetwork:
 
 net = SparseCodedChargedGauSHNetwork(b)
 net.Load()
-net.Train()
+#net.Train()
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
@@ -748,7 +751,7 @@ if 0:
 	for i,d in enumerate(np.linspace(-.3,.3,npts)):
 		print d,EF(b.mols[i].coords)[1]
 
-if 0:
+if 1:
 	mi = np.random.randint(len(b.mols))
 	m = b.mols[mi]
 	print(m.atoms, m.coords)
@@ -758,3 +761,5 @@ if 0:
 	m=Opt.OptGD(m)
 	m.Distort(0.2)
 	m=Opt.OptGD(m,"FromDistorted")
+
+# Check finite difference forces.
