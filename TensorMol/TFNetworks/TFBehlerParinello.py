@@ -79,8 +79,8 @@ class BehlerParinelloNetwork(object):
 		self.max_num_atoms = self.mol_set.MaxNAtom()
 		self.num_molecules = len(self.mol_set.mols)
 		if self.train_sparse:
-			for mol in self.mol_set.mols:
-				mol.make_neighbors(self.sparse_cutoff)
+			# for mol in self.mol_set.mols:
+			# 	mol.make_neighbors(self.sparse_cutoff)
 			self.max_num_pairs = self.mol_set.max_neighbors()
 		self.step = 0
 		self.test_freq = PARAMS["test_freq"]
@@ -243,7 +243,8 @@ class BehlerParinelloNetwork(object):
 				self.quadrupole_data[i] = mol.properties["quadrupole"]
 			if self.train_sparse:
 				for j, atom_pairs in enumerate(mol.neighbor_list):
-					self.pairs_data[i,j,:len(atom_pairs)] = np.stack([np.array([i for _ in range(len(atom_pairs))]), np.array(atom_pairs)]).T
+					self.pairs_data[i,j,:len(atom_pairs)] = np.stack([np.array(mol.neighbor_list[j]), mol.atoms[atom_pairs]], axis=-1)
+				self.batch_mol_idxs = np.tile(np.arange(self.batch_size), (1, self.max_num_pairs, self.max_num_atoms, 1)).T
 			self.num_atoms_data[i] = mol.NAtoms()
 		return
 
@@ -309,7 +310,8 @@ class BehlerParinelloNetwork(object):
 		batch_data.append(self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		if self.train_sparse:
-			batch_data.append(self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+			pair_batch_data = np.concatenate((self.batch_mol_idxs, self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]), axis=-1)
+			batch_data.append(pair_batch_data)
 		if self.train_dropout:
 			batch_data.append(self.keep_prob)
 		return batch_data
@@ -1419,7 +1421,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			self.keep_prob_pl = tf.placeholder(self.tf_precision, shape=())
 			self.training_pl = tf.placeholder(tf.bool, shape=())
 			if self.train_sparse:
-				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 2])
+				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 3])
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
 			# embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
@@ -1431,16 +1433,16 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			# 				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
 			# 				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
-			with tf.name_scope('canonicalization'):
-				canon_xyzs = gs_canonicalizev2(self.xyzs_pl, self.Zs_pl)
 			# centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
 			# rotation_params = tf.gather_nd(rotation_params, padding_mask)
 			# rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
 			# self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
 			with tf.name_scope('embedding'):
 				if self.train_sparse:
-					embed, mol_idx = tf_sparse_gaush_element_channel(self.xyzs_pl, self.Zs_pl,
-												self.pairs_pl, elements, self.gaussian_params, self.l_max)
+					dxyzs, pair_Zs = sparsify_coords(self.xyzs_pl, self.Zs_pl, self.pairs_pl)
+					canon_xyzs = gs_canonicalizev2(dxyzs, self.Zs_pl)
+					embed, mol_idx = tf_sparse_gaush_element_channel(canon_xyzs, self.Zs_pl, pair_Zs,
+												elements, self.gaussian_params, self.l_max)
 				else:
 					embed, mol_idx = tf_gaush_element_channelv3(canon_xyzs, self.Zs_pl,
 												elements, self.gaussian_params, self.l_max)

@@ -585,7 +585,7 @@ def tf_gaush_element_channel(xyzs, Zs, elements, gauss_params, l_max):
 		mol_idx = tf.dynamic_partition(padding_mask, partition_idx, num_elements)
 	return embeds, mol_idx
 
-def tf_sparse_gaush_element_channel(xyzs, Zs, pairs, elements, gauss_params, l_max):
+def tf_sparse_gaush_element_channel(xyzs, Zs, pair_Zs, elements, gauss_params, l_max):
 	"""
 	Sparse version of tf_gauss_harmonics_echannel.
 	Encodes atoms into a gaussians * spherical harmonics embedding
@@ -605,26 +605,23 @@ def tf_sparse_gaush_element_channel(xyzs, Zs, pairs, elements, gauss_params, l_m
 	"""
 	num_elements = elements.get_shape().as_list()[0]
 	num_mols = Zs.get_shape().as_list()[0]
-	max_atoms = Zs.get_shape().as_list()[1]
-	max_pairs = pairs.get_shape().as_list()[2]
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 
-	pairs = tf.gather_nd(pairs, padding_mask)
-	pair_dxyz = tf.gather_nd(xyzs, pairs[...,:2]) - tf.gather_nd(xyzs, pairs[...,:3:2])
-	pair_dist = tf.norm(pair_dxyz+1.e-16, axis=-1)
-	gauss = tf_sparse_gauss(pair_dist, gauss_params)
-	harmonics = tf_spherical_harmonics(pair_dxyz, pair_dist, l_max)
-	channel_scatter = tf.equal(tf.expand_dims(pairs[...,-1], axis=-1), elements)
+	dist_tensor = tf.norm(xyzs+1.e-16,axis=-1)
+	gauss = tf_gauss(dist_tensor, gauss_params)
+	harmonics = tf_spherical_harmonics(xyzs, dist_tensor, l_max)
+	channel_scatter = tf.equal(tf.expand_dims(pair_Zs, axis=-1), elements)
 	channel_scatter = tf.where(channel_scatter, tf.ones_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])),
 					tf.zeros_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])))
-	channel_gauss = tf.expand_dims(gauss, axis=2) * tf.expand_dims(channel_scatter, axis=-1)
-	channel_harmonics = tf.expand_dims(harmonics, axis=2) * tf.expand_dims(channel_scatter, axis=-1)
+	channel_gauss = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(channel_scatter, axis=-1)
+	channel_harmonics = tf.expand_dims(harmonics, axis=-2) * tf.expand_dims(channel_scatter, axis=-1)
 	embeds = tf.reshape(tf.einsum('ijkg,ijkl->ikgl', channel_gauss, channel_harmonics),
 			[tf.shape(padding_mask)[0], -1])
-	element_partition = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=-1),
-					elements))[:,-1], tf.int32)
-	embeds = tf.dynamic_partition(embeds, element_partition, num_elements)
-	mol_idx = tf.dynamic_partition(pairs[...,0,:2], element_partition, num_elements)
+	partition_idx = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=-1),
+						tf.expand_dims(elements, axis=0)))[:,1], tf.int32)
+	with tf.device('/cpu:0'):
+		embeds = tf.dynamic_partition(embeds, partition_idx, num_elements)
+		mol_idx = tf.dynamic_partition(padding_mask, partition_idx, num_elements)
 	return embeds, mol_idx
 
 def tf_gaush_embed_channel(xyzs, Zs, elements, gauss_params, l_max, embed_factor):
@@ -1086,7 +1083,7 @@ def gs_canonicalize(xyzs, Zs):
 	tore = tf.einsum('ijk,ilk->ijl',realdata,vs)
 	return tf.reshape(tore,tf.shape(dxyzs))
 
-def gs_canonicalizev2(xyzs, Zs):
+def gs_canonicalizev2(dxyzs, pair_Zs):
 	"""
 	Canonicalize using nearest three atoms and Graham-Schmidt.
 	If there are not three linearly independent atoms within
@@ -1096,26 +1093,23 @@ def gs_canonicalizev2(xyzs, Zs):
 		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
 		ie: ... X i X i = (0.,0.,0.))
 	"""
-	padding_mask = tf.where(tf.not_equal(Zs, 0))
-	dxyzs = tf.expand_dims(tf.gather_nd(xyzs, padding_mask), axis=1) - tf.gather(xyzs, padding_mask[:,0])
-	Z_product = tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=1) * tf.gather(Zs, padding_mask[:,0])
-	mask = tf.expand_dims(tf.where(tf.not_equal(Z_product, 0), tf.ones_like(Z_product, dtype=eval(PARAMS["tf_prec"])),
-		tf.zeros_like(Z_product, dtype=eval(PARAMS["tf_prec"]))), axis=-1)
-	dxyzs = dxyzs * mask
 	dist_tensor = tf.norm(dxyzs+1.e-16, axis=-1, keep_dims=True)
 	norm_dxyzs = dxyzs / dist_tensor
-	weights = tf.exp(-1.0 * tf.norm(dxyzs+1.e-16, axis=-1, keep_dims=True))
+	weights = 0.5 * (tf.cos(np.pi * dist_tensor / 7.0) + 1)
 	weights = tf.where(tf.equal(weights, 1.), tf.zeros_like(weights), weights)
 	weighted_xyz = tf.reduce_sum(norm_dxyzs * weights, axis=-2)
+	weighted_xyz += 1.e-6 * dxyzs[:,0]
 	weighted_norm = tf.norm(weighted_xyz+1.e-16, axis=-1, keep_dims=True)
-	first_axis = weighted_xyz / tf.where(tf.less(weighted_norm, 1.e-16), tf.zeros_like(weighted_norm), tf.ones_like(weighted_norm))
+	first_axis = weighted_xyz / tf.where(tf.less(weighted_norm, 1.e-16), tf.ones_like(weighted_norm), weighted_norm)
+	fa_dot_ndxyzs = tf.expand_dims(first_axis, axis=-2) * tf.expand_dims(tf.einsum('ikj,ij->ik', norm_dxyzs, first_axis), axis=-1)
 	mask = tf.where(tf.less(dist_tensor, 1.e-16), tf.zeros_like(dist_tensor), tf.ones_like(dist_tensor))
-	rejection_xyzs = (norm_dxyzs - tf.expand_dims(first_axis, axis=-2)) * mask
-	rej_dist_tensor = tf.norm(dxyzs+1.e-16, axis=-1, keep_dims=True)
-	norm_rej_xyzs = rejection_xyzs / tf.where(tf.less(rej_dist_tensor, 1.e-12), tf.ones_like(dist_tensor), dist_tensor)
-	weighted_rej_xyzs = tf.reduce_sum(norm_rej_xyzs * weights, axis=-2)
-	weighted_rej_norm = tf.norm(weighted_rej_xyzs+1.e-16, axis=-1, keep_dims=True)
-	second_axis = weighted_rej_xyzs / tf.where(tf.less(weighted_rej_norm, 1.e-16), tf.zeros_like(weighted_rej_norm), tf.ones_like(weighted_rej_norm))
+	rejection_dxyzs = (norm_dxyzs - fa_dot_ndxyzs) * mask
+	rej_dist_tensor = tf.norm(rejection_dxyzs+1.e-16, axis=-1, keep_dims=True)
+	norm_rej_xyzs = rejection_dxyzs / tf.where(tf.less(rej_dist_tensor, 1.e-12), tf.ones_like(rej_dist_tensor), rej_dist_tensor)
+	weighted_rej_xyz = tf.reduce_sum(norm_rej_xyzs * weights, axis=-2)
+	weighted_rej_xyz += 1.e-6 * dxyzs[:,1]
+	weighted_rej_norm = tf.norm(weighted_rej_xyz+1.e-16, axis=-1, keep_dims=True)
+	second_axis = weighted_rej_xyz / tf.where(tf.less(weighted_rej_norm, 1.e-16), tf.ones_like(weighted_rej_norm), weighted_rej_norm)
 	second_axis -= tf.expand_dims(tf.einsum('ij,ij->i',first_axis, second_axis), axis=-1) * first_axis
 	second_axis /= tf.norm(second_axis+1.e-16, axis=-1, keep_dims=True)
 	third_axis = tf.cross(first_axis, second_axis)
@@ -1127,14 +1121,8 @@ def sparsify_coords(xyzs, Zs, pairs):
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
 	pairs = tf.gather_nd(pairs, padding_mask)
+	pair_mask = tf.where(tf.equal(pairs[...,-1], 0), tf.zeros_like(pairs[...,-1], dtype=eval(PARAMS["tf_prec"])), tf.ones_like(pairs[...,-1], dtype=eval(PARAMS["tf_prec"])))
 	pair_coords = tf.gather_nd(xyzs, pairs[...,:-1])
-	pair_Zs = tf.gather_nd(Zs, pairs)
-	return pair_Zs
-	pair_mask = tf.where(tf.equal(pairs[...,0], -1), tf.zeros_like(pairs[...,0], dtype=eval(PARAMS["tf_prec"])), tf.ones_like(pairs[...,0], dtype=eval(PARAMS["tf_prec"])))
-	pair_coords *= tf.expand_dims(pair_mask, axis=-1)
-	dxyzs = tf.expand_dims(central_atom_coords, axis=1) - pair_coords
-	Z_product = tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=1) * tf.gather(Zs, padding_mask[:,0])
-	# mask = tf.expand_dims(tf.where(tf.not_equal(Z_product, 0), tf.ones_like(Z_product, dtype=eval(PARAMS["tf_prec"])),
-	# 	tf.zeros_like(Z_product, dtype=eval(PARAMS["tf_prec"]))), axis=-1)
-	# dxyzs = dxyzs * mask
-	return dxyzs
+	pair_Zs = pairs[...,-1]
+	dxyzs = (tf.expand_dims(central_atom_coords, axis=1) - pair_coords) * tf.expand_dims(pair_mask, axis=-1)
+	return dxyzs, pair_Zs
