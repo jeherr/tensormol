@@ -225,6 +225,7 @@ class BehlerParinelloNetwork(object):
 		self.num_atoms_data = np.zeros((self.num_molecules), dtype = np.int32)
 		self.energy_data = np.zeros((self.num_molecules), dtype = np.float64)
 		self.gradient_data = np.zeros((self.num_molecules, self.max_num_atoms, 3), dtype=np.float64)
+		self.nearest_neighbors_data = np.zeros((self.num_molecules, self.max_num_atoms, 2), dtype=np.int32)
 		if self.train_dipole:
 			self.dipole_data = np.zeros((self.num_molecules, 3), dtype = np.float64)
 		if self.train_quadrupole:
@@ -237,6 +238,7 @@ class BehlerParinelloNetwork(object):
 			# self.mulliken_charges_data[i][:mol.NAtoms()] = mol.properties["mulliken_charges"]
 			self.energy_data[i] = mol.properties["atomization"]
 			self.gradient_data[i][:mol.NAtoms()] = mol.properties["gradients"]
+			self.nearest_neighbors_data[i][:mol.NAtoms()] = mol.nearest_ns
 			if self.train_dipole:
 				self.dipole_data[i] = mol.properties["dipole"]
 			if self.train_quadrupole:
@@ -309,6 +311,7 @@ class BehlerParinelloNetwork(object):
 		batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(self.nearest_neighbors_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		if self.train_sparse:
 			pair_batch_data = np.concatenate((self.batch_mol_idxs, self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]), axis=-1)
 			batch_data.append(pair_batch_data)
@@ -340,8 +343,10 @@ class BehlerParinelloNetwork(object):
 		batch_data.append(self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.energy_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		batch_data.append(self.nearest_neighbors_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		if self.train_sparse:
-			batch_data.append(self.pairs_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+			pair_batch_data = np.concatenate((self.batch_mol_idxs, self.pairs_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]), axis=-1)
+			batch_data.append(pair_batch_data)
 		if self.train_dropout:
 			batch_data.append(1.0)
 		return batch_data
@@ -410,7 +415,7 @@ class BehlerParinelloNetwork(object):
 		Returns:
 			Filled feed dictionary.
 		"""
-		pl_list = [self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.energy_pl, self.gradients_pl]
+		pl_list = [self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.energy_pl, self.gradients_pl, self.nearest_neighbors_pl]
 		if self.train_sparse:
 			pl_list.append(self.pairs_pl)
 		if self.train_dropout:
@@ -632,7 +637,7 @@ class BehlerParinelloNetwork(object):
 			num_mols += self.batch_size
 			self.summary_writer.add_summary(summaries, step * int(Ncase_train/self.batch_size) + ministep)
 		duration = time.time() - start_time
-		self.print_epoch(step, duration, train_loss, train_energy_loss, train_gradient_loss, train_rotation_loss, num_mols)
+		self.print_epoch(step, duration, train_loss, train_energy_loss, train_gradient_loss, train_rotation_loss)
 		return
 
 	def dipole_test_step(self, step):
@@ -751,7 +756,7 @@ class BehlerParinelloNetwork(object):
 		LOGGER.info("RMSE Energy: %11.8f  Forces: %11.8f", np.sqrt(np.mean(np.square(test_epoch_energy_errors))),
 		np.sqrt(np.mean(np.square(test_epoch_force_errors))))
 		LOGGER.info("Gaussian paramaters: %s", gaussian_params)
-		self.print_epoch(step, duration, test_loss, test_energy_loss, test_gradient_loss, test_rotation_loss, num_mols, testing=True)
+		self.print_epoch(step, duration, test_loss, test_energy_loss, test_gradient_loss, test_rotation_loss, testing=True)
 		return test_loss
 
 
@@ -1236,13 +1241,13 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 				self.run_metadata = tf.RunMetadata()
 		return
 
-	def print_epoch(self, step, duration, loss, energy_loss, gradient_loss, rotation_loss, num_mols, testing=False):
+	def print_epoch(self, step, duration, loss, energy_loss, gradient_loss, rotation_loss, testing=False):
 		if testing:
 			LOGGER.info("step: %5d  duration: %.3f  test loss: %.10f  energy loss: %.10f  gradient loss: %.10f  rotation loss: %.10f",
-			step, duration, loss / num_mols, energy_loss / num_mols, gradient_loss / num_mols, rotation_loss / num_mols)
+			step, duration, loss, energy_loss, gradient_loss, rotation_loss)
 		else:
 			LOGGER.info("step: %5d  duration: %.3f  train loss: %.10f  energy loss: %.10f  gradient loss: %.10f  rotation loss: %.10f",
-			step, duration, loss / num_mols, energy_loss / num_mols, gradient_loss / num_mols, rotation_loss / num_mols)
+			step, duration, loss, energy_loss, gradient_loss, rotation_loss)
 		return
 
 	def evaluate_prepare(self):
@@ -1418,6 +1423,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			self.quadrupole_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, 3])
 			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
+			self.nearest_neighbors_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, 2])
 			self.keep_prob_pl = tf.placeholder(self.tf_precision, shape=())
 			self.training_pl = tf.placeholder(tf.bool, shape=())
 			if self.train_sparse:
@@ -1432,7 +1438,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			# rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
 			# 				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
 			# 				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
-			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
+			# padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			# centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
 			# rotation_params = tf.gather_nd(rotation_params, padding_mask)
 			# rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
@@ -1444,6 +1450,9 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 					embed, mol_idx = tf_sparse_gaush_element_channel(canon_xyzs, self.Zs_pl, pair_Zs,
 												elements, self.gaussian_params, self.l_max)
 				else:
+					dxyzs, padding_mask = center_dxyzs(self.xyzs_pl, self.Zs_pl)
+					nearest_neighbors = tf.gather_nd(self.nearest_neighbors_pl, padding_mask)
+					canon_xyzs = gs_canonicalizev2(dxyzs, nearest_neighbors)
 					embed, mol_idx = tf_gaush_element_channelv3(canon_xyzs, self.Zs_pl,
 												elements, self.gaussian_params, self.l_max)
 			# for element in range(len(self.elements)):
