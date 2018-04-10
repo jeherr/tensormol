@@ -1117,6 +1117,31 @@ def gs_canonicalizev2(dxyzs, pair_Zs):
 	canon_xyzs = tf.einsum("lij,lkj->lki", transform_matrix, dxyzs)
 	return canon_xyzs
 
+def gs_canonicalizev3(dxyzs, nearest_neighbors):
+	case_indices = tf.range(0, tf.shape(dxyzs)[0])
+	first_axis = tf.gather_nd(dxyzs, tf.stack([case_indices, nearest_neighbors[:,0]], axis=1))
+	first_axis /= tf.norm(first_axis, axis=-1, keep_dims=True)
+	second_axis = tf.gather_nd(dxyzs, tf.stack([case_indices, nearest_neighbors[:,1]], axis=1))
+	second_axis -= tf.expand_dims(tf.einsum('ij,ij->i',first_axis, second_axis), axis=-1) * first_axis
+	second_axis /= tf.norm(second_axis, axis=-1, keep_dims=True)
+	third_axis = tf.cross(first_axis, second_axis)
+	transform_matrix = tf.stack([first_axis, second_axis, third_axis], axis=1)
+	canon_xyzs = tf.einsum("lij,lkj->lki", transform_matrix, dxyzs)
+	return canon_xyzs
+
+
+def center_dxyzs(xyzs, Zs):
+	padding_mask = tf.where(tf.not_equal(Zs, 0))
+	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
+	mol_coords = tf.gather(xyzs, padding_mask[:,0])
+	dxyzs = tf.expand_dims(central_atom_coords, axis=1) - mol_coords
+	Z_product = tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=1) * tf.gather(Zs, padding_mask[:,0])
+	mask = tf.expand_dims(tf.where(tf.not_equal(Z_product, 0), tf.ones_like(Z_product, dtype=eval(PARAMS["tf_prec"])),
+		tf.zeros_like(Z_product, dtype=eval(PARAMS["tf_prec"]))), axis=-1)
+	dxyzs *= mask
+	return dxyzs, padding_mask
+
+
 def sparsify_coords(xyzs, Zs, pairs):
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
