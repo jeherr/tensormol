@@ -23,7 +23,7 @@ if (0):
 	for i in range(300):
 		b.mols.append(m)
 
-if (1):
+if (0):
 	a = MSet("chemspider20_1_opt_withcharge_noerror_all")
 	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
 	c = MSet("chemspider12_clean_maxatom35")
@@ -36,7 +36,7 @@ if (1):
 	b.cut_max_grad(2.0)
 	b.Save("Hybrid1")
 
-if 0:
+if 1:
 	b = MSet("Hybrid1")
 	b.Load()
 	b.cut_max_num_atoms(40)
@@ -77,19 +77,31 @@ def polykern(r):
 		f = 0.00260868
 		g = -0.0000590516
 		h = 5.67472e-7
-
-	SRInner = 4.5*1.889725989
-	SROuter = 6.5*1.889725989
-	LRInner = 13.*1.889725989
-	LROuter = 15.*1.889725989
-	a = -18.325
-	b = 7.89288
-	c = -1.35458
-	d = 0.126578
-	e = -0.00695692
-	f = 0.000225092
-	g = -3.97476e-6
-	h = 2.95926e-8
+	if 0:
+		SRInner = 4.5*1.889725989
+		SROuter = 6.5*1.889725989
+		LRInner = 13.*1.889725989
+		LROuter = 15.*1.889725989
+		a = -18.325
+		b = 7.89288
+		c = -1.35458
+		d = 0.126578
+		e = -0.00695692
+		f = 0.000225092
+		g = -3.97476e-6
+		h = 2.95926e-8
+	SRInner = 6.0
+	SROuter = 8.0
+	LRInner = 13.
+	LROuter = 15.
+	a = -57.6862
+	b = 40.2721
+	c = -11.7317
+	d = 1.8806
+	e = -0.179183
+	f = 0.0101501
+	g = -0.000316629
+	h = 4.19773e-6
 	r2=r*r
 	r3=r2*r
 	r4=r3*r
@@ -134,14 +146,13 @@ def CanonicalizeGS(dxyzs,z2s):
 	# Above is (argshape[0]*argshape[1],argshape[2]+3,1)
 	v1 = tf.reduce_sum(togather*maskedD0s,axis=1) # (argshape[0]*argshape[1],3)
 	# Add in a small amount of the ordered vectors
-	v1 += 1e-1*tf.reshape(dxyzs[:,:,:1,:],(argshape[0]*argshape[1],3))
+	v1 += 0.05*tf.reshape(dxyzs[:,:,:1,:],(argshape[0]*argshape[1],3))
 	v1 *= safe_inv_norm(v1)
 
-	#weights1 = tf.exp(-1.0*tf.clip_by_value((rsq0-0.75)*(rsq0-0.75),0.0,20.0)) # Mol X MaxNAtom X MaxNAtom
 	weights1 = 1.0/((rsq0-1.1)*(rsq0-1.1)+1.0)
 	maskedD1s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights1)
 	v2 = tf.reduce_sum(togather*maskedD1s,axis=1)
-	v2 += 1e-1*tf.reshape(dxyzs[:,:,1:2,:],(argshape[0]*argshape[1],3))
+	v2 += 0.05*tf.reshape(dxyzs[:,:,1:2,:],(argshape[0]*argshape[1],3))
 	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 	v2 *= safe_inv_norm(v2)
@@ -158,7 +169,7 @@ class SparseCodedChargedGauSHNetwork:
 	"""
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 256 # Force learning strongly modulates what you can do.
+		self.batch_size = 128 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.MaxNeigh = self.MaxNAtom
 		self.learning_rate = 0.00008
@@ -166,9 +177,6 @@ class SparseCodedChargedGauSHNetwork:
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
 		self.AtomTypes = [1,6,7,8]
 		self.l_max = 3
-		#self.GaussParams = np.array([[0.35, 0.30], [0.70, 0.30], [1.05, 0.30], [1.40, 0.30], [1.75, 0.30], [2.10, 0.30], [2.45, 0.30],[2.80, 0.30], [3.15, 0.30], [3.50, 0.30], [3.85, 0.30], [4.20, 0.30], [4.55, 0.30], [4.90, 0.30]])
-		#self.GaussParams = np.array([[0.36, 0.25], [0.70, 0.24], [1.05, 0.24], [1.38, 0.23], [1.70, 0.23],[2.08, 0.23], [2.79, 0.23], [2.42, 0.23],[3.14, 0.23], [3.50, 0.23], [3.85, 0.23], [4.20, 0.23], [4.90, 0.23], [5.50, 0.22], [6.0, 0.22]])
-		#self.GaussParams = np.array([[ 0.37477018,  0.25175677],[ 0.67658861,  0.23472445], [ 1.05008962,  0.23588795],[ 1.38640627,  0.22124612], [ 1.68125033,  0.21762672], [ 2.05397151,  0.21847124], [ 2.79472851,  0.15731322], [ 3.13242662,  0.19378809], [ 3.80189948,  0.18397461], [ 4.89845145,  0.13036654], [ 5.50038598,  0.11493009]])
 		self.GaussParams = np.array([[ 0.38013613,  0.25685447],[ 0.67603647,  0.23431556], [ 1.04691905,  0.23425959],[ 1.38447442,  0.21977644], [ 1.69198147,  0.21479645], [ 2.03830524,  0.20928990], [ 2.79550466,  0.15506908], [ 3.12586145,  0.18069188], [ 3.80089228,  0.17213186], [ 4.90006247, 0.12377406], [ 5.50127822, 0.11079252]])
 		self.nrad = len(self.GaussParams)
 		self.nang = (self.l_max+1)**2
@@ -384,9 +392,8 @@ class SparseCodedChargedGauSHNetwork:
 		tore *= -1
 		for i,rl in enumerate(RawLists): # mol
 			for j,a in enumerate(rl):
-				sa = sorted(a)
 				if (zs_[i,j] != 0): # atom
-					for k,l in enumerate(sa): #atom
+					for k,l in enumerate(a): #atom
 						if (l < natom[i]):
 							tore[i,j,k] = l
 		return tore, maxneigh
@@ -472,6 +479,106 @@ class SparseCodedChargedGauSHNetwork:
 		l2e = tf.layers.dense(inputs=l1pe,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2e")
 		# in the final layer use the atom code information.
 		l2pe = tf.concat([l2e,CODES,tf.reshape(AtomCharges,(ncase,1))],axis=-1)
+		l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
+		AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))+AvEs
+		return AtomEnergies, AtomCharges
+
+	def ChargeEmbeddedModel(self, dxyzs, Zs, zjs, gather_inds, pair_mask, gauss_params, atom_codes, l_max):
+		"""
+		This version creates a network to integrate weight information.
+		and then works like any ordinary network.
+		NOTE: This network is universal in the sense that it works on ANY atom!
+
+		Args:
+			dxyzs: (nmol X maxnatom X maxneigh x 3) difference vector.
+			Zs: mol X maxNatom X 1 atomic number tensor.
+			zjs: nmol X maxnatom x maxneigh X 1 neighbor atomic numbers.
+			#jcodes: (nmol X maxnatom x maxneigh X 4) atomic code tensor for atom j
+			pair_mask: (nmol X maxnatom X maxneigh x 1) multiplicative mask.
+			gauss_params: (nrad X 2) tensor of gaussian paramters.  (ang.)
+			l_max: max angular momentum of embedding.
+		Returns:
+			mol X maxNatom X 1 tensor of atom energies, charges.
+			these include constant shifts.
+		"""
+		ncase = self.batch_size*self.MaxNAtom
+		nchan = self.AtomCodes.shape[1]
+		nembdim = self.nembdim
+
+		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
+		Atom12Real = tf.not_equal(pair_mask,0.)
+ 		Atom12Real4 = tf.tile(Atom12Real,[1,1,1,nchan])
+		Atom12Real5 = tf.tile(Atom12Real,[1,1,1,nchan+1])
+
+		jcodes0 = tf.reshape(tf.gather(atom_codes,zjs),(self.batch_size,self.MaxNAtom,self.MaxNeigh,nchan))
+		jcodes = tf.where(Atom12Real4 , jcodes0 , tf.zeros_like(jcodes0))# mol X maxNatom X maxnieh X 4
+
+		dist_tensor = tf.clip_by_value(tf.norm(dxyzs+1.e-36,axis=-1),1e-36,1e36)
+		# NMOL X MAXNATOM X MAXNATOM X NSH
+		SH = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)*pair_mask # mol X maxNatom X maxNeigh X nang.
+		RAD = tf_gauss(dist_tensor, gauss_params)*pair_mask # mol X maxNatom X maxNeigh X nrad.
+		# Perform each of the contractions.
+		SHRAD = tf.einsum('mijk,mijl->mijkl',SH,RAD) # mol X maxnatom X maxneigh X nang X nrad
+		#CODES = tf.reshape(tf.gather(elecode, Zs, axis=0),(self.batch_size,self.MaxNAtom,self.ncodes)) # mol X maxNatom X 4
+		emb = tf.einsum('mijkl,mijn->mikln',SHRAD,jcodes)
+
+		AvEs = tf.reshape(tf.gather(self.AvE_tf, Zs, axis=0),(self.batch_size,self.MaxNAtom,1)) # (mol * maxNatom) X 1
+		AvQs = tf.reshape(tf.gather(self.AvQ_tf, Zs, axis=0),(self.batch_size,self.MaxNAtom)) # (mol * maxNatom) X 1
+		CODES = tf.reshape(tf.gather(self.atom_codes, Zs, axis=0),(ncase,nchan)) # (mol * maxNatom) X 4
+		# Combine the codes of the main atom and the sensed atom
+		# Using a hinton-esque tensor decomposition.
+		CODEKERN1 = tf.get_variable(name="CodeKernel", shape=(nchan,nchan),dtype=self.prec)
+		CODEKERN2 = tf.get_variable(name="CodeKernel2", shape=(nchan,nchan),dtype=self.prec)
+		# combine the weight kernel with the codes.
+		mix1 = tf.matmul(CODES,CODEKERN1) # ncase X ncode
+		embrs = tf.reshape(emb,(ncase,-1,nchan))
+		# Ensure any zero cases don't contribute.
+		msk = tf.where(tf.equal(Zrs,0.0),tf.zeros_like(Zrs),tf.ones_like(Zrs))
+		embrs *= msk[:,:,tf.newaxis]
+		weighted = tf.einsum('ikj,ij->ikj',embrs,mix1)
+		weighted2 = tf.einsum('ikj,jl->ikl',weighted,CODEKERN2)
+		# Now pass it through as usual.
+		l0 = tf.reshape(weighted2,(ncase,-1))
+		l0p = tf.concat([l0,CODES],axis=-1)
+
+		l1q = tf.layers.dense(inputs=l0p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1q")
+		l1pq = tf.concat([l1q,CODES],axis=-1)
+		l2q = tf.layers.dense(inputs=l1pq,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2q")
+		l2pq = tf.concat([l2q,CODES],axis=-1)
+		l3q = tf.layers.dense(l2pq,units=1,activation=None,use_bias=False,name="Dense3q")*msk
+		charges = tf.reshape(l3q,(self.batch_size,self.MaxNAtom))
+		# Set the total charges to neutral by evenly distributing any excess charge.
+		excess_charges = tf.reduce_sum(charges,axis=[1])
+		n_atoms = tf.reduce_sum(tf.where(tf.equal(Zs,0),Zs,tf.ones_like(Zs)),axis=[1,2])
+		fix = -1.0*excess_charges/tf.cast(n_atoms,tf.float64)
+		AtomCharges = charges + fix[:,tf.newaxis] + AvQs
+
+		# Now concatenate the charges onto the embedding for the energy network.
+		qcodes = tf.reshape(tf.gather_nd(AtomCharges, gather_inds),(self.batch_size,self.MaxNAtom,self.MaxNeigh,1))
+		jcodes0_wq = tf.concat([jcodes,qcodes],axis=-1)
+		jcodes_wq = tf.where(Atom12Real5 , jcodes0_wq , tf.zeros_like(jcodes0_wq))# mol X maxNatom X maxnieh X 4
+		emb_wq = tf.einsum('mijkl,mijn->mikln',SHRAD,jcodes_wq)
+		CODES_wq = tf.concat([CODES,tf.reshape(AtomCharges,(ncase,1))],axis=-1)
+		CODEKERN1_wq = tf.get_variable(name="CodeKernel_wq", shape=(nchan+1,nchan+1),dtype=self.prec)
+		CODEKERN2_wq = tf.get_variable(name="CodeKernel2_wq", shape=(nchan+1,nchan+1),dtype=self.prec)
+		# combine the weight kernel with the codes.
+		mix1_wq = tf.matmul(CODES_wq,CODEKERN1_wq) # ncase X ncode
+		embrs_wq = tf.reshape(emb_wq,(ncase,-1,nchan+1))
+		# Ensure any zero cases don't contribute.
+		msk_wq = tf.where(tf.equal(Zrs,0.0),tf.zeros_like(Zrs),tf.ones_like(Zrs))
+		embrs_wq *= msk_wq[:,:,tf.newaxis]
+		weighted_wq = tf.einsum('ikj,ij->ikj',embrs_wq,mix1_wq)
+		weighted2_wq = tf.einsum('ikj,jl->ikl',weighted_wq,CODEKERN2_wq)
+		# Now pass it through as usual.
+		l0_wq = tf.reshape(weighted2_wq,(ncase,-1))
+		l0p_wq = tf.concat([l0_wq,CODES_wq],axis=-1)
+
+		# Energy network.
+		l1e = tf.layers.dense(inputs=l0p_wq,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1e")
+		l1pe = tf.concat([l1e,CODES_wq],axis=-1)
+		l2e = tf.layers.dense(inputs=l1pe,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2e")
+		# in the final layer use the atom code information.
+		l2pe = tf.concat([l2e,CODES_wq],axis=-1)
 		l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
 		AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))+AvEs
 
@@ -570,7 +677,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.groundTruthQ_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom), dtype = tf.float64,name="GTQs") # Charges
 
 		# Constants
-		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning)
+		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec)
 		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec)
 		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec)
 		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec)
@@ -600,29 +707,30 @@ class SparseCodedChargedGauSHNetwork:
 		else:
 			tmpxyzs = self.xyzs_pl
 
-		nxs = tf.gather_nd(tmpxyzs,gather_inds) # mol X maxNatom X maxneigh X 3
-		zxs0 = tf.gather_nd(self.zs_pl, gather_inds) # mol X maxNatom X maxNeigh X 1
-		zxs = tf.where(Atom12Real, zxs0, tf.zeros_like(zxs0)) # mol X maxNatom X maxneigh X 1
+		zjs0 = tf.gather_nd(self.zs_pl, gather_inds) # mol X maxNatom X maxNeigh X 1
+		zjs = tf.where(Atom12Real, zjs0, tf.zeros_like(zjs0)) # mol X maxNatom X maxneigh X 1
 		coord1 = tf.expand_dims(tmpxyzs, axis=2) # mol X maxnatom X 1 X 3
 		coord2 = tf.gather_nd(tmpxyzs,gather_inds)
 		diff0 = (coord1-coord2)
-
 		self.dxyzs = tf.where(Atom12Real3, diff0, tf.zeros_like(diff0))
 
 		if (self.Canonicalize):
-			self.cdxyzs, self.CanonicalAxes =  CanonicalizeGS(self.dxyzs, zxs)
-			#self.cdxyzs, self.CanonicalAxes = tf.where(Atom12Real3, CanonicalizeGS(self.dxyzs, zxs) , tf.zeros_like(diff0))
+			self.cdxyzs, self.CanonicalAxes =  CanonicalizeGS(self.dxyzs, zjs)
+			#self.cdxyzs, self.CanonicalAxes = tf.where(Atom12Real3, CanonicalizeGS(self.dxyzs, zjs) , tf.zeros_like(diff0))
 		else:
 			self.cdxyzs = self.dxyzs
 
 		# Sparse Embedding.
-		jcodes0 = tf.reshape(tf.gather(self.atom_codes,zxs),(self.batch_size,self.MaxNAtom,self.MaxNeigh,4))
-		jcodes = tf.where(Atom12Real4 , jcodes0 , tf.zeros_like(jcodes0))# mol X maxNatom X maxnieh X 4
-		if (not self.DoCodeLearning):
-			tf.stop_gradient(jcodes)
-		self.embedded = self.Embed(self.cdxyzs, jcodes, self.sparse_mask, self.gp_tf, self.l_max)
-		# Sparse Energy.
-		self.AtomNetEnergies,self.AtomCharges = self.AtomEmbToAtomEnergyAndCharge(self.embedded,self.zs_pl)
+		if 0:
+			jcodes0 = tf.reshape(tf.gather(self.atom_codes,zjs),(self.batch_size,self.MaxNAtom,self.MaxNeigh,4))
+			jcodes = tf.where(Atom12Real4 , jcodes0 , tf.zeros_like(jcodes0))# mol X maxNatom X maxnieh X 4
+			if (not self.DoCodeLearning):
+				tf.stop_gradient(jcodes)
+			self.embedded = self.Embed(self.cdxyzs, jcodes, self.sparse_mask, self.gp_tf, self.l_max)
+			# Sparse Energy.
+			self.AtomNetEnergies,self.AtomCharges = self.AtomEmbToAtomEnergyAndCharge(self.embedded,self.zs_pl)
+
+		self.AtomNetEnergies,self.AtomCharges = self.ChargeEmbeddedModel(self.cdxyzs, self.zs_pl, zjs,gather_inds, self.sparse_mask, self.gp_tf, self.atom_codes, self.l_max)
 
 		if (self.DoChargeEmbedding or self.DoChargeLearning or self.DoDipoleLearning):
 			self.MolDipoles = self.ChargeToDipole(self.xyzs_pl,self.zs_pl,self.AtomCharges)
@@ -751,7 +859,7 @@ if 0:
 	for i,d in enumerate(np.linspace(-.3,.3,npts)):
 		print d,EF(b.mols[i].coords)[1]
 
-if 1:
+if 0:
 	mi = np.random.randint(len(b.mols))
 	m = b.mols[mi]
 	print(m.atoms, m.coords)
@@ -762,4 +870,41 @@ if 1:
 	m.Distort(0.2)
 	m=Opt.OptGD(m,"FromDistorted")
 
-# Check finite difference forces.
+if 0:
+	from matplotlib import pyplot as plt
+	import matplotlib.cm as cm
+	m = Mol()
+	m.FromXYZString(MethCoords(1.,1.,1.))
+	EF = net.GetEnergyForceRoutine(m)
+
+	Opt = GeomOptimizer(EF)
+	m=Opt.OptGD(m,"YYY")
+
+	atomnumber = 0
+	nx, ny = 80, 80
+	x = np.linspace(-.2, .2, nx)
+	y = np.linspace(-.2, .2, ny)
+	X, Y = np.meshgrid(x, y)
+	fig = plt.figure()
+	ax = fig.add_subplot(111)
+
+	Ens = np.zeros_like(X)
+	Fx = np.zeros_like(X)
+	Fy = np.zeros_like(X)
+
+	for xi in range(X.shape[0]):
+		for yi in range(X.shape[1]):
+			ctmp = m.coords.copy()
+			ctmp[atomnumber][0]+=X[xi,yi]
+			ctmp[atomnumber][1]+=Y[xi,yi]
+			e,f = EF(ctmp)
+			f/=-JOULEPERHARTREE
+			Ens[xi,yi] = e
+			Fx[xi,yi] = f[atomnumber,0]
+			Fy[xi,yi] = f[atomnumber,1]
+
+	color = 2 * np.log(np.hypot(Fx, Fy))
+	ax.streamplot(x, y, Fx, Fy, color=color, linewidth=1, cmap=plt.cm.inferno,
+		density=2, arrowstyle='->', arrowsize=1.5)
+	plt.pcolormesh(X, Y, Ens, cmap = cm.gray)
+	plt.show()
