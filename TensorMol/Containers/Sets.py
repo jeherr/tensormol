@@ -73,7 +73,10 @@ class MSet:
 			b[i] = m.properties["energy"]
 			for atom in range(m.NAtoms()):
 				noa[At.index(m.atoms[atom])]+=1
-				coa[At.index(m.atoms[atom])]+=m.properties["charges"][atom]
+				try:
+					coa[At.index(m.atoms[atom])]+=m.properties["charges"][atom]
+				except:
+					coa[At.index(m.atoms[atom])]+=m.properties["mul_charge"][atom]
 		x,r = np.linalg.lstsq(a,b)[:2]
 		averageqs = coa/noa
 		for i,e in enumerate(At):
