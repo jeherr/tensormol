@@ -1463,14 +1463,14 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
 				self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
 				self.total_energy = self.bp_energy
-				self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)
+				self.energy_loss = self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
 				tf.summary.scalar("energy loss", self.energy_loss)
 				tf.add_to_collection('energy_losses', self.energy_loss)
 			with tf.name_scope('gradients'):
 				xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 				self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
-				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
 				if self.train_gradients:
 					tf.add_to_collection('energy_losses', self.gradient_loss)
 					tf.summary.scalar("gradient loss", self.gradient_loss)
