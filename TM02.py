@@ -39,7 +39,7 @@ if (0):
 if 1:
 	b = MSet("Hybrid1")
 	b.Load()
-	b.cut_max_num_atoms(40)
+	b.cut_max_num_atoms(50)
 	b.cut_max_grad(2.0)
 
 MAX_ATOMIC_NUMBER = 55
