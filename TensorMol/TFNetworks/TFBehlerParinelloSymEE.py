@@ -2823,6 +2823,7 @@ class MolInstance_DirectBP_EandG_SymChannel_Multi(MolInstance_DirectBP_EandG_Sym
 			#print ("ministep:", ministep, " total step:",int(Ncase_train/self.batch_size))
 			t = time.time()
 			batch_data = self.TData.GetTrainBatch(self.batch_size) + [self.keep_prob]
+			t0 = time.time()
 			actual_mols  = self.batch_size
 			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal = self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal], feed_dict=self.fill_feed_dict(batch_data))
 
@@ -2838,7 +2839,8 @@ class MolInstance_DirectBP_EandG_SymChannel_Multi(MolInstance_DirectBP_EandG_Sym
 			duration = time.time() - start_time
 			num_of_mols += actual_mols
 			#print ("Etotal:", Etotal)
-			#print ("time cost:", time.time() - t)
+			#print ("total time cost:", time.time() - t)
+			#print ("TF time cost:", time.time() - t0)
 			#print ("Hyb:", Hyb[0])
 			#exit()
 			#print ("Scatter_Sym:", np.any(np.isnan(Scatter_Sym[1])),np.any(np.isnan(Scatter_Sym[2])),np.any(np.isnan(Scatter_Sym[0])), energy_loss, grads_loss)
