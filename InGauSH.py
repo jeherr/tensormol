@@ -14,6 +14,12 @@ def MaskedReduceMean(masked,pair_mask,axis=-2):
 	denom = tf.reduce_sum(pair_mask,axis=-2,keepdims=True)+1e-15
 	return num/denom
 
+def safe_inv_norm(x_):
+	nrm = tf.clip_by_value(tf.norm(x_,axis=-1,keepdims=True),1e-36,1e36)
+	nrm_ok = tf.logical_and(tf.not_equal(nrm,0.),tf.logical_not(tf.is_nan(nrm)))
+	safe_nrm = tf.where(nrm_ok,nrm,tf.ones_like(nrm))
+	return tf.where(nrm_ok,1.0/safe_nrm,tf.zeros_like(nrm))
+
 def sftpluswparam(x):
 	return tf.log(1.0+tf.exp(100.*x))/100.0
 
@@ -47,6 +53,7 @@ def CanonicalizePCA(dxyzs, pair_mask ,ChiralInv=True):
 	tore2 = tore*signc
 	return tore2
 
+
 def CanonicalizeGS(dxyzs):
 	"""
 	Canonicalize using nearest three atoms and Graham-Schmidt.
@@ -66,8 +73,10 @@ def CanonicalizeGS(dxyzs):
 	defaultAxes = tf.tile(tf.reshape(4.0*tf.eye(3,dtype=tf.float64),(1,1,3,3)),[argshape[0],argshape[1],1,1])
 	dxyzsandDef = tf.concat([dxyzs,defaultAxes],axis=2)
 
-	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[1],3))
-	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[1]+3,3))
+	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
+	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[2]+3,3))
+	togather += tf.random_normal(shape=(argshape[0]*argshape[1],argshape[2]+3,3), mean=0.0, stddev=1e-20,dtype=tf.float64)
+
 	weights = tf.exp(-1.0*tf.norm(dxyzsandDef,axis=-1)) # Mol X MaxNAtom X MaxNAtom
 	maskedDs = tf.where(tf.equal(weights,1.),tf.zeros_like(weights),weights)
 	#weights = (-1.0*tf.norm(dxyzsandDef,axis=-1))
@@ -93,14 +102,14 @@ def CanonicalizeGS(dxyzs):
 #	v10 = tf.Print(v10,[w1],"VsWW",summarize=5)
 	# So the first axis continuously changes when 1,2 swap.
 	v1 = w1*v10 + w2*v20
-	v1 /= tf.clip_by_value(tf.norm(v1,axis=-1,keepdims=True),1e-36,1e36)
+	v1 *= safe_inv_norm(v1)
 	v2 = w2*v10 + w1*v20 + w3*v30
 	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
-	v2 /= tf.clip_by_value(tf.norm(v2,axis=-1,keepdims=True),1e-36,1e36)
+	v2 *= safe_inv_norm(v2)
 	v3 = w2*v20 + w3*v30
 	v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
 	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
-	v3 /= tf.clip_by_value(tf.norm(v3,axis=-1,keepdims=True),1e-36,1e36)
+	v3 *= safe_inv_norm(v3)
 	vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 	#vs = tf.Print(vs,[vs[0,0,:],vs[0,1,:],vs[0,2,:]],"Vs")
 	#vs = tf.Print(vs,[w1,w2,w3],"VsWW",summarize=100000)
@@ -110,7 +119,7 @@ def CanonicalizeGS(dxyzs):
 class InGauShBPNetwork:
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 64 # Force learning strongly modulates what you can do.
+		self.batch_size = 32 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.learning_rate = 0.00005
 		self.AtomCodes = ELEMENTCODES #np.random.random(size=(MAX_ATOMIC_NUMBER,4))
@@ -338,8 +347,23 @@ class InGauShBPNetwork:
 			print("AtomCodes: ",self.sess.run([self.atom_codes])[0])
 			feed_dict = self.NextBatch(self.mset)
 			ens,frcs,summary = self.sess.run([self.MolEnergies,self.MolGrads,self.summary_op], feed_dict=feed_dict, options=self.options, run_metadata=self.run_metadata)
-			for i in range(10):
+			for i in range(6):
+				#print("Zs:",feed_dict[self.zs_pl][i])
+				#print("xyz:",feed_dict[self.xyzs_pl][i])
+				#print("NL:",feed_dict[self.nl_pl][i])
+				#print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i], frcs[i], feed_dict[self.groundTruthG_pl][i] )
 				print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i])
+			MAEF = np.average(np.abs(frcs-feed_dict[self.groundTruthG_pl]))
+			if (MAEF > 1.0 or np.any(np.isnan(MAEF))):
+				# locate the problem case.
+				for i,m in enumerate(mols):
+					MAEFm = np.average(np.abs(frcs[i] - feed_dict[self.groundTruthG_pl][i]))
+					if (MAEFm>1.0 or np.any(np.isnan(MAEFm))):
+						print("--------------")
+						print(m)
+						print(frcs[i])
+						print(feed_dict[self.groundTruthG_pl][i])
+						print("--------------")
 			print("Mean Abs Error: (Energy)", np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
 			print("Mean Abs Error (Force): ", np.average(np.abs(frcs-feed_dict[self.groundTruthG_pl])))
 			if (self.DoRotGrad):
@@ -366,7 +390,7 @@ class InGauShBPNetwork:
 	def Prepare(self):
 		tf.reset_default_graph()
 
-		self.DoRotGrad = False
+		self.DoRotGrad = True
 		self.DoForceLearning = False
 		self.DoCodeLearning = False
 
@@ -399,7 +423,7 @@ class InGauShBPNetwork:
 
 		# Optional. Verify that the canonicalized differences are invariant.
 		if self.DoRotGrad:
-			self.RotGrad = tf.gfradients(self.embedded,psis)[0]
+			self.RotGrad = tf.gradients(self.embedded,psis)[0]
 			tf.summary.scalar('RotGrad',tf.reduce_sum(self.RotGrad))
 
 		# Add force error?
@@ -452,7 +476,7 @@ class InGauShBPNetwork:
 		#self.sess.graph.finalize()
 
 net = InGauShBPNetwork(b)
-net.Load()
+#net.Load()
 net.Train()
 if 0:
 	mi = np.random.randint(len(b.mols))

@@ -56,6 +56,8 @@ class MSet:
 		Returns:
 			AvE,AvQ: dictionaries mapping Atomic number onto the averages.
 		"""
+		if (not "energy" in self.mols[-1].properties.keys()):
+			return {},{}
 		At = self.AtomTypes().tolist()
 		AvE = {x:0. for x in At}
 		AvQ = {x:0. for x in At}
@@ -164,6 +166,13 @@ class MSet:
 		cut_down_mols = []
 		for mol in self.mols:
 			if mol.atoms.shape[0] <= max_n_atoms:
+				cut_down_mols.append(mol)
+		self.mols = cut_down_mols
+
+	def cut_max_grad(self, max_grad=1.0):
+		cut_down_mols = []
+		for mol in self.mols:
+			if (np.max(np.abs(mol.properties['gradients']))<max_grad):
 				cut_down_mols.append(mol)
 		self.mols = cut_down_mols
 

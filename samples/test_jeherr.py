@@ -298,9 +298,10 @@ def train_energy_GauSH(mset):
 def train_energy_GauSHv2(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_LMAX"] = 5
-	PARAMS["train_gradients"] = False
+	PARAMS["train_gradients"] = True
 	PARAMS["train_dipole"] = False
 	PARAMS["train_rotation"] = False
+	PARAMS["train_sparse"] = False
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.0001
@@ -884,6 +885,7 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # PARAMS["SH_NRAD"] = 16
 # a = MSet("SmallMols_rand")
 # a.Load()
+# # a.ReadXYZ()
 # # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
 # # # # Tesselate that water to create a box
 # # ntess = 16
@@ -898,14 +900,14 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # 	b.mols.append(a.mols[i])
 # 	# print b.mols[i].NAtoms()
 # maxnatoms = b.MaxNAtom()
-# # for mol in a.mols:
-# # 	mol.make_neighbors(7.0)
-# # max_num_pairs = a.max_neighbors()
+# # for mol in b.mols:
+# 	# mol.make_neighbors(7.0)
+# # max_num_pairs = b.max_neighbors()
 #
 # zlist = []
 # xyzlist = []
 # gradlist = []
-# # pairlist = []
+# nnlist = []
 # # n_atoms_list = []
 # for i, mol in enumerate(b.mols):
 # 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float32)
@@ -914,26 +916,25 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # 	paddedz[:mol.atoms.shape[0]] = mol.atoms
 # 	# paddedgrad = np.zeros((maxnatoms,3), dtype=np.float32)
 # 	# paddedgrad[:mol.atoms.shape[0]] = mol.properties["gradients"]
-# 	# paddedpairs = np.zeros((maxnatoms, max_num_pairs, 4), dtype=np.int32)
+# 	paddednn = np.zeros((maxnatoms, 2), dtype=np.int32)
+# 	paddednn[:mol.atoms.shape[0]] = mol.nearest_ns
 # 	# for j, atom_pairs in enumerate(mol.neighbor_list):
-# 	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]),
-# 	# 			np.array([j for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]),
-# 	# 			mol.atoms[mol.neighbor_list[j]]]).T
+# 	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]), mol.atoms[atom_pairs]], axis=-1)
 # 	# 	paddedpairs[j,:len(atom_pairs)] = molpair
 # 	xyzlist.append(paddedxyz)
 # 	zlist.append(paddedz)
 # 	# gradlist.append(paddedgrad)
-# 	# pairlist.append(paddedpairs)
+# 	nnlist.append(paddednn)
 # 	# n_atoms_list.append(mol.NAtoms())
 # 	# if i == 1:
 # 	# 	break
 # xyzstack = tf.stack(xyzlist)
 # zstack = tf.stack(zlist)
 # # gradstack = tf.stack(gradlist)
-# # pairstack = tf.stack(pairlist)
+# nnstack = tf.stack(nnlist)
 # # natomsstack = tf.stack(n_atoms_list)
 # # r_cutoff = 6.5
-# # gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
+# # gauss_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
 # # elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
 # # tmp2 = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3)
 # # tmp = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3, rotation_params)
@@ -953,8 +954,13 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # # rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
 # # tiled_Zs = tf.gather(zstack, padding_mask[:,0])
 # # centered_xyzs = tf.where(tf.not_equal(tiled_Zs, 0), centered_xyzs, tf.zeros_like(centered_xyzs))
-# tmp = gs_canonicalizev2(xyzstack, zstack)
-# grad = tf.gradients(tmp, xyzstack)[0]
+# # pair_Zs = sparsify_coords(xyzstack, zstack, pairstack)
+# dxyzs, padding_mask = center_dxyzs(xyzstack, zstack)
+# nearest_neighbors = tf.gather_nd(nnstack, padding_mask)
+# tmp = gs_canonicalizev3(dxyzs, nearest_neighbors)
+# # embed = tf_sparse_gaush_element_channel(tmp, zstack, pair_Zs, elements, gauss_params, 5)
+# # grad = tf.gradients(tmp, xyzstack)[0]
+# # grads = tf.scatter_add(tf.Variable(tf.zeros(grad.dense_shape)), grad.indices, grad.values)
 # # grad = tf.gradients(tmp, rotation_params)[0]
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
@@ -964,12 +970,15 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
 # @TMTiming("test")
 # def get_pairs():
-# 	tmp3 = sess.run(grad, options=options, run_metadata=run_metadata)
+# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
 # 	return tmp3
 # tmp5 = get_pairs()
 # print tmp5
+# # print tmp6
 # print tmp5.shape
-# # m=Mol(zlist[0], tmp5[1])
+# # print tmp6.shape
+# # print np.concatenate([np.zeros((1,3)), tmp5[0]], axis=0)
+# # m=Mol(zlist[0], np.concatenate([np.zeros((1,3)), tmp5[0]], axis=0))
 # # m.WriteXYZfile(fname="tmp", mode="w")
 # # print tmp6.shape
 # # print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)

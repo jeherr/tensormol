@@ -208,6 +208,7 @@ class GeomOptimizer:
 		rmsgrad = 10.0
 		step=0
 		m = Mol(m_.atoms,m_.coords)
+		self.m = Mol(m_.atoms,m_.coords)
 		mol_hist = []
 		prev_m = Mol(m.atoms, m.coords)
 		#print("Orig Coords", m.coords)
