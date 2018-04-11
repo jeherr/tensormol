@@ -1236,6 +1236,7 @@ static PyObject* Make_NListNaive(PyObject *self, PyObject  *args)
 	for (int i=0; i < nreal; ++i)
 	{
 		PyObject* tl = PyList_New(tmp[i].size());
+		std::sort(tmp[i].begin(),tmp[i].end());
 		for (int j=0; j<tmp[i].size();++j)
 		{
 			PyObject* ti = PyInt_FromLong(tmp[i][j]);
