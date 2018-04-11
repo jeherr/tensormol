@@ -1248,6 +1248,112 @@ static PyObject* Make_NListNaive(PyObject *self, PyObject  *args)
 }
 
 //
+// Like the above, but returns a -1 padded Tensor with sorted Neighbor inds.
+// And works batchwise on a Nmol X MaxNatom X 3 distance tensor.
+//
+static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
+{
+	PyArrayObject *xyzs;
+	PyArrayObject *zs;
+	double rng;
+	int nreal;
+	int DoPerms;
+	if (!PyArg_ParseTuple(args, "O!O!dii", &PyArray_Type, &xyzs, &PyArray_Type, &zs, &rng, &nreal, &DoPerms))
+		return NULL;
+	double *xyzs_data;
+	int32_t *z_data;
+	xyzs_data = (double*) ((PyArrayObject*) xyzs)->data;
+	z_data = (int32_t*) ((PyArrayObject*) zs)->data;
+	const int nmol = (xyzs->dimensions)[0];
+	const int nat = (xyzs->dimensions)[1];
+
+	typedef std::vector< std::vector<int> > vov;
+	typedef std::vector< vov > vovov;
+	vovov NLS;
+
+	for (int k=0; k<nmol; ++k)
+	{
+		double* xyz_data = xyzs_data+k*(3*nat);
+		std::vector<double> XX;
+		XX.assign(xyz_data,xyz_data+3*nat);
+		std::vector<int> y(nat);
+		std::size_t n(0);
+		std::generate(y.begin(), y.end(), [&]{ return n++; });
+		std::sort(y.begin(),y.end(), [&](int i1, int i2) { return XX[i1*3] < XX[i2*3]; } );
+		// So y now contains sorted x indices, do the skipping Neighbor list.
+		std::vector< std::vector<int> > tmp(nreal);
+		for (int i=0; i< nat; ++i)
+		{
+			int I = y[i];
+			// We always work in order of increasing X...
+			for (int j=i+1; j < nat; ++j)
+			{
+				int J = y[j];
+				if (!(I<nreal || J<nreal))
+					continue;
+
+				if (z_data[k*(nat)+I]<=0 || z_data[k*(nat)+J]<=0)
+					continue;
+				if (fabs(XX[I*3] - XX[J*3]) > rng)
+					break;
+
+				double dx = (xyz_data[I*3+0]-xyz_data[J*3+0]);
+				double dy = (xyz_data[I*3+1]-xyz_data[J*3+1]);
+				double dz = (xyz_data[I*3+2]-xyz_data[J*3+2]);
+				double dij = sqrt(dx*dx+dy*dy+dz*dz) + 0.0000000000001;
+				if (dij < rng)
+				{
+					if (I<J)
+					{
+						tmp[I].push_back(J);
+						if (J<nreal && DoPerms==1)
+							tmp[J].push_back(I);
+					}
+					else
+					{
+						tmp[J].push_back(I);
+						if (I<nreal && DoPerms==1)
+							tmp[I].push_back(J);
+					}
+				}
+			}
+		}
+		NLS.push_back(tmp);
+	}
+	// Determine the maximum number of neighbors and make a tensor.
+	int MaxNeigh = 0;
+	for (vovov::iterator it = NLS.begin(); it != NLS.end();++it)
+	{
+		vov& tmp = *it;
+		for (vov::iterator it2 = tmp.begin(); it2 != tmp.end(); ++it2)
+		{
+			if (it2->size() > MaxNeigh)
+				MaxNeigh = it2->size();
+			std::sort(it2->begin(),it2->end());
+		}
+	}
+	npy_intp outdim2[3] = {nmol,nat,MaxNeigh};
+	PyObject* NLTensor = PyArray_ZEROS(3, outdim2, NPY_INT32,0);
+	int32_t* NL_data = (int32_t*) ((PyArrayObject*)NLTensor)->data;
+	for (int i = 0; i<nmol; ++i)
+	{
+		for (int j = 0; j<nat; ++j)
+		{
+			for (int k=0; k<MaxNeigh; ++k)
+			{
+				if (k < NLS[i][j].size())
+					NL_data[i*(nat*MaxNeigh)+j*MaxNeigh+k] = (int32_t)(NLS[i][j][k]);
+				else
+					NL_data[i*(nat*MaxNeigh)+j*MaxNeigh+k] = (int32_t)(-1);
+			}
+		}
+	}
+	return NLTensor;
+}
+
+
+
+//
 // Linear scaling version of the above routine.
 // This should NOT be used for training.
 //
@@ -2175,6 +2281,8 @@ static PyMethodDef EmbMethods[] =
 	"Make_NListLinear method"},
 	{"Make_NListNaive", Make_NListNaive, METH_VARARGS,
 	"Make_NListNaive method"},
+	{"Make_NLTensor", Make_NLTensor, METH_VARARGS,
+	"Make_NLTensor method"},
 	{"DipoleAutoCorr", DipoleAutoCorr, METH_VARARGS,
 	"DipoleAutoCorr method"},
 	{"Make_DistMat", Make_DistMat, METH_VARARGS,
