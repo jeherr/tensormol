@@ -683,6 +683,10 @@ class Mol:
 		self.neighbor_list = MolEmb.Make_NListNaive(self.coords, r_cutoff, self.NAtoms(), True)
 		self.neighbor_list = [sorted(neighbors) for neighbors in self.neighbor_list]
 
+	def nearest_two_neighbors(self):
+		self.BuildDistanceMatrix()
+		self.nearest_ns = np.argsort(self.DistMatrix, axis=1)[:,1:3]
+
 	def max_neighbors(self):
 		return max([len(atom_neighbors) for atom_neighbors in self.neighbor_list])
 
