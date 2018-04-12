@@ -27,16 +27,18 @@ if (0):
 	a = MSet("chemspider20_1_opt_withcharge_noerror_all")
 	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
 	c = MSet("chemspider12_clean_maxatom35")
+	d = MSet("kevin_heteroatom.dat")
 	a.Load()
 	b.Load()
 	c.Load()
-	b.mols = a.mols+b.mols+c.mols[:len(b.mols)]
+	d.Load()
+	b.mols = a.mols+b.mols+c.mols[:len(b.mols)]+d.mols
 	#b.Statistics()
-	b.cut_max_num_atoms(50)
+	b.cut_max_num_atoms(55)
 	b.cut_max_grad(2.0)
-	b.Save("Hybrid1")
+	b.Save("Hybrid2")
 
-if 1:
+if 0:
 	b = MSet("Hybrid130")
 	c = MSet("kevin_heteroatom.dat")
 	b.Load()
@@ -46,11 +48,11 @@ if 1:
 	b.cut_max_grad(2.0)
 	b.Save("Hybrid2")
 
-if 0:
+if 1:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("HNCO_small")
+	b = MSet("Hybrid2")
 	b.Load()
-	b.cut_max_num_atoms(50)
+	b.cut_max_num_atoms(55)
 	b.cut_max_grad(2.0)
 
 MAX_ATOMIC_NUMBER = 55
@@ -289,7 +291,7 @@ class SparseCodedChargedGauSHNetwork:
 			Zs[0,:m.NAtoms(),0] = m.atoms
 			nlt,MaxNeigh = self.NLTensors(xyzs,Zs)
 			if (MaxNeigh > self.MaxNeigh):
-	 			print("Too Many Neighbors.")
+				print("Too Many Neighbors.")
 				raise Exception('NeighborOverflow')
 			nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
 			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs,self.nl_pl:nls}
@@ -428,30 +430,6 @@ class SparseCodedChargedGauSHNetwork:
 		"""
 		nlt = Make_NLTensor(xyzs_,zs_.astype(np.int32),self.RCut, self.MaxNAtom, True)
 		return nlt, nlt.shape[-1]
-		if 0:
-			nlt = Make_NLTensor(xyzs_,zs_.astype(np.int32),self.RCut, self.MaxNAtom, True)
-			RawLists=[]
-			natom = np.sum(np.where(zs_ > 0,np.ones_like(zs_),np.zeros_like(zs_)),axis=(1,2)).astype(np.int32)
-			for mi in range(xyzs_.shape[0]):
-				RawLists.append(Make_NListNaive(xyzs_[mi],self.RCut,natom[mi],True))
-			maxneigh = 0
-			for rl in RawLists:
-				for a in rl:
-					if len(a) > maxneigh:
-						maxneigh = len(a)
-			tore = np.ones((xyzs_.shape[0],xyzs_.shape[1],maxneigh),dtype=np.int32)
-			tore *= -1
-			for i,rl in enumerate(RawLists): # mol
-				for j,a in enumerate(rl):
-					if (zs_[i,j] != 0): # atom
-						for k,l in enumerate(a): #atom
-							if (l < natom[i]):
-								tore[i,j,k] = l
-			# Check the MolEmb NLTensor acc.
-			for i,rl in enumerate(RawLists): # mol
-				print ("--------------")
-				print (i,tore[i],nlt[i])
-			return tore, maxneigh
 
 	def CoulombAtomEnergies(self,dxyzs_,q1q2s_):
 		"""
@@ -831,7 +809,7 @@ class SparseCodedChargedGauSHNetwork:
 		tf.reset_default_graph()
 
 		self.DoRotGrad = False
-		self.DoForceLearning = False
+		self.DoForceLearning = True
 		self.Canonicalize = True
 		self.DoCodeLearning = True
 		self.DoDipoleLearning = False
@@ -1048,7 +1026,7 @@ if 0:
 	m.Distort(0.2)
 	m=Opt.OptGD(m,"FromDistorted")
 
-if 1:
+if 0:
 	from matplotlib import pyplot as plt
 	import matplotlib.cm as cm
 	m = Mol()
