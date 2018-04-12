@@ -126,52 +126,6 @@ def polykern(r):
 				(a+b*r+c*r2+d*r3+e*r4+f*r5+g*r6+h*r7)/r))
 	return kern
 
-def CanonicalizeGS_old(dxyzs,z2s):
-	"""
-	Canonicalize using nearest atoms and Graham-Schmidt.
-	If there are not three linearly independent atoms within
-	4A, the output will not be rotationally invariant, although
-	The axes will still be as invariant as possible.
-
-	The axes are also smooth WRT radial displacments, because they are
-	smoothly mixed with each other.
-
-	Args:
-		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
-		zs: a nMol X maxNatom X maxNatom X 1 tensor of atomic number pairs.
-		ie: ... X i X i = (0.,0.,0.))
-	"""
-	# Append orthogonal axes to dxyzs
-	argshape = tf.shape(dxyzs)
-	ax0 = tf.constant(np.array([[4.9,0.,0.],[0.,5.,0.],[0.,0.,5.1]]),dtype=tf.float64)*2048.0
-	defaultAxes = tf.tile(tf.reshape(ax0,(1,1,3,3)),[argshape[0],argshape[1],1,1])
-	dxyzsandDef = tf.concat([dxyzs*tf.cast(z2s,tf.float64),defaultAxes],axis=2)
-
-	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
-	togather = tf.reshape(dxyzsandDef,(argshape[0]*argshape[1],argshape[2]+3,3))
-
-	rsq0 = tf.reduce_sum(togather*togather,axis=-1,keepdims=True)
-	weights0 = 1.0/(rsq0*rsq0+1.0) # Mol X MaxNAtom X MaxNAtom X 1
-	maskedD0s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights0)
-	# Above is (argshape[0]*argshape[1],argshape[2]+3,1)
-	v1 = tf.reduce_sum(togather*maskedD0s,axis=1) # (argshape[0]*argshape[1],3)
-	# Add in a small amount of the ordered vectors
-	v1 += 0.1*tf.reshape(dxyzs[:,:,:1,:],(argshape[0]*argshape[1],3))
-	v1 *= safe_inv_norm(v1)
-
-	weights1 = 1.0/((rsq0-1.1)*(rsq0-1.1)+1.0)
-	maskedD1s = tf.where(tf.greater_equal(weights0,0.9),tf.zeros_like(weights0),weights1)
-	v2 = tf.reduce_sum(togather*maskedD1s,axis=1)
-	v2 += 0.1*tf.reshape(dxyzs[:,:,1:2,:],(argshape[0]*argshape[1],3))
-	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
-	v2 *= safe_inv_norm(v2)
-
-	v3 = tf.cross(v1,v2)
-	v3 *= safe_inv_norm(v3)
-	vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
-	tore = tf.einsum('ijk,ilk->ijl',realdata,vs)
-	return tf.reshape(tore,tf.shape(dxyzs)) , vs
-
 def CanonicalizeGS(dxyzs,z2s):
 	"""
 	This version returns two sets of axes for nearest and next-nearest neighbor.
@@ -428,30 +382,6 @@ class SparseCodedChargedGauSHNetwork:
 		"""
 		nlt = Make_NLTensor(xyzs_,zs_.astype(np.int32),self.RCut, self.MaxNAtom, True)
 		return nlt, nlt.shape[-1]
-		if 0:
-			nlt = Make_NLTensor(xyzs_,zs_.astype(np.int32),self.RCut, self.MaxNAtom, True)
-			RawLists=[]
-			natom = np.sum(np.where(zs_ > 0,np.ones_like(zs_),np.zeros_like(zs_)),axis=(1,2)).astype(np.int32)
-			for mi in range(xyzs_.shape[0]):
-				RawLists.append(Make_NListNaive(xyzs_[mi],self.RCut,natom[mi],True))
-			maxneigh = 0
-			for rl in RawLists:
-				for a in rl:
-					if len(a) > maxneigh:
-						maxneigh = len(a)
-			tore = np.ones((xyzs_.shape[0],xyzs_.shape[1],maxneigh),dtype=np.int32)
-			tore *= -1
-			for i,rl in enumerate(RawLists): # mol
-				for j,a in enumerate(rl):
-					if (zs_[i,j] != 0): # atom
-						for k,l in enumerate(a): #atom
-							if (l < natom[i]):
-								tore[i,j,k] = l
-			# Check the MolEmb NLTensor acc.
-			for i,rl in enumerate(RawLists): # mol
-				print ("--------------")
-				print (i,tore[i],nlt[i])
-			return tore, maxneigh
 
 	def CoulombAtomEnergies(self,dxyzs_,q1q2s_):
 		"""
