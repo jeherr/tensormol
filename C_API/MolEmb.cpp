@@ -1267,7 +1267,22 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 	const int nmol = (xyzs->dimensions)[0];
 	const int nat = (xyzs->dimensions)[1];
 
-	typedef std::vector< std::vector<int> > vov;
+	struct ind_dist {
+		int ind;
+		double dist;
+	};
+	struct by_dist {
+			bool operator()(ind_dist const &a, ind_dist const &b) {
+				if (a.dist > 0.01 && b.dist > 0.01)
+					return a.dist < b.dist;
+				else if (a.dist > 0.01)
+					return true;
+				else
+					return false;
+			}
+	};
+
+	typedef std::vector< std::vector<ind_dist> > vov;
 	typedef std::vector< vov > vovov;
 	vovov NLS;
 
@@ -1281,7 +1296,7 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 		std::generate(y.begin(), y.end(), [&]{ return n++; });
 		std::sort(y.begin(),y.end(), [&](int i1, int i2) { return XX[i1*3] < XX[i2*3]; } );
 		// So y now contains sorted x indices, do the skipping Neighbor list.
-		std::vector< std::vector<int> > tmp(nreal);
+		vov tmp(nreal);
 		for (int i=0; i< nat; ++i)
 		{
 			int I = y[i];
@@ -1303,17 +1318,19 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 				double dij = sqrt(dx*dx+dy*dy+dz*dz) + 0.0000000000001;
 				if (dij < rng)
 				{
+					ind_dist Id = {I,dij};
+					ind_dist Jd = {J,dij};
 					if (I<J)
 					{
-						tmp[I].push_back(J);
+						tmp[I].push_back(Jd);
 						if (J<nreal && DoPerms==1)
-							tmp[J].push_back(I);
+							tmp[J].push_back(Id);
 					}
 					else
 					{
-						tmp[J].push_back(I);
+						tmp[J].push_back(Id);
 						if (I<nreal && DoPerms==1)
-							tmp[I].push_back(J);
+							tmp[I].push_back(Jd);
 					}
 				}
 			}
@@ -1322,14 +1339,15 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 	}
 	// Determine the maximum number of neighbors and make a tensor.
 	int MaxNeigh = 0;
-	for (vovov::iterator it = NLS.begin(); it != NLS.end();++it)
+
+	for (int i = 0; i<NLS.size(); ++i)
 	{
-		vov& tmp = *it;
-		for (vov::iterator it2 = tmp.begin(); it2 != tmp.end(); ++it2)
+		vov& tmp = NLS[i];
+		for (int j = 0; j<tmp.size(); ++j)
 		{
-			if (it2->size() > MaxNeigh)
-				MaxNeigh = it2->size();
-			std::sort(it2->begin(),it2->end());
+			if (tmp[j].size() > MaxNeigh)
+				MaxNeigh = tmp[j].size();
+			std::sort(tmp[j].begin(), tmp[j].end(), by_dist());
 		}
 	}
 	npy_intp outdim2[3] = {nmol,nat,MaxNeigh};
@@ -1342,7 +1360,7 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 			for (int k=0; k<MaxNeigh; ++k)
 			{
 				if (k < NLS[i][j].size())
-					NL_data[i*(nat*MaxNeigh)+j*MaxNeigh+k] = (int32_t)(NLS[i][j][k]);
+					NL_data[i*(nat*MaxNeigh)+j*MaxNeigh+k] = (int32_t)(NLS[i][j][k].ind);
 				else
 					NL_data[i*(nat*MaxNeigh)+j*MaxNeigh+k] = (int32_t)(-1);
 			}
