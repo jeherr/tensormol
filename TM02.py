@@ -218,13 +218,13 @@ class SparseCodedChargedGauSHNetwork:
 		self.batch_size = 128 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.MaxNeigh = self.MaxNAtom
-		self.learning_rate = 0.00008
+		self.learning_rate = 0.00006
 		self.RCut = 15.0
 		self.AtomCodes = ELEMENTCODES
 		#self.AtomCodes = np.random.random(size=(MAX_ATOMIC_NUMBER,6))
 		self.AtomTypes = [1,6,7,8]
 		self.l_max = 3
-		self.GaussParams = np.array([[ 0.38434305,  0.26026951],[ 0.67905506,  0.23592885],[ 1.04607650,  0.23607738],[ 1.38130411,  0.21887474],[ 1.68601092,  0.21598197],[ 2.04284021,  0.21199570],[ 2.78971537,  0.15424753],[ 3.13646133,  0.18127764],[ 3.79728505,  0.17333783],[ 4.90312228,  0.11746010],[ 5.50414348,  0.10980897]])
+		self.GaussParams = np.array([[ 0.38664542,  0.26217287], [ 0.67811722,  0.23477701],    [ 1.04543342,  0.23426948],    [ 1.38311757,  0.21758330],    [ 1.68369538,  0.21645779],    [ 2.04304538,  0.21420768],    [ 2.78418335,  0.15554105],    [ 3.13734002,  0.18086331],    [ 3.79258319,  0.17154482],    [ 4.90203694,  0.11153887],    [ 5.50218806,  0.10848024]])
 		self.nrad = len(self.GaussParams)
 		self.nang = (self.l_max+1)**2
 		self.ncodes = self.AtomCodes.shape[-1]
