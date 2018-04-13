@@ -50,7 +50,7 @@ if 0:
 
 if 1:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("Hybrid2")
+	b = MSet("Hybrid1")
 	b.Load()
 	b.cut_max_num_atoms(55)
 	b.cut_max_grad(2.0)
@@ -321,7 +321,7 @@ class SparseCodedChargedGauSHNetwork:
 			Zs[0,:m.NAtoms(),0] = m.atoms
 			nlt,MaxNeigh = self.NLTensors(xyzs,Zs)
 			if (MaxNeigh > self.MaxNeigh):
-	 			print("Too Many Neighbors.")
+				print("Too Many Neighbors.")
 				raise Exception('NeighborOverflow')
 			nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
 			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs,self.nl_pl:nls}
@@ -387,7 +387,7 @@ class SparseCodedChargedGauSHNetwork:
 			ds[i]=m.properties["dipole"]
 		nlt, MaxNeigh = self.NLTensors(xyzs,zs)
 		if (MaxNeigh > self.MaxNeigh):
- 			print("Too Many Neighbors.")
+			print("Too Many Neighbors.")
 			raise Exception('NeighborOverflow')
 		nls[:nlt.shape[0],:nlt.shape[1],:nlt.shape[2]] = nlt
 		return {self.xyzs_pl:xyzs, self.zs_pl:zs,self.nl_pl:nls,self.groundTruthE_pl:true_ae, self.groundTruthG_pl:true_force, self.groundTruthQ_pl:qs, self.groundTruthD_pl:ds}, mols
@@ -540,7 +540,7 @@ class SparseCodedChargedGauSHNetwork:
 
 		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
 		Atom12Real = tf.not_equal(pair_mask,0.)
- 		Atom12Real4 = tf.tile(Atom12Real,[1,1,1,nchan])
+		Atom12Real4 = tf.tile(Atom12Real,[1,1,1,nchan])
 		Atom12Real5 = tf.tile(Atom12Real,[1,1,1,nchan+1])
 
 		jcodes0 = tf.reshape(tf.gather(atom_codes,zjs),(self.batch_size,self.MaxNAtom,self.MaxNeigh,nchan))
@@ -640,7 +640,7 @@ class SparseCodedChargedGauSHNetwork:
 
 		Zrs = tf.cast(tf.reshape(Zs,(ncase,-1)),self.prec)
 		Atom12Real = tf.not_equal(pair_mask,0.)
- 		Atom12Real4 = tf.tile(Atom12Real,[1,1,1,nchan])
+		Atom12Real4 = tf.tile(Atom12Real,[1,1,1,nchan])
 		Atom12Real5 = tf.tile(Atom12Real,[1,1,1,nchan+1])
 
 		jcodes0 = tf.reshape(tf.gather(atom_codes,zjs),(self.batch_size,self.MaxNAtom,self.MaxNeigh,nchan))
@@ -968,7 +968,7 @@ class SparseCodedChargedGauSHNetwork:
 		#self.sess.graph.finalize()
 
 net = SparseCodedChargedGauSHNetwork(b)
-#net.Load()
+net.Load()
 net.Train()
 
 def MethCoords(R1,R2,R3):
@@ -1010,10 +1010,10 @@ if 0:
 
 	EF = net.GetEnergyForceRoutine(b.mols[-1])
 	for i,d in enumerate(np.linspace(-.3,.3,npts)):
-		print d,EF(b.mols[i].coords)[0][0]
-	print "------------------------"
+		print(d,EF(b.mols[i].coords)[0][0])
+	print("------------------------")
 	for i,d in enumerate(np.linspace(-.3,.3,npts)):
-		print d,EF(b.mols[i].coords)[1]
+		print(d,EF(b.mols[i].coords)[1])
 
 if 0:
 	mi = np.random.randint(len(b.mols))
