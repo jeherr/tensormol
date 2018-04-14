@@ -39,18 +39,20 @@ if (0):
 	b.Save("Hybrid2")
 
 if 0:
+	a = MSet("kevin_rand1")
 	b = MSet("Hybrid130")
 	c = MSet("kevin_heteroatom.dat")
+	a.Load()
 	b.Load()
 	c.Load()
-	b.mols = b.mols+c.mols
+	b.mols = a.mols+b.mols+c.mols
 	b.cut_max_num_atoms(40)
 	b.cut_max_grad(2.0)
 	b.Save("Hybrid2")
 
 if 1:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("Hybrid1")
+	b = MSet("Hybrid2")
 	b.Load()
 	b.cut_max_num_atoms(55)
 	b.cut_max_grad(2.0)
@@ -128,11 +130,21 @@ def polykern(r):
 				(a+b*r+c*r2+d*r3+e*r4+f*r5+g*r6+h*r7)/r))
 	return kern
 
+def RemoveReflections(dxyzs):
+	avx = tf.reduce_sum(dxyzs[:,:,:,:1],axis=2,keepdims=True)
+	ot = tf.ones_like(avx)
+	signsx = tf.where(tf.less_equal(avx,0.),-1.*ot,ot)
+	signsy = tf.where(tf.less_equal(tf.reduce_sum(dxyzs[:,:,:,1:2],axis=2,keepdims=True),0.),-1.*ot,ot)
+	signsz = tf.where(tf.less_equal(tf.reduce_sum(dxyzs[:,:,:,2:],axis=2,keepdims=True),0.),-1.*ot,ot)
+	signtensor = tf.concat([signsx,signsy,signsz],axis=-1)
+	return dxyzs * signtensor
+
 def CanonicalizeGS(dxyzs,z2s):
 	"""
 	This version returns two sets of axes for nearest and next-nearest neighbor.
-	If the energy from both these representations is summed the result
-	should be permutationally invariant and rot. inv.
+	If the energy from both these representations is averaged the result
+	will be permutationally invariant (WRT nearest-next-nearest motion)
+	and rotationally invariant.
 
 	Args:
 		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
@@ -176,6 +188,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.MaxNeigh = self.MaxNAtom
 		self.learning_rate = 0.00006
 		self.RCut = 15.0
+		self.MinMAE = 100.0
 		self.AtomCodes = ELEMENTCODES
 		#self.AtomCodes = np.random.random(size=(MAX_ATOMIC_NUMBER,6))
 		self.AtomTypes = [1,6,7,8]
@@ -190,6 +203,7 @@ class SparseCodedChargedGauSHNetwork:
 		if (aset != None):
 			self.MaxNAtom = b.MaxNAtom()+1
 			self.AtomTypes = b.AtomTypes()
+			print("Calculating element averages...")
 			AvE,AvQ = aset.RemoveElementAverages()
 			self.AverageElementEnergy = np.zeros((MAX_ATOMIC_NUMBER))
 			self.AverageElementCharge = np.zeros((MAX_ATOMIC_NUMBER))
@@ -602,6 +616,7 @@ class SparseCodedChargedGauSHNetwork:
 
 		# construct embedding.
 		dist_tensor = tf.clip_by_value(tf.norm(dxyzs+1.e-36,axis=-1),1e-36,1e36)
+
 		# NMOL X MAXNATOM X MAXNATOM X NSH
 		SH = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)*pair_mask # mol X maxNatom X maxNeigh X nang.
 		RAD = tf_gauss(dist_tensor, gauss_params)*pair_mask # mol X maxNatom X maxNeigh X nrad.
@@ -704,7 +719,6 @@ class SparseCodedChargedGauSHNetwork:
 
 	def print_training(self, step, loss_):
 		if (step%15==0):
-			self.saver.save(self.sess, './networks/SparseCodedGauSH', global_step=step)
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
 			if (self.DoCodeLearning):
 				print("Gauss Params: ",self.sess.run([self.gp_tf])[0])
@@ -722,7 +736,9 @@ class SparseCodedChargedGauSHNetwork:
 				print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i])
 				if (self.DoChargeEmbedding):
 					print("MolCoulEnergy: ", qens[i])
-			MAEF = np.average(np.abs(frcs-feed_dict[self.groundTruthG_pl]))
+			diffF = frcs-feed_dict[self.groundTruthG_pl]
+			MAEF = np.average(np.abs(diffF))
+			RMSF = np.sqrt(np.average(diffF*diffF))
 			if (MAEF > 1.0 or np.any(np.isnan(MAEF))):
 				# locate the problem case.
 				for i,m in enumerate(mols):
@@ -733,14 +749,23 @@ class SparseCodedChargedGauSHNetwork:
 						print(frcs[i])
 						print(feed_dict[self.groundTruthG_pl][i])
 						print("--------------")
-			print("Mean Abs Error: (Energy)", np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
+			diffE = ens-feed_dict[self.groundTruthE_pl]
+			MAEE = np.average(np.abs(diffE))
+			RMSE = np.sqrt(np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
+			print("Mean Abs Error: (Energy)", MAEE)
 			print("Mean Abs Error (Force): ", MAEF)
+			print("RMS Error (Energ): ", RMSE)
+			print("RMS Error (Force): ", RMSF)
 			if (self.DoDipoleLearning):
 				print("Mean Abs Error (Dipole): ", np.average(np.abs(dipoles-feed_dict[self.groundTruthD_pl])))
 			if (self.DoChargeLearning):
 				print("Mean Abs Error (Charges): ", np.average(np.abs(charges-feed_dict[self.groundTruthQ_pl])))
 			if (self.DoRotGrad):
 				print("RotGrad:",self.sess.run([self.RotGrad], feed_dict=feed_dict))
+			if (MAEE < self.MinMAE):
+				print("New Min, Saving...")
+				self.MinMAE = MAEE
+				self.saver.save(self.sess, './networks/SparseCodedGauSH', global_step=step)
 			self.writer.add_summary(summary,step)
 		return
 
@@ -765,6 +790,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.DoRotGrad = False
 		self.DoForceLearning = True
 		self.Canonicalize = True
+		self.DoUnChiralize = True # Enforces inversion symmetry.
 		self.DoCodeLearning = True
 		self.DoDipoleLearning = False
 		self.DoChargeLearning = True
@@ -824,6 +850,11 @@ class SparseCodedChargedGauSHNetwork:
 		else:
 			self.cdxyzs = self.dxyzs
 
+		if (self.DoUnChiralize):
+			# force the average x,y,z coordinates to be positive.
+			self.cdxyzs = RemoveReflections(self.cdxyzs)
+			self.cdxyzs_p = RemoveReflections(self.cdxyzs_p)
+
 		# Sparse Embedding.
 		if 0:
 			jcodes0 = tf.reshape(tf.gather(self.atom_codes,zjs),(self.batch_size,self.MaxNAtom,self.MaxNeigh,4))
@@ -871,7 +902,7 @@ class SparseCodedChargedGauSHNetwork:
 
 		# Optional. Verify that the canonicalized differences are invariant.
 		if self.DoRotGrad:
-			self.RotGrad = tf.gradients(self.embedded,psis)[0]
+			self.RotGrad = tf.gradients(self.MolEnergies,psis)[0]
 			tf.summary.scalar('RotGrad',tf.reduce_sum(self.RotGrad))
 
 		self.Eloss = tf.nn.l2_loss(self.MolEnergies - self.groundTruthE_pl,name='Eloss')/tf.cast(self.batch_size,self.prec)

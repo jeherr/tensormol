@@ -93,7 +93,7 @@ class Mol:
 		Number of atoms of a given Element
 		"""
 		return sum( [1 if at==e else 0 for at in self.atoms ] )
-
+		
 	def CalculateAtomization(self):
 		"""
 		This routine needs to be revised and replaced.

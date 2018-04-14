@@ -63,25 +63,43 @@ class MSet:
 		AvQ = {x:0. for x in At}
 		nmols = len(self.mols)
 		nele = len(AvE)
+		neled = max(At)+1
 		b = np.zeros(nmols)
-		a = np.zeros((nmols,nele))
-		noa = np.zeros(nele)
-		coa = np.zeros(nele)
+		# Use dense zero-padded arrays to avoid index logic.
+		a = np.zeros((nmols,neled))
+		noa = np.zeros(neled)
+		coa = np.zeros(neled)
 		for i,m in enumerate(self.mols):
-			for j,e in enumerate(At):
-				a[i,j] = m.NumOfAtomsE(e)
+			unique, counts = np.unique(m.atoms, return_counts=True)
+			stoich = np.zeros(neled)
+			for j in range(len(unique)):
+				stoich[unique[j]] = counts[j]
+			a[i] += stoich
+			noa += stoich
 			b[i] = m.properties["energy"]
 			for atom in range(m.NAtoms()):
-				noa[At.index(m.atoms[atom])]+=1
 				try:
-					coa[At.index(m.atoms[atom])]+=m.properties["charges"][atom]
+					coa[m.atoms[atom]]+=m.properties["charges"][atom]
 				except:
-					coa[At.index(m.atoms[atom])]+=m.properties["mul_charge"][atom]
+					coa[m.atoms[atom]]+=m.properties["mul_charge"][atom]
 		x,r = np.linalg.lstsq(a,b)[:2]
 		averageqs = coa/noa
-		for i,e in enumerate(At):
-			AvE[e] = x[i]
-			AvQ[e] = averageqs[i]
+		for e in At:
+			AvE[e] = x[e]
+			AvQ[e] = averageqs[e]
+		# Report the residual information.
+		EErrors = np.zeros(nmols)
+		QErrors = np.zeros(nmols)
+		for i,m in enumerate(self.mols):
+			e0 = 0.0
+			for j,e in enumerate(At):
+				e0 += AvE[e]*a[i,e]
+			#print("Formula: ",a[i],m.properties["energy"],e0)
+			EErrors[i] = e0 - m.properties["energy"]
+		print("MAE  Energy: ", np.average(np.abs(EErrors)))
+		print("RMSE Energy: ", np.sqrt(np.average(EErrors*EErrors)))
+		print("AvE: ", AvE)
+		print("AvQ: ", AvQ)
 		self.AvE = AvE
 		self.AvQ = AvQ
 		return AvE,AvQ
