@@ -447,9 +447,7 @@ class BehlerParinelloNetwork(object):
 							weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
 									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
 							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-							branches[-1].append(self.activation_function(tf.matmul(inputs, weights) + biases))
-							if self.train_dropout:
-								branches[-1].append(tf.nn.dropout(branches[-1][-1], self.keep_prob_pl))
+							branches[-1].append(self.activation_function(tf.tensordot(inputs, weights, axes=1) + biases))
 							variables.append(weights)
 							variables.append(biases)
 					else:
@@ -457,21 +455,17 @@ class BehlerParinelloNetwork(object):
 							weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
 									stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
 							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-							branches[-1].append(self.activation_function(tf.matmul(branches[-1][-1], weights) + biases))
-							if self.train_dropout:
-								branches[-1].append(tf.nn.dropout(branches[-1][-1], self.keep_prob_pl))
+							branches[-1].append(self.activation_function(tf.tensordot(branches[-1][-1], weights, axes=1) + biases))
 							variables.append(weights)
 							variables.append(biases)
 				with tf.name_scope(str(self.elements[e])+'_regression_linear'):
 					weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 1],
 							stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
 					biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
-					branches[-1].append(tf.squeeze(tf.matmul(branches[-1][-1], weights) + biases, axis=1))
-					if self.train_dropout:
-						branches[-1].append(tf.nn.dropout(branches[-1][-1], self.keep_prob_pl))
+					branches[-1].append(tf.squeeze(tf.tensordot(branches[-1][-1], weights, axes=1) + biases, axis=1))
 					variables.append(weights)
 					variables.append(biases)
-					output += tf.scatter_nd(index, branches[-1][-1], [self.batch_size, self.max_num_atoms])
+					output += tf.reduce_mean(tf.scatter_nd(index, branches[-1][-1], [2, self.batch_size, self.max_num_atoms]), axis=0)
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
@@ -1349,60 +1343,8 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 	the total energy.
 	"""
 	def compute_normalization(self):
-		# xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
-		# Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
-		# if self.train_sparse:
-		# 	pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 4])
-		# gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
-		# elements = tf.constant(self.elements, dtype = tf.int32)
-		#
-		# rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-		# 				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-		# 				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
-		# padding_mask = tf.where(tf.not_equal(Zs_pl, 0))
-		# centered_xyzs = tf.expand_dims(tf.gather_nd(xyzs_pl, padding_mask), axis=1) - tf.gather(xyzs_pl, padding_mask[:,0])
-		# rotation_params = tf.gather_nd(rotation_params, padding_mask)
-		# rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
-		# if self.train_sparse:
-		# 	embed, mol_idx = tf_sparse_gaush_element_channel(rotated_xyzs, Zs_pl, pairs_pl,
-		# 								elements, gaussian_params, self.l_max)
-		# else:
-		# 	embed, mol_idx = tf_gaush_element_channelv3(rotated_xyzs, Zs_pl, elements,
-		# 								gaussian_params, self.l_max)
-		# self.embed_mean = []
-		# self.embed_stddev = []
-		# num_cases = [0, 0, 0, 0]
-		#
-		# sess = tf.Session()
-		# sess.run(tf.global_variables_initializer())
-		# for ministep in range(int(self.num_train_cases/self.batch_size)):
-		# 	batch_data = self.get_energy_train_batch(self.batch_size)
-		# 	if self.train_sparse:
-		# 		embedding = sess.run(embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1], pairs_pl:batch_data[5]})
-		# 	else:
-		# 		embedding = sess.run(embed, feed_dict = {xyzs_pl:batch_data[0], Zs_pl:batch_data[1]})
-		# 	for element in range(len(self.elements)):
-		# 		if ministep == 0:
-		# 			self.embed_stddev.append(np.var(embedding[element]))
-		# 			self.embed_mean.append(np.mean(embedding[element]))
-		# 		else:
-		# 			self.embed_stddev[element] = (((self.embed_stddev[element] * num_cases[element]
-		# 										+ np.var(embedding[element], axis=0) * embedding[element].shape[0])
-		# 										/ (num_cases[element] + embedding[element].shape[0]))
-		# 										+ (np.square(self.embed_mean[element] - np.mean(embedding[element], axis=0))
-		# 										* num_cases[element] * embedding[element].shape[0] /
-		# 										((num_cases[element] + embedding[element].shape[0]) ** 2)))
-		# 			self.embed_mean[element] = ((self.embed_mean[element] * num_cases[element]
-		# 										+ np.mean(embedding[element], axis=0) * embedding[element].shape[0])
-		# 										/ (num_cases[element] + embedding[element].shape[0]))
-		# 		num_cases[element] += embedding[element].shape[0]
-		# sess.close()
-		# self.embed_mean = np.stack(self.embed_mean)
-		# self.embed_stddev = np.sqrt(np.stack(self.embed_stddev))
 		self.energy_mean = np.mean(self.energy_data)
 		self.energy_stddev = np.std(self.energy_data)
-		# self.train_pointer = 0
-
 		self.embed_shape = self.elements.shape[0] * self.gaussian_params.shape[0] * (self.l_max + 1) ** 2
 		self.label_shape = self.energy_mean.shape
 		return
@@ -1430,19 +1372,8 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 3])
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
-			# embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
-			# embed_stddev = tf.Variable(self.embed_stddev, trainable=False, dtype = self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
-
-			# rotation_params = tf.stack([np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-			# 				np.pi * tf.random_uniform([self.batch_size, self.max_num_atoms], maxval=2.0, dtype=self.tf_precision),
-			# 				tf.random_uniform([self.batch_size, self.max_num_atoms], minval=0.1, maxval=1.9, dtype=self.tf_precision)], axis=-1)
-			# padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
-			# centered_xyzs = tf.expand_dims(tf.gather_nd(self.xyzs_pl, padding_mask), axis=1) - tf.gather(self.xyzs_pl, padding_mask[:,0])
-			# rotation_params = tf.gather_nd(rotation_params, padding_mask)
-			# rotated_xyzs = tf_random_rotate(centered_xyzs, rotation_params)
-			# self.dipole_labels = tf.squeeze(tf_random_rotate(tf.expand_dims(self.dipole_pl, axis=1), rotation_params))
 			with tf.name_scope('embedding'):
 				if self.train_sparse:
 					dxyzs, pair_Zs = sparsify_coords(self.xyzs_pl, self.Zs_pl, self.pairs_pl)
@@ -1452,14 +1383,15 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				else:
 					dxyzs, padding_mask = center_dxyzs(self.xyzs_pl, self.Zs_pl)
 					nearest_neighbors = tf.gather_nd(self.nearest_neighbors_pl, padding_mask)
-					canon_xyzs = gs_canonicalizev2(dxyzs, nearest_neighbors)
+					canon_xyzs, perm_canon_xyzs = gs_canonicalize(dxyzs, nearest_neighbors)
 					embed, mol_idx = tf_gaush_element_channelv3(canon_xyzs, self.Zs_pl,
-												elements, self.gaussian_params, self.l_max)
-			# for element in range(len(self.elements)):
-			# 	embed[element] -= embed_mean[element]
-			# 	embed[element] /= embed_stddev[element]
+									elements, self.gaussian_params, self.l_max)
+					perm_embed, _ = tf_gaush_element_channelv3(perm_canon_xyzs, self.Zs_pl,
+											elements, self.gaussian_params, self.l_max)
+					embed = tf.stack([embed, perm_embed], axis=0)
 			with tf.name_scope('energy_inference'):
 				atom_energies, energy_variables = self.energy_inference(embed, mol_idx)
+				# perm_atom_energies, _ = self.energy_inference(perm_embed, mol_idx)
 				norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
 				self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
 				self.total_energy = self.bp_energy
@@ -1470,14 +1402,10 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 				self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
-				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
+				self.gradient_loss = 0.001 * self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
 				if self.train_gradients:
 					tf.add_to_collection('energy_losses', self.gradient_loss)
 					tf.summary.scalar("gradient loss", self.gradient_loss)
-			# self.rotation_loss = self.loss_op(rot_grad)
-			# if self.train_rotation:
-			# 	tf.add_to_collection('energy_losses', self.rotation_loss)
-			# 	tf.summary.scalar("rotational loss", self.rotation_loss)
 			self.energy_losses = tf.add_n(tf.get_collection('energy_losses'))
 			tf.summary.scalar("energy losses", self.energy_losses)
 
