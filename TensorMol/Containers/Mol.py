@@ -28,16 +28,20 @@ class Mol:
 		for connectivity, geometry etc.
 		puts these in a summary dictionary which it returns.
 		"""
-		self.properties = {}
 		self.SortAtoms()
 		self.BuildDistanceMatrix()
 		d,t,q = self.Topology()
+		bm = np.zeros((self.NAtoms(),self.NAtoms()))
+		for b in d:
+			bm[b[0],b[1]] = self.atoms[b[0]]*self.atoms[b[1]]
+			bm[b[1],b[0]] = self.atoms[b[0]]*self.atoms[b[1]]
+		w,v = np.linalg.eig(bm)
 		MW = self.MolecularWeight()
 		formula = self.Formula()
 		import hashlib
 		hasher = hashlib.md5()
 		hasher.update(formula.encode('utf-8'))
-		hasher.update(str(d).encode('utf-8'))
+		hasher.update(str(abs(np.sort(np.round(w,decimals=6)))).encode('utf-8'))
 		bondhash = hasher.hexdigest()
 		hasher.update(str(np.round(self.DistMatrix,decimals=6)).encode('utf-8'))
 		ghash = hasher.hexdigest()
@@ -93,7 +97,7 @@ class Mol:
 		Number of atoms of a given Element
 		"""
 		return sum( [1 if at==e else 0 for at in self.atoms ] )
-		
+
 	def CalculateAtomization(self):
 		"""
 		This routine needs to be revised and replaced.

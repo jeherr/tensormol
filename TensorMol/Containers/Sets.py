@@ -96,13 +96,53 @@ class MSet:
 				e0 += AvE[e]*a[i,e]
 			#print("Formula: ",a[i],m.properties["energy"],e0)
 			EErrors[i] = e0 - m.properties["energy"]
+		print("---- Results of Stoichiometric Model ----")
 		print("MAE  Energy: ", np.average(np.abs(EErrors)))
+		print("MXE  Energy: ", np.max(np.abs(EErrors)))
 		print("RMSE Energy: ", np.sqrt(np.average(EErrors*EErrors)))
 		print("AvE: ", AvE)
 		print("AvQ: ", AvQ)
 		self.AvE = AvE
 		self.AvQ = AvQ
 		return AvE,AvQ
+
+	def cut_max_num_atoms(self, max_n_atoms):
+		cut_down_mols = []
+		for mol in self.mols:
+			if mol.atoms.shape[0] <= max_n_atoms:
+				cut_down_mols.append(mol)
+		self.mols = cut_down_mols
+
+	def cut_randomselection(self, n_totake=100000.):
+		accept_fraction = (n_totake/(len(self.mols)))
+		cut_down_mols = []
+		for mol in self.mols:
+			if (random.random()<accept_fraction):
+				cut_down_mols.append(mol)
+		self.mols = cut_down_mols
+
+	def cut_max_grad(self, max_grad=1.0):
+		cut_down_mols = []
+		for mol in self.mols:
+			if (np.max(np.abs(mol.properties['gradients']))<max_grad):
+				cut_down_mols.append(mol)
+		self.mols = cut_down_mols
+
+	def cut_energy_outliers(self,max_diff=1.0):
+		"""
+		removes any molecules which are more than a hartree away from the mean.
+		"""
+		self.RemoveElementAverages()
+		cut_down_mols = []
+		for m in self.mols:
+			unique, counts = np.unique(m.atoms, return_counts=True)
+			e0=0.
+			for i in range(len(unique)):
+				e0+=counts[i]*self.AvE[unique[i]]
+			if abs(m.properties["energy"] - e0) < max_diff:
+				cut_down_mols.append(m)
+		self.mols = cut_down_mols
+		return
 
 	def DistortAlongNormals(self, npts=8, random=True, disp=.2):
 		'''
@@ -179,20 +219,6 @@ class MSet:
 		"""
 		for mol in self.mols:
 			mol.coords -= mol.Center()
-
-	def cut_max_num_atoms(self, max_n_atoms):
-		cut_down_mols = []
-		for mol in self.mols:
-			if mol.atoms.shape[0] <= max_n_atoms:
-				cut_down_mols.append(mol)
-		self.mols = cut_down_mols
-
-	def cut_max_grad(self, max_grad=1.0):
-		cut_down_mols = []
-		for mol in self.mols:
-			if (np.max(np.abs(mol.properties['gradients']))<max_grad):
-				cut_down_mols.append(mol)
-		self.mols = cut_down_mols
 
 	def NAtoms(self):
 		nat=0
