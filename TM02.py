@@ -59,9 +59,9 @@ if 0:
 	b.cut_energy_outliers()
 	b.Save("Hybrid")
 
-if 0:
+if 1:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("Hybrid")
+	b = MSet("Hybrid2")
 	b.Load()
 	b.cut_max_num_atoms(55)
 	b.cut_max_grad(1.0)
@@ -198,6 +198,8 @@ class SparseCodedChargedGauSHNetwork:
 	This is the basic TensorMol0.2 model chemistry.
 	"""
 	def __init__(self,aset=None,load=False):
+		if (aset==None and load==False):
+			raise Exception("Give me a set or load me k. plz. thx.")
 		self.prec = tf.float64
 		self.batch_size = 64 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
@@ -215,6 +217,8 @@ class SparseCodedChargedGauSHNetwork:
 		self.ncodes = self.AtomCodes.shape[-1]
 		self.ngaush = self.nrad*self.nang
 		self.nembdim = self.ngaush*self.ncodes
+		self.AverageElementEnergy = None
+		self.AverageElementCharge = None
 		self.mset = aset
 		if (aset != None):
 			self.MaxNAtom = b.MaxNAtom()+1
@@ -268,8 +272,10 @@ class SparseCodedChargedGauSHNetwork:
 			# Recover key variables.
 			self.AtomCodes = self.sess.run([v for v in tf.global_variables() if v.name == "atom_codes:0"][0])
 			self.GaussParams = self.sess.run([v for v in tf.global_variables() if v.name == "gauss_params:0"][0])
-			self.AverageElementEnergy = self.sess.run([v for v in tf.global_variables() if v.name == "av_energies:0"][0])
-			self.AverageElementCharge = self.sess.run([v for v in tf.global_variables() if v.name == "av_charges:0"][0])
+			# if these are None, Restore them.
+			if (self.AverageElementEnergy == None):
+				self.AverageElementEnergy = self.sess.run([v for v in tf.global_variables() if v.name == "av_energies:0"][0])
+				self.AverageElementCharge = self.sess.run([v for v in tf.global_variables() if v.name == "av_charges:0"][0])
 		except Exception as Ex:
 			print("Load failed.",Ex)
 			raise Ex
@@ -838,9 +844,9 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=None,load=True)
-net.Load()
-#net.Train()
+net = SparseCodedChargedGauSHNetwork(aset=b,load=False)
+#net.Load()
+net.Train()
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
@@ -897,7 +903,7 @@ if 0:
 	m.Distort(0.2)
 	m=Opt.OptGD(m,"FromDistorted")
 
-if 1:
+if 0:
 	from matplotlib import pyplot as plt
 	import matplotlib.cm as cm
 	m = Mol()
@@ -937,81 +943,81 @@ if 1:
 	plt.show()
 
 # Some code to find and visualize largest errors in the set.
+if (0):
+	m = Mol()
+	m.FromXYZString("""68
 
-m = Mol()
-m.FromXYZString("""68
-
-Ti        0.120990   -0.060138    0.681291
- O        -1.183156   -1.211327    1.530892
- O         1.551867   -0.526524    1.879088
- O        -0.393679    1.496824    1.600554
- N        -1.573945   -0.081347   -0.721848
- N         1.163022   -1.708772   -0.348239
- N         1.168753    1.447422   -0.369693
- N         0.487855   -0.147761   -2.466560
- C        -2.365392   -1.436265    1.003740
- C        -2.630885   -0.805726   -0.264150
- C        -3.871117   -1.056995   -0.909339
- H        -4.062406   -0.639027   -1.891098
- C        -4.810176   -1.864998   -0.296374
- H        -5.754316   -2.064232   -0.795191
- C        -4.551256   -2.451304    0.963384
- H        -5.308554   -3.077665    1.426832
- C        -3.338502   -2.249950    1.606902
- H        -3.114836   -2.706156    2.565852
- C         2.390952   -1.504643    1.624142
- C         2.203137   -2.202060    0.378359
- C         3.118718   -3.228959    0.026910
- H         3.033398   -3.722479   -0.934718
- C         4.139844   -3.563900    0.896557
- H         4.845856   -4.341553    0.619056
- C         4.291634   -2.894854    2.132633
- H         5.100658   -3.180429    2.799223
- C         3.432176   -1.868643    2.494264
- H         3.541561   -1.328464    3.429274
- C         0.082181    2.697242    1.272502
- C         0.969870    2.709072    0.156623
- C         1.463287    3.948981   -0.298909
- H         2.098097    3.993581   -1.176906
- C         1.111612    5.117094    0.369597
- H         1.493951    6.069135    0.011693
- C         0.265473    5.084805    1.490221
- H         0.009661    6.008532    2.001673
- C        -0.258161    3.875463    1.941611
- H        -0.927590    3.822434    2.794486
- C        -0.559135    0.775222   -2.717545
- C        -1.673529    0.742001   -1.844994
- C        -2.747040    1.620694   -2.088361
- H        -3.588610    1.633646   -1.403975
- C        -2.688343    2.527350   -3.142015
- H        -3.512568    3.217141   -3.299816
- C        -1.563565    2.579248   -3.973513
- H        -1.519560    3.293873   -4.790475
- C        -0.499053    1.706764   -3.757774
- H         0.379719    1.730920   -4.394999
- C         0.236139   -1.539331   -2.555194
- C         0.676848   -2.356131   -1.483516
- C         0.474604   -3.748583   -1.571271
- H         0.774452   -4.378943   -0.741040
- C        -0.187066   -4.298804   -2.663753
- H        -0.362641   -5.370480   -2.698613
- C        -0.656316   -3.477134   -3.695516
- H        -1.178183   -3.909357   -4.544504
- C        -0.445910   -2.101273   -3.639011
- H        -0.794965   -1.452681   -4.437269
- C         1.826934    0.329568   -2.399929
- C         2.143015    1.220203   -1.346856
- C         3.452548    1.735349   -1.286446
- H         3.720882    2.395684   -0.468840
- C         4.411945    1.346198   -2.216853
- H         5.422558    1.737580   -2.135304
- C         4.094111    0.436857   -3.231447
- H         4.846701    0.135097   -3.954237
- C         2.800449   -0.073173   -3.318151
- H         2.528822   -0.772568   -4.103764""")
-EF = net.GetEnergyForceRoutine(m)
-print(EF(m.coords))
-Opt = GeomOptimizer(EF)
-m=Opt.OptGD(m)
-m.Distort(0.2)
-m=Opt.OptGD(m,"FromDistorted")
+	Ti        0.120990   -0.060138    0.681291
+	 O        -1.183156   -1.211327    1.530892
+	 O         1.551867   -0.526524    1.879088
+	 O        -0.393679    1.496824    1.600554
+	 N        -1.573945   -0.081347   -0.721848
+	 N         1.163022   -1.708772   -0.348239
+	 N         1.168753    1.447422   -0.369693
+	 N         0.487855   -0.147761   -2.466560
+	 C        -2.365392   -1.436265    1.003740
+	 C        -2.630885   -0.805726   -0.264150
+	 C        -3.871117   -1.056995   -0.909339
+	 H        -4.062406   -0.639027   -1.891098
+	 C        -4.810176   -1.864998   -0.296374
+	 H        -5.754316   -2.064232   -0.795191
+	 C        -4.551256   -2.451304    0.963384
+	 H        -5.308554   -3.077665    1.426832
+	 C        -3.338502   -2.249950    1.606902
+	 H        -3.114836   -2.706156    2.565852
+	 C         2.390952   -1.504643    1.624142
+	 C         2.203137   -2.202060    0.378359
+	 C         3.118718   -3.228959    0.026910
+	 H         3.033398   -3.722479   -0.934718
+	 C         4.139844   -3.563900    0.896557
+	 H         4.845856   -4.341553    0.619056
+	 C         4.291634   -2.894854    2.132633
+	 H         5.100658   -3.180429    2.799223
+	 C         3.432176   -1.868643    2.494264
+	 H         3.541561   -1.328464    3.429274
+	 C         0.082181    2.697242    1.272502
+	 C         0.969870    2.709072    0.156623
+	 C         1.463287    3.948981   -0.298909
+	 H         2.098097    3.993581   -1.176906
+	 C         1.111612    5.117094    0.369597
+	 H         1.493951    6.069135    0.011693
+	 C         0.265473    5.084805    1.490221
+	 H         0.009661    6.008532    2.001673
+	 C        -0.258161    3.875463    1.941611
+	 H        -0.927590    3.822434    2.794486
+	 C        -0.559135    0.775222   -2.717545
+	 C        -1.673529    0.742001   -1.844994
+	 C        -2.747040    1.620694   -2.088361
+	 H        -3.588610    1.633646   -1.403975
+	 C        -2.688343    2.527350   -3.142015
+	 H        -3.512568    3.217141   -3.299816
+	 C        -1.563565    2.579248   -3.973513
+	 H        -1.519560    3.293873   -4.790475
+	 C        -0.499053    1.706764   -3.757774
+	 H         0.379719    1.730920   -4.394999
+	 C         0.236139   -1.539331   -2.555194
+	 C         0.676848   -2.356131   -1.483516
+	 C         0.474604   -3.748583   -1.571271
+	 H         0.774452   -4.378943   -0.741040
+	 C        -0.187066   -4.298804   -2.663753
+	 H        -0.362641   -5.370480   -2.698613
+	 C        -0.656316   -3.477134   -3.695516
+	 H        -1.178183   -3.909357   -4.544504
+	 C        -0.445910   -2.101273   -3.639011
+	 H        -0.794965   -1.452681   -4.437269
+	 C         1.826934    0.329568   -2.399929
+	 C         2.143015    1.220203   -1.346856
+	 C         3.452548    1.735349   -1.286446
+	 H         3.720882    2.395684   -0.468840
+	 C         4.411945    1.346198   -2.216853
+	 H         5.422558    1.737580   -2.135304
+	 C         4.094111    0.436857   -3.231447
+	 H         4.846701    0.135097   -3.954237
+	 C         2.800449   -0.073173   -3.318151
+	 H         2.528822   -0.772568   -4.103764""")
+	EF = net.GetEnergyForceRoutine(m)
+	print(EF(m.coords))
+	Opt = GeomOptimizer(EF)
+	m=Opt.OptGD(m)
+	m.Distort(0.2)
+	m=Opt.OptGD(m,"FromDistorted")
