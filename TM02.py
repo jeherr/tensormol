@@ -280,6 +280,7 @@ class SparseCodedChargedGauSHNetwork:
 	def GetDebugRoutine(self,m):
 		if (m.NAtoms() > self.MaxNAtom):
 			self.MaxNAtom = m.NAtoms()
+		self.MaxNeigh = 100
 		self.batch_size=1
 		self.Prepare()
 		self.Load()
@@ -310,6 +311,7 @@ class SparseCodedChargedGauSHNetwork:
 	def GetEnergyForceRoutine(self,m):
 		if (m.NAtoms() > self.MaxNAtom):
 			self.MaxNAtom = m.NAtoms()
+		self.MaxNeigh = 100
 		self.batch_size=1
 		self.Prepare()
 		self.Load()
@@ -338,6 +340,7 @@ class SparseCodedChargedGauSHNetwork:
 	def GetEnergyForceHessRoutine(self,m):
 		if (m.NAtoms() > self.MaxNAtom):
 			self.MaxNAtom = m.NAtoms()
+		self.MaxNeigh = 100
 		self.batch_size=1
 		self.Prepare()
 		self.Load()
