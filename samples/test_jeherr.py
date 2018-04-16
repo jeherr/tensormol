@@ -298,7 +298,7 @@ def train_energy_GauSH(mset):
 def train_energy_GauSHv2(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_LMAX"] = 5
-	PARAMS["train_gradients"] = False
+	PARAMS["train_gradients"] = True
 	PARAMS["train_dipole"] = False
 	PARAMS["train_rotation"] = False
 	PARAMS["train_sparse"] = False
