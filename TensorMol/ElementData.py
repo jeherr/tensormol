@@ -63,6 +63,23 @@ AtomData = [['X','Nullium', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
 ['I','Iodine', 53.0, 126.90447, 2.0, 5.0, 10.0, 2.359, 115.0, 1008.0, 3.0590465, 34.6],
 ['Xe','Xenon', 54.0, 131.293, 2.0, 6.0, 10.0, 2.582, 108.0, 1170.0, -0.83, 27.815],
 ['Cs','Cesium', 55.0, 132.9054519, 1.0, 0.0, 0.0, 0.659, 298.0, 376.0, 0.47163, 401.0]]
+
+atoi = {sym:an for (sym,an) in [(x[0],int(x[2])) for x in AtomData]}
+itoa = {an:sym for (sym,an) in [(x[0],int(x[2])) for x in AtomData]}
+def AtomicNumber(Symb):
+	try:
+		return atoi[Symb]
+	except Exception as Ex:
+		raise Exception("Unknown Atom")
+	return 0
+def AtomicSymbol(number):
+	try:
+		return itoa[number]
+	except Exception as Ex:
+		raise Exception("Unknown Atom")
+	return 0
+
+
 def ReadAtomCodeString():
 	tmp = []
 	for line in ATOMCODELINES.split('\n'):

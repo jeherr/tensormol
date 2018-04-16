@@ -465,7 +465,7 @@ class BehlerParinelloNetwork(object):
 					branches[-1].append(tf.squeeze(tf.matmul(branches[-1][-1], weights) + biases, axis=1))
 					variables.append(weights)
 					variables.append(biases)
-					output += tf.reduce_mean(tf.scatter_nd(index, branches[-1][-1], [self.batch_size, self.max_num_atoms]), axis=0)
+					output += tf.scatter_nd(index, branches[-1][-1], [self.batch_size, self.max_num_atoms])
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
