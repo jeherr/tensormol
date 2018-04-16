@@ -298,7 +298,7 @@ def train_energy_GauSH(mset):
 def train_energy_GauSHv2(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
 	PARAMS["SH_LMAX"] = 5
-	PARAMS["train_gradients"] = False
+	PARAMS["train_gradients"] = True
 	PARAMS["train_dipole"] = False
 	PARAMS["train_rotation"] = False
 	PARAMS["train_sparse"] = False
@@ -885,6 +885,8 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # PARAMS["SH_NRAD"] = 16
 # a = MSet("SmallMols_rand")
 # a.Load()
+# for mol in a.mols:
+# 	mol.nearest_two_neighbors()
 # # a.ReadXYZ()
 # # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
 # # # # Tesselate that water to create a box
@@ -934,8 +936,9 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # nnstack = tf.stack(nnlist)
 # # natomsstack = tf.stack(n_atoms_list)
 # # r_cutoff = 6.5
-# # gauss_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
-# # elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
+# gauss_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
+# elements = tf.constant([1, 6, 7, 8], dtype=tf.int32)
+# element_codes = tf.Variable(ELEMENTCODES, trainable=False, dtype=tf.float32)
 # # tmp2 = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3)
 # # tmp = tf_gaush_element_channelv2(xyzstack, zstack, elements, gaussian_params, 3, rotation_params)
 # # rotation_params = tf.stack([np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
@@ -957,8 +960,8 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # # pair_Zs = sparsify_coords(xyzstack, zstack, pairstack)
 # dxyzs, padding_mask = center_dxyzs(xyzstack, zstack)
 # nearest_neighbors = tf.gather_nd(nnstack, padding_mask)
-# tmp = gs_canonicalizev3(dxyzs, nearest_neighbors)
-# # embed = tf_sparse_gaush_element_channel(tmp, zstack, pair_Zs, elements, gauss_params, 5)
+# tmp = gs_canonicalize(dxyzs, nearest_neighbors)
+# embed = tf_gaush_embed_channel(tmp, zstack, elements, gauss_params, 5, element_codes)
 # # grad = tf.gradients(tmp, xyzstack)[0]
 # # grads = tf.scatter_add(tf.Variable(tf.zeros(grad.dense_shape)), grad.indices, grad.values)
 # # grad = tf.gradients(tmp, rotation_params)[0]
@@ -970,7 +973,7 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
 # @TMTiming("test")
 # def get_pairs():
-# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
+# 	tmp3 = sess.run(embed, options=options, run_metadata=run_metadata)
 # 	return tmp3
 # tmp5 = get_pairs()
 # print tmp5
