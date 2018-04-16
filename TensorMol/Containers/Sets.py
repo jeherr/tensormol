@@ -32,7 +32,7 @@ class MSet:
 		LOGGER.info("Saving set to: %s ", self.path+filename+self.suffix)
 		#print "Saving set to: ", self.path+self.name+self.suffix
 		f=open(self.path+filename+self.suffix,"wb")
-		pickle.dump(self.__dict__, f, protocol=pickle.HIGHEST_PROTOCOL)
+		pickle.dump(self.__dict__, f)
 		f.close()
 		return
 

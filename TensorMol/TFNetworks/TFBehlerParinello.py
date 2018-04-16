@@ -447,7 +447,7 @@ class BehlerParinelloNetwork(object):
 							weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
 									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
 							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-							branches[-1].append(self.activation_function(tf.tensordot(inputs, weights, axes=1) + biases))
+							branches[-1].append(self.activation_function(tf.matmul(inputs, weights) + biases))
 							variables.append(weights)
 							variables.append(biases)
 					else:
@@ -455,17 +455,17 @@ class BehlerParinelloNetwork(object):
 							weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
 									stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
 							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-							branches[-1].append(self.activation_function(tf.tensordot(branches[-1][-1], weights, axes=1) + biases))
+							branches[-1].append(self.activation_function(tf.matmul(branches[-1][-1], weights) + biases))
 							variables.append(weights)
 							variables.append(biases)
 				with tf.name_scope(str(self.elements[e])+'_regression_linear'):
 					weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 1],
 							stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
 					biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
-					branches[-1].append(tf.squeeze(tf.tensordot(branches[-1][-1], weights, axes=1) + biases, axis=1))
+					branches[-1].append(tf.squeeze(tf.matmul(branches[-1][-1], weights) + biases, axis=1))
 					variables.append(weights)
 					variables.append(biases)
-					output += tf.reduce_mean(tf.scatter_nd(index, branches[-1][-1], [2, self.batch_size, self.max_num_atoms]), axis=0)
+					output += tf.scatter_nd(index, branches[-1][-1], [self.batch_size, self.max_num_atoms])
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
@@ -1388,11 +1388,11 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 									elements, self.gaussian_params, self.l_max)
 					perm_embed, _ = tf_gaush_element_channelv3(perm_canon_xyzs, self.Zs_pl,
 											elements, self.gaussian_params, self.l_max)
-					embed = tf.stack([embed, perm_embed], axis=0)
 			with tf.name_scope('energy_inference'):
 				atom_energies, energy_variables = self.energy_inference(embed, mol_idx)
-				# perm_atom_energies, _ = self.energy_inference(perm_embed, mol_idx)
-				norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
+				perm_atom_energies, _ = self.energy_inference(perm_embed, mol_idx)
+				norm_bp_energy = ((tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
+								+ tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])) / 2.0)
 				self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
 				self.total_energy = self.bp_energy
 				self.energy_loss = self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)

@@ -8,15 +8,13 @@ from __future__ import absolute_import
 import numpy as np
 from math import pi as Pi
 
+
+# This shit needs to move to elementdata or be deleted.
 ELEHEATFORM = {1:-0.497912, 6:-37.844411, 7:-54.581501, 8:-75.062219, 9:-99.716370}     # ref: https://figshare.com/articles/Atomref%3A_Reference_thermochemical_energies_of_H%2C_C%2C_N%2C_O%2C_F_atoms./1057643
 bond_length_thresh = {"HH": 1.1, "HC": 1.4, "HN": 1.4, "HO": 1.3, "CC": 1.7, "CN": 1.7, "CO": 1.7, "NN": 1.7, "NO": 1.7, "OO": 1.7 } # https://figshare.com/articles/Atomref%3A_Reference_thermochemical_energies_of_H%2C_C%2C_N%2C_O%2C_F_atoms./1057643
 ORBITALNAMES = ["1s","2s","2p","3s","3p","4s","3d","4p","5s","4d","5p"]
-NCOREELEC = [0,0, 2,2, 2,2,2,2,2, 2, 10,10, 10,10,10,10,10, 10, 18,18, 18,18,18,18,18,18,18,18,18,18, 18,18,18,18,18, 18, 36,36, 36,36,36,36,36,36,36,36,36,36, 36,36,36,36,36, 36]
 ele_U = {1:-0.500273, 6:-37.8462793, 7:-54.58449,  8:-75.060612}
 ele_E_david = {1: -0.5026682859, 6:-37.8387398670, 8:-75.0586028553}
-atoi = {'X':0,'H':1,'He':2,'Li':3,'Be':4,'B':5,'C':6,'N':7,'O':8,'F':9,'Ne':10,'Na':11,'Mg':12,'Al':13,'Si':14,'P':15,'S':16,'Cl':17,'Ar':18,'K':19,'Ca':20,'Sc':21,'Ti':22,'V':23,'Cr':24,'Mn':25,'Se':34,'Br':35, 'Cs':55, 'Pb':82}
-itoa = {0:'X',1:'H',2:'He',3:'Li',4:'Be',5:'B',6:'C',7:'N',8:'O',9:'F',10:'Ne',11:'Na',12:'Mg',13:'Al',14:'Si',15:'P',16:'S',17:'Cl',18:'Ar',19:'K',20:'Ca',21:'Sc',22:'Ti',23:'V',24:'Cr',25:'Mn',31:'Ga',32:'Ge',33:'As',34:'Se',35:'Br',55:'Cs',82:'Pb'}
-#itoa = ['X','H','He','Li','Be','B','C','N','O','F','Ne','Na','Mg','Al','Si','P','S','Cl','Ar','K','Ca','Sc','Ti','V','Cr','Mn','Se','Br','Cs','Pb']
 atoc = {1: 40, 6: 100, 7: 150, 8: 200, 9:240}
 atom_valance = {1:1, 8:2, 7:3, 6:4}
 bond_index = {"HH": 1, "HC": 2, "HN": 3, "HO": 4, "CC": 5, "CN": 6, "CO": 7, "NN": 8, "NO": 9, "OO": 10}
@@ -26,6 +24,8 @@ ATOMICMASSESAMU = np.array([1.00794, 4.002602, 6.941, 9.012182, 10.811, 12.0107,
 atomic_vdw_radius = {1:1.001, 2:1.012, 3:0.825, 4:1.408, 5:1.485, 6:1.452, 7:1.397, 8:1.342, 9:1.287, 10:1.243} # ref: http://onlinelibrary.wiley.com/doi/10.1002/jcc.20495/epdf   unit in angstrom
 C6_coff = {1:0.14, 2:0.08, 3:1.16, 4:1.61, 5:3.13, 6:1.75, 7:1.23, 8:0.70, 9:0.75, 10:0.63}  # ref: http://onlinelibrary.wiley.com/doi/10.1002/jcc.20495/epdf unit in Jnm^6/mol
 S6 = {"PBE": 0.75, "BLYP":1.2, "B-P86":1.05, "TPSS":1.0, "B3LYP":1.05}  # s6 scaler of different DF of Grimmer C6 scheme
+#
+
 GOLDENRATIO = (np.sqrt(5.)+1.0)/2.0
 KJPERHARTREE = 2625.499638
 JOULEPERHARTREE = KJPERHARTREE*1000.0

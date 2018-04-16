@@ -15,6 +15,7 @@ import scipy.special
 from TensorMol.TMParams import *
 TMBanner()
 from TensorMol.PhysicalData import *
+from TensorMol.ElementData import *
 warnings.simplefilter(action = "ignore", category = FutureWarning)
 #
 # GLOBALS
@@ -161,20 +162,6 @@ def complement(a,b):
 def scitodeci(sci):
 	tmp=re.search(r'(\d+\.?\d+)\*\^(-?\d+)',sci)
 	return float(tmp.group(1))*pow(10,float(tmp.group(2)))
-
-def AtomicNumber(Symb):
-	try:
-		return atoi[Symb]
-	except Exception as Ex:
-		raise Exception("Unknown Atom")
-	return 0
-
-def AtomicSymbol(number):
-	try:
-		return atoi.keys()[atoi.values().index(number)]
-	except Exception as Ex:
-		raise Exception("Unknown Atom")
-	return 0
 
 def LtoS(l):
 	s=""
