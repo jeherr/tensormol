@@ -41,17 +41,17 @@ if (0):
 	b.cut_max_grad(2.0)
 	b.Save("Hybrid2")
 
-if 1:
+if 0:
 	a = MSet("kevin_rand1")
 	b = MSet("chemspider20_1_meta_withcharge_noerror_all")
 	c = MSet("kevin_heteroatom.dat")
-	d = MSet("chemspider12_clean")
+	d = MSet("chemspider12_clean_maxatom35_small")
 	e = MSet("chemspider20_1_opt_withcharge_noerror_all")
 	a.Load()
 	b.Load()
 	c.Load()
 	d.Load()
-	d.cut_randomselection(len(a.mols))
+	d.cut_randomselection(300000)
 	e.Load()
 	b.mols = a.mols+b.mols+c.mols+d.mols+e.mols
 	b.cut_max_num_atoms(40)
@@ -61,7 +61,7 @@ if 1:
 
 if 0:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("Hybrid2")
+	b = MSet("Hybrid")
 	b.Load()
 	b.cut_max_num_atoms(55)
 	b.cut_max_grad(1.0)
@@ -197,7 +197,7 @@ class SparseCodedChargedGauSHNetwork:
 	"""
 	This is the basic TensorMol0.2 model chemistry.
 	"""
-	def __init__(self,aset=None):
+	def __init__(self,aset=None,load=False):
 		self.prec = tf.float64
 		self.batch_size = 64 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
@@ -250,15 +250,29 @@ class SparseCodedChargedGauSHNetwork:
 					print(aset.mols[mol_order[i]])
 					print(NLT[i].shape,NLT[i])
 		self.sess = None
+		if (load):
+			self.Load()
 		self.Prepare()
 		return
 
 	def Load(self):
 		try:
 			chkpt = tf.train.latest_checkpoint('./networks/')
-			self.saver.restore(self.sess, chkpt)
+			metafilename = ".".join([chkpt, "meta"])
+			if (self.sess == None):
+				self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+			print("Loading Graph: ",metafilename)
+			saver = tf.train.import_meta_graph(metafilename)
+			saver.restore(self.sess,chkpt)
+			print("Loaded Check: ",chkpt)
+			# Recover key variables.
+			self.AtomCodes = self.sess.run([v for v in tf.global_variables() if v.name == "atom_codes:0"][0])
+			self.GaussParams = self.sess.run([v for v in tf.global_variables() if v.name == "gauss_params:0"][0])
+			self.AverageElementEnergy = self.sess.run([v for v in tf.global_variables() if v.name == "av_energies:0"][0])
+			self.AverageElementCharge = self.sess.run([v for v in tf.global_variables() if v.name == "av_charges:0"][0])
 		except Exception as Ex:
-			pass
+			print("Load failed.",Ex)
+			raise Ex
 		return
 
 	def GetDebugRoutine(self,m):
@@ -505,9 +519,9 @@ class SparseCodedChargedGauSHNetwork:
 			l0 = tf.reshape(weighted2,(ncase,-1))
 			l0p = tf.concat([l0,CODES],axis=-1)
 
-			l1q = tf.layers.dense(inputs=l0p,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1q")
+			l1q = tf.layers.dense(inputs=l0p,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense1q")
 			l1pq = tf.concat([l1q,CODES],axis=-1)
-			l2q = tf.layers.dense(inputs=l1pq,units=512,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2q")
+			l2q = tf.layers.dense(inputs=l1pq,units=256,activation=sftpluswparam,use_bias=True, kernel_initializer=tf.variance_scaling_initializer, bias_initializer=tf.variance_scaling_initializer,name="Dense2q")
 			l2pq = tf.concat([l2q,CODES],axis=-1)
 			l3q = tf.layers.dense(l2pq,units=1,activation=None,use_bias=False,name="Dense3q")*msk
 			charges = tf.reshape(l3q,(self.batch_size,self.MaxNAtom))
@@ -673,10 +687,10 @@ class SparseCodedChargedGauSHNetwork:
 		self.groundTruthQ_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom), dtype = tf.float64,name="GTQs") # Charges
 
 		# Constants
-		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec)
-		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec)
-		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec)
-		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec)
+		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec,name="atom_codes")
+		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec,name="gauss_params")
+		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec,name="av_energies")
+		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec,name="av_charges")
 
 		Atom1Real = tf.tile(tf.greater(self.zs_pl,0)[:,:,tf.newaxis,:],(1,1,self.MaxNeigh,1))
 		nl = tf.reshape(self.nl_pl,(self.batch_size,self.MaxNAtom,self.MaxNeigh,1))
@@ -818,7 +832,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(b)
+net = SparseCodedChargedGauSHNetwork(aset=None,load=True)
 net.Load()
 net.Train()
 
@@ -877,7 +891,7 @@ if 0:
 	m.Distort(0.2)
 	m=Opt.OptGD(m,"FromDistorted")
 
-if 0:
+if 1:
 	from matplotlib import pyplot as plt
 	import matplotlib.cm as cm
 	m = Mol()
