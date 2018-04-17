@@ -209,8 +209,8 @@ def CanonicalizeGS(dxyzs):
 	# Append orthogonal axes to dxyzs
 	argshape = tf.shape(dxyzs)
 	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
-	#orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
-	orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
+	orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
+	#orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
 	tore = []
 	for perm in orders:
 		v1 = tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([1e-8,0.,0.]),dtype=tf.float64)
