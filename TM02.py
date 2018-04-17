@@ -7,39 +7,11 @@ from TensorMol import *
 import numpy as np
 
 HAS_MATPLOTLIB=True
-if (HAS_MATPLOTLIB):
+try:
 	import matplotlib.pyplot as plt
-if (0):
-	# Linear molecules are a good test.
-	m=Mol()
-	m.FromXYZString("""5
-	Comment:
-	C   0.1506907344  0.0  0.0
-	C   -1.1550766934  0.0  0.0
-	S   -2.7208105787  0.0  0.0
-	C   1.4245508222  0.0  0.0
-	S   2.9488539653  0.0  0.0""")
-	m.properties["energy"]=-1000.0
-	m.properties["charges"]=np.array([0.,0.,0.,0.,0.])
-	m.properties["gradients"]=np.zeros((5,3))
-	m.properties["dipole"]=np.zeros((3))
-	for i in range(300):
-		b.mols.append(m)
-
-if (0):
-	a = MSet("kevin_rand1")
-	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
-	c = MSet("chemspider12_clean_maxatom35")
-	d = MSet("kevin_heteroatom.dat")
-	a.Load()
-	b.Load()
-	c.Load()
-	d.Load()
-	b.mols = a.mols+b.mols+c.mols[:len(b.mols)]+d.mols
-	#b.Statistics()
-	b.cut_max_num_atoms(50)
-	b.cut_max_grad(2.0)
-	b.Save("Hybrid2")
+	HAS_MATPLOTLIB=True
+except Exception as Ex:
+	HAS_MATPLOTLIB=False
 
 if 0:
 	a = MSet("kevin_rand1")
@@ -61,7 +33,7 @@ if 0:
 
 if 1:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("HNCO_small")
+	b = MSet("Hybrid2")
 	b.Load()
 	b.cut_max_num_atoms(55)
 	b.cut_max_grad(1.0)
@@ -159,13 +131,17 @@ class SparseCodedChargedGauSHNetwork:
 	"""
 	This is the basic TensorMol0.2 model chemistry.
 	"""
-	def __init__(self,aset=None,load=False):
+	def __init__(self,aset=None,load=False, mode_='train'):
 		if (aset==None and load==False):
 			raise Exception("Give me a set or load me k. plz. thx.")
 		self.prec = tf.float64
-		self.batch_size = 32 # Force learning strongly modulates what you can do.
+		self.batch_size = 128 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
-		self.ncan = 12 # Symmetrizes up to four bonds.
+		self.Mode = mode_
+		if self.Mode == 'train':
+			self.ncan = 2 # Symmetrizes no bonds. random neighbors.
+		elif self.Mode == 'eval':
+			self.ncan = 12 # Symmetrizes up to four bonds.
 		self.MaxNeigh = self.MaxNAtom
 		self.learning_rate = 0.00003
 		self.RCut = 15.0
@@ -397,7 +373,7 @@ class SparseCodedChargedGauSHNetwork:
 
 			and the number of maximum neighbors found in its argument.
 		"""
-		nlt = Make_NLTensor(xyzs_,zs_.astype(np.int32),self.RCut, self.MaxNAtom, True)
+		nlt = Make_NLTensor(xyzs_,zs_.astype(np.int32),self.RCut, self.MaxNAtom, True, self.Mode == 'eval')
 		return nlt, nlt.shape[-1]
 
 	def CoulombAtomEnergies(self,dxyzs_,q1q2s_):
@@ -589,8 +565,8 @@ class SparseCodedChargedGauSHNetwork:
 			mol X maxNatom X 1 tensor of atom energies, charges.
 			these include constant shifts.
 		"""
-		n_qunit = 256
-		n_eunit = 256
+		n_qunit = 512
+		n_eunit = 512
 		ncan = self.ncan
 		ncase = self.batch_size*self.MaxNAtom
 		ncancase = ncan*ncase
