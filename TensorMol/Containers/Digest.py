@@ -115,8 +115,6 @@ class Digester:
 				Ins =  MolEmb.Make_SH_Transf(PARAMS, mol_.coords, mol_.atoms, at_, Transforms)
 		elif (self.name=="GauInv"):
 			Ins= MolEmb.Make_Inv(PARAMS, mol_.coords, mol_.atoms, at_)
-		elif (self.name=="RDF"):
-			Ins= MolEmb.Make_RDF(mol_.coords, xyz_, mol_.atoms , self.eles ,  self.SensRadius, self.ngrid, at_, 0.0)
 		elif (self.name=="SensoryBasis"):
 			Ins= mol_.OverlapEmbeddings(mol_.coords, xyz_, mol_.atoms , self.eles ,  self.SensRadius, self.ngrid, at_, 0.0)
 		elif (self.name=="SymFunc"):
