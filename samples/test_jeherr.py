@@ -76,7 +76,7 @@ def test_md():
 	a = MSet("water10")
 	a.ReadXYZ()
 	mol = a.mols[1]
-	network = BehlerParinelloGauSHv2(name="BPGauSH_water_wb97xd_6311gss_Thu_Mar_15_16.29.21_2018")
+	network = BehlerParinelloGauSHv2(name="BPGauSH_water_wb97xd_6311gss_Sat_Apr_14_00.23.37_2018")
 	def force_field(coords, forces=True):
 		m=Mol(mol.atoms, coords)
 		if forces:
@@ -313,57 +313,22 @@ def train_energy_GauSHv2(mset):
 	network = BehlerParinelloGauSHv2(mset)
 	network.start_training()
 
-def train_energy_GauSHConv(mset):
+def train_energy_GauSH_univ(mset):
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
-	PARAMS["SH_LMAX"] = 4
-	PARAMS["train_gradients"] = True
+	PARAMS["SH_LMAX"] = 5
+	PARAMS["train_gradients"] = False
 	PARAMS["train_dipole"] = False
-	PARAMS["train_rotation"] = True
+	PARAMS["train_rotation"] = False
+	PARAMS["train_sparse"] = False
 	PARAMS["weight_decay"] = None
-	PARAMS["ConvFilter"] = [256]
-	PARAMS["ConvKernelSize"] = [25]
-	PARAMS["ConvStrides"] = [25]
-	PARAMS["HiddenLayers"] = [512, 512]
-	PARAMS["learning_rate"] = 0.00005
+	PARAMS["HiddenLayers"] = [256, 256, 256]
+	PARAMS["learning_rate"] = 0.0001
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
 	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
-	network = BehlerParinelloGauSHConv(mset)
-	network.start_training()
-
-def train_AE_GauSH(mset):
-	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
-	PARAMS["SH_LMAX"] = 3
-	PARAMS["train_rotation"] = True
-	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [512, 512]
-	PARAMS["learning_rate"] = 0.00005
-	PARAMS["max_steps"] = 1000
-	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 100
-	PARAMS["NeuronType"] = "sigmoid"
-	PARAMS["tf_prec"] = "tf.float32"
-	network = GauSHEncoderv2(mset)
-	network.start_training()
-
-def train_energy_AE_GauSH(mset):
-	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
-	PARAMS["SH_LMAX"] = 3
-	PARAMS["train_gradients"] = True
-	PARAMS["train_dipole"] = False
-	PARAMS["train_rotation"] = True
-	PARAMS["weight_decay"] = None
-	PARAMS["AE_hidden_layers"] = [1024]
-	PARAMS["HiddenLayers"] = [512, 512, 512]
-	PARAMS["learning_rate"] = 0.00005
-	PARAMS["max_steps"] = 1000
-	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 100
-	PARAMS["NeuronType"] = "sigmoid"
-	PARAMS["tf_prec"] = "tf.float32"
-	network = BehlerParinelloGauSHAE(mset)
+	network = UniversalNetwork(mset)
 	network.start_training()
 
 def test_h2o():
@@ -862,8 +827,8 @@ def minimize_ob():
 # train_energy_pairs_triples()
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
-train_energy_GauSHv2("water_wb97xd_6311gss")
-# train_AE_GauSH("water_wb97xd_6311gss")
+# train_energy_GauSHv2("water_wb97xd_6311gss")
+train_energy_GauSH_univ("water_wb97xd_6311gss")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -960,7 +925,7 @@ train_energy_GauSHv2("water_wb97xd_6311gss")
 # # pair_Zs = sparsify_coords(xyzstack, zstack, pairstack)
 # dxyzs, padding_mask = center_dxyzs(xyzstack, zstack)
 # nearest_neighbors = tf.gather_nd(nnstack, padding_mask)
-# tmp = gs_canonicalize(dxyzs, nearest_neighbors)
+# tmp, tmp2 = gs_canonicalize(dxyzs, nearest_neighbors)
 # embed = tf_gaush_embed_channel(tmp, zstack, elements, gauss_params, 5, element_codes)
 # # grad = tf.gradients(tmp, xyzstack)[0]
 # # grads = tf.scatter_add(tf.Variable(tf.zeros(grad.dense_shape)), grad.indices, grad.values)

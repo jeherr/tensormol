@@ -436,7 +436,7 @@ class BehlerParinelloNetwork(object):
 		branches=[]
 		variables=[]
 		output = tf.zeros([self.batch_size, self.max_num_atoms], dtype=self.tf_precision)
-		with tf.name_scope("energy_network"):
+		with tf.name_scope("energy_network", reuse=tf.AUTO_REUSE):
 			for e in range(len(self.elements)):
 				branches.append([])
 				inputs = inp[e]
@@ -1288,7 +1288,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 			self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
 		return
 
-	def evaluate_fill_feed_dict(self, xyzs, Zs, num_atoms):
+	def evaluate_fill_feed_dict(self, xyzs, Zs, num_atoms, nearest_neighbors):
 		"""
 		Fill the tensorflow feed dictionary.
 
@@ -1299,7 +1299,7 @@ class BehlerParinelloGauSH(BehlerParinelloNetwork):
 		Returns:
 			Filled feed dictionary.
 		"""
-		feed_dict={i: d for i, d in zip([self.xyzs_pl, self.Zs_pl, self.num_atoms_pl], [xyzs, Zs, num_atoms])}
+		feed_dict={i: d for i, d in zip([self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.nearest_neighbors_pl], [xyzs, Zs, num_atoms, nearest_neighbors])}
 		return feed_dict
 
 	def evaluate_mol(self, mol, eval_forces=True):
@@ -1392,7 +1392,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				atom_energies, energy_variables = self.energy_inference(embed, mol_idx)
 				perm_atom_energies, _ = self.energy_inference(perm_embed, mol_idx)
 				norm_bp_energy = ((tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
-								+ tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])) / 2.0)
+								+ tf.reshape(tf.reduce_sum(perm_atom_energies, axis=1), [self.batch_size])) / 2.0)
 				self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
 				self.total_energy = self.bp_energy
 				self.energy_loss = self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
@@ -1424,7 +1424,7 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 				self.run_metadata = tf.RunMetadata()
 		return
 
-	def evaluate_prepare(self, avg_rots=False):
+	def evaluate_prepare(self):
 		"""
 		Get placeholders, graph and losses in order to begin training.
 		Also assigns the desired padding.
@@ -1433,31 +1433,25 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			continue_training: should read the graph variables from a saved checkpoint.
 		"""
 		with tf.Graph().as_default():
-			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[1, self.max_num_atoms, 3])
-			self.Zs_pl = tf.placeholder(tf.int32, shape=[1, self.max_num_atoms])
-			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[1])
+			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
+			self.Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
+			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
+			self.nearest_neighbors_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, 2])
 			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
 			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
-			embed_mean = tf.Variable(self.embed_mean, trainable=False, dtype = self.tf_precision)
-			embed_stddev = tf.Variable(self.embed_stddev, trainable=False, dtype = self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
-			if avg_rots:
-				tiled_xyzs = tf.tile(self.xyzs_pl, [64, 1, 1])
-				tiled_Zs = tf.tile(self.Zs_pl, [64, 1])
-				rotation_params = tf.cast(tf.concat([np.pi * tf.expand_dims(tf.tile(tf.linspace(0.0, 1.5, 4), [16]), axis=1),
-						np.pi * tf.reshape(tf.tile(tf.expand_dims(tf.linspace(0.0, 1.5, 4), axis=1), [1,16]), [64,1]),
-						tf.reshape(tf.tile(tf.expand_dims(tf.expand_dims(tf.linspace(0.1, 1.9, 4), axis=1),
-						axis=2), [4,1,4]), [64,1])], axis=1), dtype=self.tf_precision)
-				rotated_xyzs = tf_random_rotate(tiled_xyzs, rotation_params)
-				self.embed, mol_idx = tf_gaush_element_channel(rotated_xyzs, tiled_Zs, elements, self.gaussian_params, self.l_max)
-			else:
-				embed, mol_idx = tf_gaush_element_channel(self.xyzs_pl, self.Zs_pl, elements, self.gaussian_params, self.l_max)
-			for element in range(len(self.elements)):
-				self.embed[element] -= embed_mean[element]
-				self.embed[element] /= embed_stddev[element]
-			atom_energies, energy_variables = self.energy_inference(self.embed, mol_idx)
-			norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
+			dxyzs, padding_mask = center_dxyzs(self.xyzs_pl, self.Zs_pl)
+			nearest_neighbors = tf.gather_nd(self.nearest_neighbors_pl, padding_mask)
+			canon_xyzs, perm_canon_xyzs = gs_canonicalize(dxyzs, nearest_neighbors)
+			embed, mol_idx = tf_gaush_element_channelv3(canon_xyzs, self.Zs_pl,
+							elements, self.gaussian_params, self.l_max)
+			perm_embed, _ = tf_gaush_element_channelv3(perm_canon_xyzs, self.Zs_pl,
+									elements, self.gaussian_params, self.l_max)
+			atom_energies, _ = self.energy_inference(embed, mol_idx)
+			perm_atom_energies, _ = self.energy_inference(perm_embed, mol_idx)
+			norm_bp_energy = ((tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
+							+ tf.reshape(tf.reduce_sum(perm_atom_energies, axis=1), [self.batch_size])) / 2.0)
 			self.bp_energy = tf.reduce_mean((norm_bp_energy * energy_stddev) + energy_mean)
 			self.gradients = tf.gradients(self.bp_energy, self.xyzs_pl)[0]
 
@@ -1483,18 +1477,18 @@ class BehlerParinelloGauSHv2(BehlerParinelloGauSH):
 			print("loading the session..")
 			self.assign_activation()
 			self.max_num_atoms = mol.NAtoms()
-			if avg_rots:
-				self.batch_size = 64
-			else:
-				self.batch_size = 1
-			self.evaluate_prepare(avg_rots)
+			self.batch_size = 1
+			self.evaluate_prepare()
 		xyzs_feed = np.zeros((1,self.max_num_atoms, 3))
 		xyzs_feed[0,:mol.NAtoms()] = mol.coords
 		Zs_feed = np.zeros((1,self.max_num_atoms), dtype=np.int32)
 		Zs_feed[0,:mol.NAtoms()] = mol.atoms
 		num_atoms_feed = np.zeros((1), dtype=np.int32)
 		num_atoms_feed[0] = mol.NAtoms()
-		feed_dict=self.evaluate_fill_feed_dict(xyzs_feed, Zs_feed, num_atoms_feed)
+		nearest_neighbors_feed = np.zeros((1, self.max_num_atoms, 2), dtype=np.int32)
+		mol.nearest_two_neighbors()
+		nearest_neighbors_feed[0,:mol.NAtoms()] = mol.nearest_ns
+		feed_dict=self.evaluate_fill_feed_dict(xyzs_feed, Zs_feed, num_atoms_feed, nearest_neighbors_feed)
 		if eval_forces:
 			energy, gradients = self.sess.run([self.bp_energy, self.gradients], feed_dict=feed_dict)
 			forces = -gradients[0]

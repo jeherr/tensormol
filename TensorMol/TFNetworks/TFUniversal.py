@@ -57,6 +57,7 @@ class UniversalNetwork(object):
 		self.element_codes = ELEMENTCODES
 		self.assign_activation()
 
+
 		#Reloads a previous network if name variable is not None
 		if name != None:
 			self.name = name
@@ -75,6 +76,11 @@ class UniversalNetwork(object):
 			self.max_num_pairs = self.mol_set.max_neighbors()
 		self.step = 0
 		self.test_freq = PARAMS["test_freq"]
+		self.network_type = "GauSH_Univ"
+		self.name = self.network_type+"_"+self.mol_set_name+"_"+time.strftime("%a_%b_%d_%H.%M.%S_%Y")
+		self.network_directory = PARAMS["networks_directory"]+self.name
+		self.l_max = PARAMS["SH_LMAX"]
+		self.gaussian_params = PARAMS["RBFS"]
 
 		LOGGER.info("learning rate: %f", self.learning_rate)
 		LOGGER.info("batch size:    %d", self.batch_size)
@@ -304,8 +310,6 @@ class UniversalNetwork(object):
 		if self.train_sparse:
 			pair_batch_data = np.concatenate((self.batch_mol_idxs, self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]), axis=-1)
 			batch_data.append(pair_batch_data)
-		if self.train_dropout:
-			batch_data.append(self.keep_prob)
 		return batch_data
 
 	def get_dipole_test_batch(self, batch_size):
@@ -336,8 +340,6 @@ class UniversalNetwork(object):
 		if self.train_sparse:
 			pair_batch_data = np.concatenate((self.batch_mol_idxs, self.pairs_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]), axis=-1)
 			batch_data.append(pair_batch_data)
-		if self.train_dropout:
-			batch_data.append(1.0)
 		return batch_data
 
 	def variable_with_weight_decay(self, shape, stddev, weight_decay, name = None):
@@ -392,12 +394,10 @@ class UniversalNetwork(object):
 		pl_list = [self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.energy_pl, self.gradients_pl, self.nearest_neighbors_pl]
 		if self.train_sparse:
 			pl_list.append(self.pairs_pl)
-		if self.train_dropout:
-			pl_list.append(self.keep_prob_pl)
 		feed_dict={i: d for i, d in zip(pl_list, batch_data)}
 		return feed_dict
 
-	def energy_inference(self, inp, indexs):
+	def energy_inference(self, inputs, indexs):
 		"""
 		Builds a Behler-Parinello graph
 
@@ -407,45 +407,34 @@ class UniversalNetwork(object):
 		Returns:
 			The BP graph output
 		"""
-		branches=[]
 		variables=[]
 		output = tf.zeros([self.batch_size, self.max_num_atoms], dtype=self.tf_precision)
-		with tf.name_scope("energy_network"):
-			for e in range(len(self.elements)):
-				branches.append([])
-				inputs = inp[e]
-				index = indexs[e]
-				for i in range(len(self.hidden_layers)):
-					if i == 0:
-						with tf.name_scope(str(self.elements[e])+'_hidden1'):
-							weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
-									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
-							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-							branches[-1].append(self.activation_function(tf.matmul(inputs, weights) + biases))
-							if self.train_dropout:
-								branches[-1].append(tf.nn.dropout(branches[-1][-1], self.keep_prob_pl))
-							variables.append(weights)
-							variables.append(biases)
-					else:
-						with tf.name_scope(str(self.elements[e])+'_hidden'+str(i+1)):
-							weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
-									stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
-							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-							branches[-1].append(self.activation_function(tf.matmul(branches[-1][-1], weights) + biases))
-							if self.train_dropout:
-								branches[-1].append(tf.nn.dropout(branches[-1][-1], self.keep_prob_pl))
-							variables.append(weights)
-							variables.append(biases)
-				with tf.name_scope(str(self.elements[e])+'_regression_linear'):
-					weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 1],
-							stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
-					biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
-					branches[-1].append(tf.squeeze(tf.matmul(branches[-1][-1], weights) + biases, axis=1))
-					if self.train_dropout:
-						branches[-1].append(tf.nn.dropout(branches[-1][-1], self.keep_prob_pl))
-					variables.append(weights)
-					variables.append(biases)
-					output += tf.scatter_nd(index, branches[-1][-1], [self.batch_size, self.max_num_atoms])
+		with tf.variable_scope("energy_network", reuse=tf.AUTO_REUSE):
+			for i in range(len(self.hidden_layers)):
+				if i == 0:
+					with tf.name_scope('hidden1'):
+						weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
+								stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+						activations = self.activation_function(tf.matmul(inputs, weights) + biases)
+						variables.append(weights)
+						variables.append(biases)
+				else:
+					with tf.name_scope('hidden'+str(i+1)):
+						weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
+								stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
+						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+						activations = self.activation_function(tf.matmul(activations, weights) + biases)
+						variables.append(weights)
+						variables.append(biases)
+			with tf.name_scope('regression_linear'):
+				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 1],
+						stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
+				biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
+				outputs = tf.squeeze(tf.matmul(activations, weights) + biases, axis=1)
+				variables.append(weights)
+				variables.append(biases)
+				output += tf.scatter_nd(indexs, outputs, [self.batch_size, self.max_num_atoms])
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
@@ -601,7 +590,7 @@ class UniversalNetwork(object):
 			num_mols += self.batch_size
 			self.summary_writer.add_summary(summaries, step * int(Ncase_train/self.batch_size) + ministep)
 		duration = time.time() - start_time
-		self.print_epoch(step, duration, train_loss, train_energy_loss, train_gradient_loss, train_rotation_loss)
+		self.print_epoch(step, duration, train_loss, train_energy_loss, train_gradient_loss)
 		return
 
 	def dipole_test_step(self, step):
@@ -724,7 +713,7 @@ class UniversalNetwork(object):
 	def compute_normalization(self):
 		self.energy_mean = np.mean(self.energy_data)
 		self.energy_stddev = np.std(self.energy_data)
-		self.embed_shape = self.elements.shape[0] * self.gaussian_params.shape[0] * (self.l_max + 1) ** 2
+		self.embed_shape = 4 * self.gaussian_params.shape[0] * (self.l_max + 1) ** 2
 		self.label_shape = self.energy_mean.shape
 		return
 
@@ -760,12 +749,16 @@ class UniversalNetwork(object):
 				else:
 					dxyzs, padding_mask = center_dxyzs(self.xyzs_pl, self.Zs_pl)
 					nearest_neighbors = tf.gather_nd(self.nearest_neighbors_pl, padding_mask)
-					canon_xyzs = gs_canonicalizev2(dxyzs, nearest_neighbors)
-					embed, mol_idx = tf_gaush_embed_channel(canon_xyzs, self.Zs_pl,
+					canon_xyzs, perm_canon_xyzs = gs_canonicalize(dxyzs, nearest_neighbors)
+					embed = tf_gaush_embed_channel(canon_xyzs, self.Zs_pl,
 									elements, self.gaussian_params, self.l_max, self.element_codes)
+					perm_embed = tf_gaush_embed_channel(perm_canon_xyzs, self.Zs_pl,
+											elements, self.gaussian_params, self.l_max, self.element_codes)
 			with tf.name_scope('energy_inference'):
-				atom_energies, energy_variables = self.energy_inference(embed, mol_idx)
-				norm_bp_energy = tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
+				atom_energies, energy_variables = self.energy_inference(embed, padding_mask)
+				perm_atom_energies, _ = self.energy_inference(perm_embed, padding_mask)
+				norm_bp_energy = ((tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
+								+ tf.reshape(tf.reduce_sum(perm_atom_energies, axis=1), [self.batch_size])) / 2.0)
 				self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
 				self.total_energy = self.bp_energy
 				self.energy_loss = self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
