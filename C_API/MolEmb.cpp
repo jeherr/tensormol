@@ -457,115 +457,6 @@ static PyObject* EmptyInterfacedFunction(PyObject *self, PyObject  *args)
 		return Py_BuildValue("i", To);
 	}
 
-//
-// This isn't an embedding; it's fast code to make a go-model potential for a molecule.
-//
-static PyObject* Make_Go(PyObject *self, PyObject  *args) {
-
-	PyArrayObject   *xyz, *DistMat, *Coords, *OutMat;
-	int  theatom; // omit the training atom from the RDF
-	if (!PyArg_ParseTuple(args, "O!O!O!O!i", &PyArray_Type, &xyz, &PyArray_Type, &DistMat,&PyArray_Type, &OutMat,&PyArray_Type, &Coords, &theatom)) return 0;
-
-	double *xyz_data=(double*) xyz->data;
-	double *distmat=(double*) DistMat->data;
-	double *outmat=(double*) OutMat->data;
-	double *coords=(double*) Coords->data;
-	const int natom = (DistMat->dimensions)[0];
-	const int nxyz = (xyz->dimensions)[0];
-	const int noutmat = (OutMat->dimensions)[0];
-
-	if (nxyz != noutmat)
-	std::cout << "Bad input arrays :( " << std::endl;
-
-	for (int s=0; s<nxyz; s++)
-	{
-		//std::cout << xyz_data[3*s] << " " << xyz_data[3*s+1] << " " << xyz_data[3*s+2] << std::endl;
-		for (int i=0; i<natom; i++)
-		{
-			for (int j=i+1; j<natom; j++)
-			{
-				if (i==theatom)
-				{
-					outmat[s] += 0.0125*pow(distmat[i*natom+j]-dist(xyz_data[3*s],xyz_data[3*s+1],xyz_data[3*s+2],coords[3*j],coords[3*j+1],coords[3*j+2]),2.0);
-				}
-				else if (j==theatom)
-				{
-					outmat[s] += 0.0125*pow(distmat[i*natom+j]-dist(xyz_data[3*s],xyz_data[3*s+1],xyz_data[3*s+2],coords[3*i],coords[3*i+1],coords[3*i+2]),2.0);
-				}
-			}
-		}
-	}
-	PyObject* nlist = PyList_New(0);
-	return nlist;
-}
-
-static PyObject*  Make_RDF(PyObject *self, PyObject  *args) {
-
-	PyArrayObject   *xyz, *grids, *atoms_, *elements;
-	double   dist_cut,  width;
-	int  ngrids, theatom; // omit the training atom from the RDF
-	if (!PyArg_ParseTuple(args, "O!O!O!O!diid",
-	&PyArray_Type, &xyz, &PyArray_Type, &grids, &PyArray_Type, &atoms_, &PyArray_Type, &elements, &dist_cut, &ngrids, &theatom, &width))  return NULL;
-	PyObject* RDF_all = PyList_New(0);
-
-	//npy_intp* nelep = elements->dimensions;
-	const int nele = (elements->dimensions)[0];
-	uint8_t* ele=(uint8_t*)elements->data;
-	uint8_t* atoms=(uint8_t*)atoms_->data;
-
-	npy_intp  RDFdim[2] = {nele, ngrids};
-	PyObject* RDF;
-	double *RDF_data, *xyz_data, *grids_data;
-	double center[3]; // x y z of the center
-	int natom, num_RDF;
-	array<std::vector<int>, 100> ele_index;  // hold max 100 elements most
-	array<std::vector<double>, 100> ele_dist;  //  hold max 100 elements most
-
-	// for (int i = 0; i < nele; i++)
-	//	ele[i] = PyFloat_AsDouble(PyList_GetItem(elements, i));
-
-	npy_intp* Nxyz = xyz->dimensions;
-	natom = Nxyz[0];
-	npy_intp* Ngrids = grids->dimensions;
-	num_RDF = Ngrids[0];
-	xyz_data = (double*) xyz->data;
-	grids_data = (double*) grids -> data;
-	for (int j = 0; j < natom; j++) {
-		if (j==theatom)
-		continue;
-		for (int k=0; k < nele; k++) {
-			if (atoms[j] == ele[k])
-			ele_index[k].push_back(j);
-		}
-	}
-
-	for  (int i= 0; i < num_RDF; i++) {
-		center[0] = grids_data[i*Ngrids[1]];
-		center[1] = grids_data[i*Ngrids[1]+1];
-		center[2] = grids_data[i*Ngrids[1]+2];
-		RDF = PyArray_SimpleNew(2, RDFdim, NPY_DOUBLE);  //2 is the number of dimensions
-		RDF_data = (double*) ((PyArrayObject*) RDF)->data;
-		for (int n = 0 ; n < RDFdim[0]*RDFdim[1]; n++)
-		RDF_data[n] = 0.0;
-		for (int m =0; m < nele; m++) {
-			if (ele_index[m].size() > 0 )
-			rdf(RDF_data,  ngrids,  ele_index,  m, center, xyz_data,  dist_cut, width);
-		}
-
-		PyList_Append(RDF_all, RDF);
-
-	}
-
-	for (int j = 0; j < nele; j++)
-	ele_index[j].clear(); // It should scope out anyways.
-
-	PyObject* nlist = PyList_New(0);
-	PyList_Append(nlist, RDF_all);
-	//         PyList_Append(nlist, AM_all);
-
-	return  nlist;
-}
-
 int  Make_AM (const double *center_m, const array<std::vector<int>, 100>  ele_index, const int &nele, const int &center_etype_index, const int &center_index, const double *molxyz_data, npy_intp *Nxyz, double *AM_data, const int &max_near){
 	double dist1, dist2, dist3, angel, dist;
 	int angel_index = 0;
@@ -1118,60 +1009,6 @@ static PyObject* CountInRange(PyObject *self, PyObject  *args)
 	return SH;
 }
 
-static PyObject* GetRDF_Bin(PyObject *self, PyObject  *args)
-{
-	PyArrayObject *xyz;
-	PyArrayObject *Zs;
-	double cut;
-	double dr;
-	double cellsize;
-	int ele1, ele2;
-	if (!PyArg_ParseTuple(args, "O!O!dddii", &PyArray_Type, &xyz, &PyArray_Type, &Zs, &cut, &dr, &cellsize, &ele1, &ele2))
-	return NULL;
-	int ntess = (int)(cut/cellsize)+1;
-	const int nat = (xyz->dimensions)[0];
-	int nat_p = nat*((int)(pow(2*ntess+1,3)));
-	npy_intp xyzpdim[2] = {nat_p ,3};
-	PyObject* xyzp = PyArray_ZEROS(2, xyzpdim, NPY_DOUBLE, 0);
-	double *SH_data,*xyzp_data, *xyz_data;
-	uint8_t* atoms=(uint8_t*)Zs->data;
-	xyz_data = (double*) ((PyArrayObject*) xyz)->data;
-	xyzp_data = (double*) ((PyArrayObject*) xyzp)->data;
-	for (int n=0; n<nat; ++n) {
-		xyzp_data[n*3+0] = xyz_data[n*3+0];
-		xyzp_data[n*3+1] = xyz_data[n*3+1];
-		xyzp_data[n*3+2] = xyz_data[n*3+2];
-	}
-	int tess_index = 1;
-	for (int i=-ntess; i <= ntess; ++i) {
-		for (int j=-ntess; j <= ntess; ++j)
-			for (int k=-ntess; k <= ntess; ++k)
-			   if (i!=0 || j!=0 || k!=0){
-				for (int n=0; n<nat; ++n) {
-						xyzp_data[(tess_index*nat+n)*3+0] = xyz_data[n*3+0] + i*cellsize;
-						xyzp_data[(tess_index*nat+n)*3+1] = xyz_data[n*3+1] + j*cellsize;
-						xyzp_data[(tess_index*nat+n)*3+2] = xyz_data[n*3+2] + k*cellsize;
-				}
-				tess_index++;
-			   }
-	}
-	PyObject* bin_index = PyList_New(0);
-	double dist;
-	for (int i=0; i < nat; ++i)
-		if (atoms[i] == ele1) {
-			for (int j=0; j < nat_p; ++j)
-			{
-				if (atoms[j%nat] == ele2 && i!=j) {
-					dist = sqrt((xyz_data[i*3+0]-xyzp_data[j*3+0])*(xyz_data[i*3+0]-xyzp_data[j*3+0])+(xyz_data[i*3+1]-xyzp_data[j*3+1])*(xyz_data[i*3+1]-xyzp_data[j*3+1])+(xyz_data[i*3+2]-xyzp_data[j*3+2])*(xyz_data[i*3+2]-xyzp_data[j*3+2])) + 0.00000000001;
-					if (dist < cut) {
-						PyObject* ti = PyInt_FromLong((int)(dist/dr));
-						PyList_Append(bin_index, ti);
-					}
-				}
-			}
-		}
-	return bin_index;
-}
 //
 // Make a neighborlist using a naive, quadratic algorithm.
 // returns a python list.
@@ -1258,7 +1095,8 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 	double rng;
 	int nreal;
 	int DoPerms;
-	if (!PyArg_ParseTuple(args, "O!O!dii", &PyArray_Type, &xyzs, &PyArray_Type, &zs, &rng, &nreal, &DoPerms))
+  bool sortns;
+	if (!PyArg_ParseTuple(args, "O!O!diib", &PyArray_Type, &xyzs, &PyArray_Type, &zs, &rng, &nreal, &DoPerms, &sortns))
 		return NULL;
 	double *xyzs_data;
 	int32_t *z_data;
@@ -1349,7 +1187,10 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 		{
 			if (tmp[j].size() > MaxNeigh)
 				MaxNeigh = tmp[j].size();
-			std::sort(tmp[j].begin(), tmp[j].end(), by_dist_and_z());
+      if (sortns)
+  			std::sort(tmp[j].begin(), tmp[j].end(), by_dist_and_z());
+      else
+        std::random_shuffle(tmp[j].begin(), tmp[j].end());
 		}
 	}
 	npy_intp outdim2[3] = {nmol,nat,MaxNeigh};
@@ -1551,224 +1392,6 @@ static PyObject* Norm_Matrices(PyObject *self, PyObject *args)
 	for (int j=0; j < dim2; ++j)
 	norm += (dmat1_data[i*dim2+j] - dmat2_data[i*dim2+j])*(dmat1_data[i*dim2+j] - dmat2_data[i*dim2+j]);
 	return PyFloat_FromDouble(sqrt(norm));
-}
-
-static PyObject* Make_GoForce(PyObject *self, PyObject  *args)
-{
-	PyArrayObject *xyz, *EqDistMat;
-	int at, spherical;
-	if (!PyArg_ParseTuple(args, "O!O!ii", &PyArray_Type, &xyz, &PyArray_Type, &EqDistMat, &at, &spherical))
-	return NULL;
-	const int nat = (xyz->dimensions)[0];
-	npy_intp outdim[2] = {nat,3};
-	if (at>=0)
-	outdim[0] = 1;
-	PyObject* hess = PyArray_ZEROS(2, outdim, NPY_DOUBLE, 0);
-	double *frc_data,*xyz_data,*d_data;
-	xyz_data = (double*) ((PyArrayObject*)xyz)->data;
-	frc_data = (double*) ((PyArrayObject*)hess)->data;
-	d_data = (double*) ((PyArrayObject*)EqDistMat)->data;
-	double u[3]={0.0,0.0,0.0};
-	if (at<0)
-	{
-		#pragma omp parallel for
-		for (int i=0; i < nat; ++i)
-		{
-			for (int j=0; j < nat; ++j)
-			{
-				if (i==j)
-				continue;
-				double dij = sqrt((xyz_data[i*3+0]-xyz_data[j*3+0])*(xyz_data[i*3+0]-xyz_data[j*3+0])+(xyz_data[i*3+1]-xyz_data[j*3+1])*(xyz_data[i*3+1]-xyz_data[j*3+1])+(xyz_data[i*3+2]-xyz_data[j*3+2])*(xyz_data[i*3+2]-xyz_data[j*3+2]));
-				u[0] = (xyz_data[j*3]-xyz_data[i*3])/dij;
-				u[1] = (xyz_data[j*3+1]-xyz_data[i*3+1])/dij;
-				u[2] = (xyz_data[j*3+2]-xyz_data[i*3+2])/dij;
-				frc_data[i*3+0] += -2*(dij-d_data[i*nat+j])*u[0];
-				frc_data[i*3+1] += -2*(dij-d_data[i*nat+j])*u[1];
-				frc_data[i*3+2] += -2*(dij-d_data[i*nat+j])*u[2];
-			}
-		}
-		if (spherical)
-		for (int i=0; i < nat; ++i)
-		CartToSphere(frc_data+i*3);
-	}
-	else
-	{
-		int i=at;
-		for (int j=0; j < nat; ++j)
-		{
-			if (i==j)
-			continue;
-			double dij = sqrt((xyz_data[i*3+0]-xyz_data[j*3+0])*(xyz_data[i*3+0]-xyz_data[j*3+0])+(xyz_data[i*3+1]-xyz_data[j*3+1])*(xyz_data[i*3+1]-xyz_data[j*3+1])+(xyz_data[i*3+2]-xyz_data[j*3+2])*(xyz_data[i*3+2]-xyz_data[j*3+2]));
-			u[0] = (xyz_data[j*3]-xyz_data[i*3])/dij;
-			u[1] = (xyz_data[j*3+1]-xyz_data[i*3+1])/dij;
-			u[2] = (xyz_data[j*3+2]-xyz_data[i*3+2])/dij;
-			//std::cout<<i<<"  "<<j<<"  "<<'dij'<<"  "<<dij<<"  "<<(-2*(dij-d_data[i*nat+j])*u[0])<<"  "<<(-2*(dij-d_data[i*nat+j])*u[1])<<"  "<<(-2*(dij-d_data[i*nat+j])*u[2])<<std::endl;
-			frc_data[0] += -2*(dij-d_data[i*nat+j])*u[0];
-			frc_data[1] += -2*(dij-d_data[i*nat+j])*u[1];
-			frc_data[2] += -2*(dij-d_data[i*nat+j])*u[2];
-		}
-		if (spherical)
-		CartToSphere(frc_data);
-	}
-	return hess;
-}
-
-static PyObject* Make_GoForceLocal(PyObject *self, PyObject  *args)
-{
-	PyArrayObject *xyz, *EqDistMat;
-	int at;
-	if (!PyArg_ParseTuple(args, "O!O!i", &PyArray_Type, &xyz, &PyArray_Type, &EqDistMat, &at))
-	return NULL;
-	const int nat = (xyz->dimensions)[0];
-	npy_intp outdim[2] = {nat,3};
-	if (at>=0)
-	outdim[0] = 1;
-	PyObject* hess = PyArray_ZEROS(2, outdim, NPY_DOUBLE, 0);
-	double *frc_data,*xyz_data,*d_data;
-	xyz_data = (double*) ((PyArrayObject*)xyz)->data;
-	frc_data = (double*) ((PyArrayObject*)hess)->data;
-	d_data = (double*) ((PyArrayObject*)EqDistMat)->data;
-	double u[3]={0.0,0.0,0.0};
-	if (at<0)
-	{
-		for (int i=0; i < nat; ++i)
-		{
-			for (int j=0; j < nat; ++j)
-			{
-				if (i==j)
-				continue;
-				double dij = sqrt((xyz_data[i*3+0]-xyz_data[j*3+0])*(xyz_data[i*3+0]-xyz_data[j*3+0])+(xyz_data[i*3+1]-xyz_data[j*3+1])*(xyz_data[i*3+1]-xyz_data[j*3+1])+(xyz_data[i*3+2]-xyz_data[j*3+2])*(xyz_data[i*3+2]-xyz_data[j*3+2]));
-				if (dij > 15.0)
-				continue;
-				u[0] = (xyz_data[j*3]-xyz_data[i*3])/dij;
-				u[1] = (xyz_data[j*3+1]-xyz_data[i*3+1])/dij;
-				u[2] = (xyz_data[j*3+2]-xyz_data[i*3+2])/dij;
-				frc_data[i*3+0] += -2*(dij-d_data[i*nat+j])*u[0];
-				frc_data[i*3+1] += -2*(dij-d_data[i*nat+j])*u[1];
-				frc_data[i*3+2] += -2*(dij-d_data[i*nat+j])*u[2];
-			}
-		}
-	}
-	else
-	{
-		int i=at;
-		for (int j=0; j < nat; ++j)
-		{
-			if (i==j)
-			continue;
-			double dij = sqrt((xyz_data[i*3+0]-xyz_data[j*3+0])*(xyz_data[i*3+0]-xyz_data[j*3+0])+(xyz_data[i*3+1]-xyz_data[j*3+1])*(xyz_data[i*3+1]-xyz_data[j*3+1])+(xyz_data[i*3+2]-xyz_data[j*3+2])*(xyz_data[i*3+2]-xyz_data[j*3+2]));
-			if (dij > 15.0)
-			continue;
-			u[0] = (xyz_data[j*3]-xyz_data[i*3])/dij;
-			u[1] = (xyz_data[j*3+1]-xyz_data[i*3+1])/dij;
-			u[2] = (xyz_data[j*3+2]-xyz_data[i*3+2])/dij;
-			frc_data[0] += -2*(dij-d_data[i*nat+j])*u[0];
-			frc_data[1] += -2*(dij-d_data[i*nat+j])*u[1];
-			frc_data[2] += -2*(dij-d_data[i*nat+j])*u[2];
-		}
-	}
-	return hess;
-}
-
-static PyObject* Make_GoHess(PyObject *self, PyObject  *args)
-{
-	PyArrayObject *xyz, *EqDistMat;
-	if (!PyArg_ParseTuple(args, "O!O!", &PyArray_Type, &xyz, &PyArray_Type, &EqDistMat))
-	return NULL;
-	const int nat = (xyz->dimensions)[0];
-	npy_intp outdim[2] = {3*nat,3*nat};
-	PyObject* hess = PyArray_ZEROS(2, outdim, NPY_DOUBLE, 0);
-	double *hess_data,*xyz_data,*d_data;
-	xyz_data = (double*) ((PyArrayObject*)xyz)->data;
-	hess_data = (double*) ((PyArrayObject*)hess)->data;
-	d_data = (double*) ((PyArrayObject*)EqDistMat)->data;
-	double u[3]={0.0,0.0,0.0};
-	for (int i=0; i < nat; ++i)
-	{
-		for (int j=0; j < nat; ++j)
-		{
-			if (i==j)
-			continue;
-			double dij = sqrt((xyz_data[i*3+0]-xyz_data[j*3+0])*(xyz_data[i*3+0]-xyz_data[j*3+0])+(xyz_data[i*3+1]-xyz_data[j*3+1])*(xyz_data[i*3+1]-xyz_data[j*3+1])+(xyz_data[i*3+2]-xyz_data[j*3+2])*(xyz_data[i*3+2]-xyz_data[j*3+2]));
-			u[0] = (xyz_data[j*3]-xyz_data[i*3])/dij;
-			u[1] = (xyz_data[j*3+1]-xyz_data[i*3+1])/dij;
-			u[2] = (xyz_data[j*3+2]-xyz_data[i*3+2])/dij;
-			for (int ip=0; ip < 3; ++ip)
-			{
-				for (int jp=0; jp < 3; ++jp)
-				{
-					if (ip==jp)
-					{
-						hess_data[(i*3+ip)*3*nat+i*3+ip] += 2.0*(u[ip]*u[ip]- (dij-d_data[i*nat+j])*(u[ip]*u[ip])/dij + (dij-d_data[i*nat+j])/dij);
-						hess_data[(i*3+ip)*3*nat+j*3+jp] = 2.0*(-u[ip]*u[ip] + (dij-d_data[i*nat+j])*(u[ip]*u[ip])/dij - (dij-d_data[i*nat+j])/dij);
-					}
-					else
-					{
-						hess_data[(i*3+ip)*3*nat+i*3+jp] += 2.0*(u[ip]*u[jp] - (dij-d_data[i*nat+j])*u[ip]*u[jp]/dij);
-						hess_data[(i*3+ip)*3*nat+j*3+jp] = 2.0*(-u[ip]*u[jp] + (dij-d_data[i*nat+j])*u[ip]*u[jp]/dij);
-					}
-				}
-			}
-		}
-	}
-	return hess;
-}
-
-static PyObject* Make_LJForce(PyObject *self, PyObject  *args)
-{
-	PyArrayObject *xyz, *EqDistMat, *eps;
-	int at;
-	if (!PyArg_ParseTuple(args, "O!O!O!i", &PyArray_Type, &xyz, &PyArray_Type, &EqDistMat, &PyArray_Type, &eps, &at ))
-	return NULL;
-	const int nat = (xyz->dimensions)[0];
-	npy_intp outdim[2] = {nat,3};
-	if (at>=0)
-	outdim[0] = 1;
-	PyObject* hess = PyArray_ZEROS(2, outdim, NPY_DOUBLE, 0);
-	double *frc_data,*xyz_data,*eps_data,*d_data;
-	xyz_data = (double*) ((PyArrayObject*)xyz)->data;
-	eps_data = (double*) ((PyArrayObject*)eps)->data;
-	frc_data = (double*) ((PyArrayObject*)hess)->data;
-	d_data = (double*) ((PyArrayObject*)EqDistMat)->data;
-	double u[3]={0.0,0.0,0.0};
-
-	if (at<0)
-	{
-		for (int i=0; i < nat; ++i)
-		{
-			for (int j=0; j < nat; ++j)
-			{
-				if (i==j)
-				continue;
-				double dij = (pow((xyz_data[i*3+0]-xyz_data[j*3+0]), 2.0) + pow((xyz_data[i*3+1]-xyz_data[j*3+1]), 2.0) + pow((xyz_data[i*3+2]-xyz_data[j*3+2]), 2.0));
-				u[0] = (xyz_data[i*3] - xyz_data[j*3]);
-				u[1] = (xyz_data[i*3+1] - xyz_data[j*3+1]);
-				u[2] = (xyz_data[i*3+2] - xyz_data[j*3+2]);
-				frc_data[i*3+0] += -eps_data[i*nat+j]*((12.*pow(d_data[i*nat+j],12.0)/pow(dij,7.0))*u[0]-(12.*pow(d_data[i*nat+j],6.0)/pow(dij,4.0))*u[0]);
-				frc_data[i*3+1] += -eps_data[i*nat+j]*((12.*pow(d_data[i*nat+j],12.0)/pow(dij,7.0))*u[1]-(12.*pow(d_data[i*nat+j],6.0)/pow(dij,4.0))*u[1]);
-				frc_data[i*3+2] += -eps_data[i*nat+j]*((12.*pow(d_data[i*nat+j],12.0)/pow(dij,7.0))*u[2]-(12.*pow(d_data[i*nat+j],6.0)/pow(dij,4.0))*u[2]);
-
-			}
-		}
-	}
-	else
-	{
-		int i=at;
-
-		for (int j=0; j < nat; ++j)
-		{
-			if (i==j)
-			continue;
-			double dij = (pow((xyz_data[i*3+0]-xyz_data[j*3+0]), 2.0) + pow((xyz_data[i*3+1]-xyz_data[j*3+1]), 2.0) + pow((xyz_data[i*3+2]-xyz_data[j*3+2]), 2.0));
-			u[0] = (xyz_data[i*3] - xyz_data[j*3])/dij;
-			u[1] = (xyz_data[i*3+1] - xyz_data[j*3+1])/dij;
-			u[2] = (xyz_data[i*3+2] - xyz_data[j*3+2])/dij;
-			frc_data[0] += -eps_data[i*nat+j]*((12.*pow(d_data[i*nat+j],12.0)/pow(dij,7.0))*u[0]-(12.*pow(d_data[i*nat+j],6.0)/pow(dij,4.0))*u[0]);
-			frc_data[1] += -eps_data[i*nat+j]*((12.*pow(d_data[i*nat+j],12.0)/pow(dij,7.0))*u[1]-(12.*pow(d_data[i*nat+j],6.0)/pow(dij,4.0))*u[1]);
-			frc_data[2] += -eps_data[i*nat+j]*((12.*pow(d_data[i*nat+j],12.0)/pow(dij,7.0))*u[2]-(12.*pow(d_data[i*nat+j],6.0)/pow(dij,4.0))*u[2]);
-		}
-	}
-	return hess;
 }
 
 //
@@ -2311,24 +1934,10 @@ static PyMethodDef EmbMethods[] =
 	"CountInRange method"},
 	{"Make_DistMat_ForReal", Make_DistMat_ForReal, METH_VARARGS,
 	"Make_DistMat_ForReal method"},
-	{"GetRDF_Bin", GetRDF_Bin, METH_VARARGS,
-	"GetRDF_Bin method"},
 	{"Norm_Matrices", Norm_Matrices, METH_VARARGS,
 	"Norm_Matrices method"},
 	{"Make_CM", Make_CM, METH_VARARGS,
 	"Make_CM method"},
-	{"Make_RDF", Make_RDF, METH_VARARGS,
-	"Make_RDF method"},
-	{"Make_Go", Make_Go, METH_VARARGS,
-	"Make_Go method"},
-	{"Make_GoForce", Make_GoForce, METH_VARARGS,
-	"Make_GoForce method"},
-	{"Make_GoForceLocal", Make_GoForceLocal, METH_VARARGS,
-	"Make_GoForceLocal method"},
-	{"Make_GoHess", Make_GoHess, METH_VARARGS,
-	"Make_GoHess method"},
-	{"Make_LJForce", Make_LJForce, METH_VARARGS,
-	"Make_LJForce method"},
 	{"Make_SH", Make_SH, METH_VARARGS,
 	"Make_SH method"},
 	{"Make_SH_Transf", Make_SH_Transf, METH_VARARGS,

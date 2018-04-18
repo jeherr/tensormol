@@ -1,12 +1,15 @@
 // Neighborlist
 
 // Includes
+//#include "Python.h"
 #include <list>
 #include <unordered_map>
 #include <string>
 #include <vector>
 #include <iostream>
-#include <unordered_set>
+#include <set>
+#include <utility>
+#include <cmath>
 
 using namespace std;
 
@@ -51,12 +54,13 @@ typedef list<Atom> *cell_list_ptr;
 typedef vector<vector<vector<cell_list_ptr> > > grid;
 typedef list<pair<int, int>> neighborlist;
 
-#define R_CUT 1.0 // Cutoff radius. 1 Angstrom for now
+#define R_CUT 5.0 // Cutoff radius (Angstroms)
 #define pair pair<int,int>
 #define Cell Heads[x][y][z]
 
 // Prototypes
 int get_atomic_number(string);
+string get_atom_name(int);
 neighborlist compute_neighbor_list(grid);
 
 // Main execution: Process input file and create the x by
@@ -141,7 +145,7 @@ int main() {
 		Cell->push_back(atom);
 	}
 	/* ==== Testing ==== */
-	for (int x = 0; x < Heads.size(); x++) {
+	/*for (int x = 0; x < Heads.size(); x++) {
 		for (int y = 0; y < Heads[x].size(); y++) {
 			for (int z = 0; z < Heads[x][y].size(); z++) {
 				cout << x << ' ' << y << ' ' << z << ": ";
@@ -153,9 +157,20 @@ int main() {
 			cout << '\n';
 		}
 		cout << "\n\n\n";
-	}
+	}*/
 
 	neighborlist neighbors = compute_neighbor_list(Heads);
+
+	for (auto it = neighbors.begin(); it != neighbors.end(); it++) {
+		printf("%s: %9.6f %9.6f %9.6f ||| %s: %9.6f %9.6f %9.6f ... %9.6f\n", get_atom_name(xyzs[it->first][3]).c_str(), xyzs[it->first][0],
+					xyzs[it->first][1], xyzs[it->first][2],
+					get_atom_name(xyzs[it->second][3]).c_str(), xyzs[it->second][0],
+					xyzs[it->second][1], xyzs[it->second][2],
+					sqrt( pow((xyzs[it->first][0] - xyzs[it->second][0]), 2)
+					+ pow((xyzs[it->first][1] - xyzs[it->second][1]), 2)
+					+ pow((xyzs[it->first][2] - xyzs[it->second][2]), 2) )
+					);
+	}
 
 }
 
@@ -187,57 +202,101 @@ neighborlist compute_neighbor_list(grid Heads) {
 	for (int x = 0; x < xbuckets; x++) {
 		for (int y = 0; y < ybuckets; y++) {
 			for (int z = 0; z < zbuckets; z++) {
-				unordered_set<vector<int>> to_visit;
+				vector<vector<int>> all_cells;
+				set<vector<int>> to_visit;
 
-				// Cell * (always included in to_visit)
-				vector<int> current_coords {x, y, z};
-				to_visit.insert(current_coords);
+				// Cell * (not included in to_visit, dealt with afterwards)
+				vector<int> current_coords = {x, y, z};
 
-				// Cell C
-				vector<int> c_coords {x + 1, y - 1, z - 1};
+				// Cell C (0)
+				vector<int> c_coords = {x + 1, y - 1, z - 1};
+				all_cells.push_back(c_coords);
+
+				// Cell F (1)
+				vector<int> f_coords = {x + 1, y, z - 1};
+				all_cells.push_back(f_coords);
+
+				// Cell I (2)
+				vector<int> i_coords = {x + 1, y + 1, z - 1};
+				all_cells.push_back(i_coords);
+
+				// Cell K (3)
+				vector<int> k_coords = {x, y - 1, z};
+				all_cells.push_back(k_coords);
+
+				// Cell L (4)
+				vector<int> l_coords = {x + 1, y - 1, z};
+				all_cells.push_back(l_coords);
+
+				// Cell N (5)
+				vector<int> n_coords = {x + 1, y, z};
+				all_cells.push_back(n_coords);
+
+				// Cell Q (6)
+				vector<int> q_coords = {x + 1, y + 1, z};
+				all_cells.push_back(q_coords);
+
+				// Cell S (7)
+				vector<int> s_coords = {x, y - 1, z + 1};
+				all_cells.push_back(s_coords);
+
+				// Cell T (8)
+				vector<int> t_coords = {x + 1, y - 1, z + 1};
+				all_cells.push_back(t_coords);
+
+				// Cell V (9)
+				vector<int> v_coords = {x, y, z + 1};
+				all_cells.push_back(v_coords);
+
+				// Cell W (10)
+				vector<int> w_coords = {x + 1, y, z + 1};
+				all_cells.push_back(w_coords);
+
+				// Cell Y (11)
+				vector<int> y_coords = {x, y + 1, z + 1};
+				all_cells.push_back(y_coords);
+
+				// Cell Z (12)
+				vector<int> z_coords = {x + 1, y + 1, z + 1};
+				all_cells.push_back(z_coords);
+
 				/* TODO NEXT ==> ALL THE CONDITIONS FOR WHETHER TO INSERT
 				THE COORDS INTO THE TO_VISIT VECTOR */
-
-				// Cell F
-				vector<int> f_coords {x + 1, y, z - 1};
-
-				// Cell I
-				vector<int> i_coords {x + 1, y + 1, z - 1};
-
-				// Cell K
-				vector<int> k_coords {x, y - 1, z};
-
-				// Cell L
-				vector<int> l_coords {x + 1, y - 1, z};
-
-				// Cell N
-				vector<int> n_coords {x + 1, y, z};
-
-				// Cell Q
-				vector<int> q_coords {x + 1, y + 1, z};
-
-				// Cell S
-
-				// Cell T
-
-				// Cell V
-
-				// Cell W
-
-				// Cell Y
-
-				// Cell Z
-				
+				for (size_t i = 0; i < all_cells.size(); i++) {
+					if (all_cells[i][0] >= 0 && all_cells[i][0] < xbuckets &&
+							all_cells[i][1] >= 0 && all_cells[i][1] < ybuckets &&
+							all_cells[i][2] >= 0 && all_cells[i][2] < zbuckets) {
+						to_visit.insert(all_cells[i]);
+					}
+				}
 
 				for (auto it = Cell->begin(); it != Cell->end(); it++) {
-
+					//cout << x << " " << y << " " << z << " " << "\n";
+					for (auto jt = to_visit.begin(); jt != to_visit.end(); jt++) {
+						int x2 = (*jt)[0]; int y2 = (*jt)[1]; int z2 = (*jt)[2];
+						//cout << x2 << " " << y2 << " " << z2 << " | ";
+						for (auto kt = Heads[x2][y2][z2]->begin(); kt != Heads[x2][y2][z2]->end(); kt++) {
+							double distance = sqrt( pow((it->getX() - kt->getX()), 2) + pow((it->getY() - kt->getY()), 2) + pow((it->getZ() - kt->getZ()), 2) );
+							if (distance < R_CUT && distance != 0.0) {
+								neighbors.push_back(make_pair(it->getID(), kt->getID()));
+							}
+						}
+					}
+					//cout << "\n";
+				}
+				for (auto it = Cell->begin(); it != Cell->end(); it++) {
+					auto curr = it;
+					curr++;
+					for (auto jt = curr; jt != Cell->end(); jt++) {
+						double distance = sqrt( pow((it->getX() - jt->getX()), 2) + pow((it->getY() - jt->getY()), 2) + pow((it->getZ() - jt->getZ()), 2) );
+						if (distance < R_CUT && distance != 0.0) {
+							neighbors.push_back(make_pair(it->getID(), jt->getID()));
+						}
+					}
 				}
 			}
 		}
 	}
-
-
-	/* ==== neighbors.insert(make_pair(atom_id_1, atom_id_2)); ==== */
 
 	return neighbors;
 }
@@ -259,4 +318,23 @@ int get_atomic_number(string s) {
 		return Atoms[s];
 	else
 		return Atoms["X"];
+}
+
+string get_atom_name(int x) {
+	unordered_map<int, string> Atoms = {
+		{0, "X"},
+		{1, "H"},
+		{2, "He"},
+		{3, "Li"},
+		{4, "Be"},
+		{5, "B"},
+		{6, "C"},
+		{7, "N"},
+		{8, "O"},
+		{9, "F"}
+	};
+	if (Atoms.find(x) != Atoms.end())
+		return Atoms[x];
+	else
+		return Atoms[0];
 }
