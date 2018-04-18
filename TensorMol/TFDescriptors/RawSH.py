@@ -620,7 +620,7 @@ def tf_gaush_embed_channel(xyzs, Zs, elements, gauss_params, l_max, embed_factor
 	pair_Zs = tf.gather(Zs, padding_mask[:,0])
 	channel_factors = tf.reshape(tf.gather(embed_factor, tf.reshape(pair_Zs, [-1])), [tf.shape(xyzs)[0], tf.shape(xyzs)[1], 4])
 	embeds = tf.reduce_sum(tf.expand_dims(embeds, axis=-1) * tf.expand_dims(channel_factors, axis=-2), axis=1)
-	return tf.reshape(embeds, [tf.shape(xyzs)[0], -1])
+	return embeds
 
 def tf_gaush_element_channelv3(xyzs, Zs, elements, gauss_params, l_max):
 	"""
