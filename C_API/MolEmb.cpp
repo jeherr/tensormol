@@ -1188,7 +1188,9 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 			if (tmp[j].size() > MaxNeigh)
 				MaxNeigh = tmp[j].size();
       if (sortns)
-  			std::sort(tmp[j].begin(), tmp[j].end(), by_dist_and_z());
+			{
+ 				std::sort(tmp[j].begin(), tmp[j].end(), by_dist_and_z());
+			}
       else
         std::random_shuffle(tmp[j].begin(), tmp[j].end());
 		}
