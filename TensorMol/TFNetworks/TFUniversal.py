@@ -397,7 +397,7 @@ class UniversalNetwork(object):
 		feed_dict={i: d for i, d in zip(pl_list, batch_data)}
 		return feed_dict
 
-	def energy_inference(self, inputs, indexs):
+	def energy_inference(self, embed, atom_codes, indices):
 		"""
 		Builds a Behler-Parinello graph
 
@@ -410,13 +410,18 @@ class UniversalNetwork(object):
 		variables=[]
 		output = tf.zeros([self.batch_size, self.max_num_atoms], dtype=self.tf_precision)
 		with tf.variable_scope("energy_network", reuse=tf.AUTO_REUSE):
+			code_kernel1 = tf.get_variable(name="CodeKernel", shape=(4, 4),dtype=self.tf_precision)
+			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(4, 4),dtype=self.tf_precision)
+			coded_weights = tf.matmul(atom_codes, code_kernel1)
+			coded_embed = tf.einsum('ikj,ij->ikj', embed, coded_weights)
+			coded_embed = tf.reshape(tf.einsum('ikj,jl->ikl', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
 			for i in range(len(self.hidden_layers)):
 				if i == 0:
 					with tf.name_scope('hidden1'):
 						weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
 								stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
 						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-						activations = self.activation_function(tf.matmul(inputs, weights) + biases)
+						activations = self.activation_function(tf.matmul(coded_embed, weights) + biases)
 						variables.append(weights)
 						variables.append(biases)
 				else:
@@ -434,7 +439,7 @@ class UniversalNetwork(object):
 				outputs = tf.squeeze(tf.matmul(activations, weights) + biases, axis=1)
 				variables.append(weights)
 				variables.append(biases)
-				output += tf.scatter_nd(indexs, outputs, [self.batch_size, self.max_num_atoms])
+				output += tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
@@ -754,9 +759,10 @@ class UniversalNetwork(object):
 									elements, self.gaussian_params, self.l_max, self.element_codes)
 					perm_embed = tf_gaush_embed_channel(perm_canon_xyzs, self.Zs_pl,
 											elements, self.gaussian_params, self.l_max, self.element_codes)
+					atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			with tf.name_scope('energy_inference'):
-				atom_energies, energy_variables = self.energy_inference(embed, padding_mask)
-				perm_atom_energies, _ = self.energy_inference(perm_embed, padding_mask)
+				atom_energies, energy_variables = self.energy_inference(embed, atom_codes, padding_mask)
+				perm_atom_energies, _ = self.energy_inference(perm_embed, atom_codes, padding_mask)
 				norm_bp_energy = ((tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
 								+ tf.reshape(tf.reduce_sum(perm_atom_energies, axis=1), [self.batch_size])) / 2.0)
 				self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
