@@ -46,7 +46,7 @@ class MSet:
 		LOGGER.info("Loaded, "+str(len(self.mols))+" molecules "+str(self.NAtoms())+" Atoms total "+str(self.AtomTypes())+" Types ")
 		return
 
-	def RemoveElementAverages(self):
+	def RemoveElementAverages(self, DoCharge=True):
 		"""
 		Removes average from energies and charges returns dictionaries mapping
 		AN=> element averages useful for normalizing training.
@@ -73,19 +73,27 @@ class MSet:
 			b[i] = m.properties["energy"]
 			for atom in range(m.NAtoms()):
 				noa[At.index(m.atoms[atom])]+=1
-				try:
-					coa[At.index(m.atoms[atom])]+=m.properties["charges"][atom]
-				except:
-					coa[At.index(m.atoms[atom])]+=m.properties["mul_charge"][atom]
-		x,r = np.linalg.lstsq(a,b)[:2]
-		averageqs = coa/noa
-		for i,e in enumerate(At):
-			AvE[e] = x[i]
-			AvQ[e] = averageqs[i]
-		self.AvE = AvE
-		self.AvQ = AvQ
-		return AvE,AvQ
-
+				if DoCharge:
+					try:
+						coa[At.index(m.atoms[atom])]+=m.properties["charges"][atom]
+					except:
+						coa[At.index(m.atoms[atom])]+=m.properties["mul_charge"][atom]
+		if DoCharge:
+			x,r = np.linalg.lstsq(a,b)[:2]
+			averageqs = coa/noa
+			for i,e in enumerate(At):
+				AvE[e] = x[i]
+				AvQ[e] = averageqs[i]
+			self.AvE = AvE
+			self.AvQ = AvQ
+			return AvE,AvQ
+		else:
+			x,r = np.linalg.lstsq(a,b)[:2]
+			for i,e in enumerate(At):
+				AvE[e] = x[i]
+			self.AvE = AvE
+			return AvE
+	
 	def DistortAlongNormals(self, npts=8, random=True, disp=.2):
 		'''
 		Create a distorted copy of a set
