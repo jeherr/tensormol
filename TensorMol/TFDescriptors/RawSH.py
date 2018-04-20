@@ -515,37 +515,6 @@ def gaussian_spherical_harmonic_rev(vec_,samps_,lmax=5):
 	"""
 	return
 
-def tf_gaussian_spherical_harmonics(xyzs, Zs, elements, gauss_params, atomic_embed_factors, l_max):
-	"""
-	Encodes atoms into a gaussians and spherical harmonics embedding
-	This one doesn't split into channels (not working?)
-
-	Args:
-		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
-		element (int): element to return embedding/labels for
-		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
-		atomic_embed_factors (tf.float): MaxElementNumber tensor of scaling factors for elements
-		l_max (tf.int32): Scalar for the highest order spherical harmonics to use (needs implemented)
-		labels (tf.Tensor): NMol x MaxNAtom x label shape tensor of learning targets
-
-	Returns:
-		embedding (tf.float): atom embeddings for element
-		labels (tf.float): atom labels for element
-	"""
-	num_elements = elements.get_shape().as_list()[0]
-	dxyzs = tf.expand_dims(xyzs, axis=2) - tf.expand_dims(xyzs, axis=1)
-	element_indices = tf.cast(tf.where(tf.equal(tf.expand_dims(Zs, axis=-1), tf.reshape(elements, [1, 1, tf.shape(elements)[0]]))), tf.int32)
-	dist_tensor = tf.norm(dxyzs+1.e-16,axis=3)
-	atom_scaled_gauss = tf_gauss(dist_tensor, Zs, gauss_params, atomic_embed_factors, orthogonalize)
-	spherical_harmonics = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)
-	embeddings = tf.reshape(tf.einsum('ijkg,ijkl->ijgl', atom_scaled_gauss, spherical_harmonics),
-							[tf.shape(Zs)[0], tf.shape(Zs)[1], tf.shape(gauss_params)[0] * (l_max + 1) ** 2])
-	embeddings = tf.gather_nd(embeddings, element_indices[:,0:2])
-	element_embeddings = tf.dynamic_partition(embeddings, element_indices[:,2], num_elements)
-	molecule_indices = tf.dynamic_partition(element_indices[:,0:2], element_indices[:,2], num_elements)
-	return element_embeddings, molecule_indices
-
 def tf_gaush_element_channel(xyzs, Zs, elements, gauss_params, l_max):
 	"""
 	Encodes atoms into a gaussians * spherical harmonics embedding
@@ -569,7 +538,6 @@ def tf_gaush_element_channel(xyzs, Zs, elements, gauss_params, l_max):
 	dxyzs = tf.gather_nd(xyzs, padding_mask)
 	dist_tensor = tf.norm(dxyzs+1.e-16,axis=-1)
 	gauss = tf_gauss(dist_tensor, gauss_params)
-	# dxyzs has dimension NNZ X MaxNAtom X 3
 	harmonics = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)
 	channel_scatter = tf.gather(tf.equal(tf.expand_dims(Zs, axis=-1), elements), padding_mask[:,0])
 	channel_scatter = tf.where(channel_scatter, tf.ones_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])),
@@ -645,63 +613,13 @@ def tf_gaush_embed_channel(xyzs, Zs, elements, gauss_params, l_max, embed_factor
 	num_mols = Zs.get_shape().as_list()[0]
 	num_channels = embed_factor.get_shape().as_list()[0]
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
-
-	dxyzs = tf.expand_dims(xyzs, axis=2) - tf.expand_dims(xyzs, axis=1)
-	dxyzs = tf.gather_nd(dxyzs, padding_mask)
-	dist_tensor = tf.norm(dxyzs+1.e-16,axis=-1)
+	dist_tensor = tf.norm(xyzs+1.e-16,axis=-1)
 	gauss = tf_gauss(dist_tensor, gauss_params)
-	harmonics = tf_spherical_harmonics(dxyzs, dist_tensor, l_max)
-	channel_factors = tf.gather(tf.gather(embed_factor, Zs), padding_mask[:,0])
-	channel_gauss = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(channel_factors, axis=-1)
-	embeds = tf.reshape(tf.einsum('ijkg,ijl->ikgl', channel_gauss, harmonics),
-			[tf.shape(padding_mask)[0], -1])
-	partition_idx = tf.cast(tf.where(tf.equal(tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=-1),
-						tf.expand_dims(elements, axis=0)))[:,1], tf.int32)
-	embeds = tf.dynamic_partition(embeds, partition_idx, num_elements)
-	mol_idx = tf.dynamic_partition(padding_mask, partition_idx, num_elements)
-	return embeds, mol_idx
-
-def tf_gaush_element_channelv2(xyzs, Zs, elements, gauss_params, l_max, invariant=False):
-	"""
-	Encodes atoms into a gaussians * spherical harmonics embedding
-	cast into element channels. Works on a batch of molecules.
-
-	Args:
-		xyzs (tf.float): NMol x MaxNAtom x 3 coordinates tensor
-		Zs (tf.int32): NMol x MaxNAtom atomic number tensor
-		element (int): element to return embedding/labels for
-		gauss_params (tf.float): NGaussians x 2 tensor of gaussian parameters
-		l_max (tf.int32): Scalar for the highest order spherical harmonics to use
-
-	Returns:
-		embedding (tf.float): atom embeddings for element
-		molecule_indices (tf.float): mapping between atoms and molecules.
-	"""
-	num_elements = elements.get_shape().as_list()[0]
-	num_mols = Zs.get_shape().as_list()[0]
-	padding_mask = tf.where(tf.not_equal(Zs, 0))
-
-	centered_xyzs = tf.expand_dims(tf.gather_nd(xyzs, padding_mask), axis=1) - tf.gather(xyzs, padding_mask[:,0])
-	dist_tensor = tf.norm(centered_xyzs+1.e-16,axis=-1)
-	min_Zs = tf.gather(Zs, padding_mask[:,0])
-	min_dist_tensor = tf.where(tf.equal(min_Zs, 0), 20.0 * tf.ones_like(dist_tensor), dist_tensor)
-	_, min_idx = tf.nn.top_k(-min_dist_tensor, k=4)
-	min_z_idx = tf.stack([tf.cast(padding_mask[:,0], tf.int32), min_idx[:,1]], axis=-1)
-	min_x_idx = tf.stack([tf.cast(padding_mask[:,0], tf.int32), min_idx[:,2]], axis=-1)
-	min_y_idx = tf.stack([tf.cast(padding_mask[:,0], tf.int32), min_idx[:,3]], axis=-1)
-	z_midpoint = 0.5 * (tf.constant([0., 0., 1.], dtype=tf.float32)
-				+ tf.gather_nd(xyzs, min_z_idx) / tf.norm(tf.gather_nd(xyzs, min_z_idx), axis=-1, keepdims=True))
-	z_orient_xyzs = tf_rotate(centered_xyzs, z_midpoint, np.pi * tf.ones([tf.shape(z_midpoint)[0]], dtype=tf.float32))
-	return z_orient_xyzs
-	gauss = tf_gauss(dist_tensor, gauss_params)
-	harmonics = tf_spherical_harmonics(xyzs, dist_tensor, l_max, invariant)
-	channel_scatter = tf.gather(tf.equal(tf.expand_dims(Zs, axis=-1), elements), padding_mask[:,0])
-	channel_scatter = tf.where(channel_scatter, tf.ones_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])),
-					tf.zeros_like(channel_scatter, dtype=eval(PARAMS["tf_prec"])))
-	channel_gauss = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(channel_scatter, axis=-1)
-	channel_harmonics = tf.expand_dims(harmonics, axis=-2) * tf.expand_dims(channel_scatter, axis=-1)
-	embeds = tf.reshape(tf.einsum('ijkg,ijkl->ikgl', channel_gauss, channel_harmonics),
-			[tf.shape(padding_mask)[0], -1])
+	harmonics = tf_spherical_harmonics(xyzs, dist_tensor, l_max)
+	embeds = tf.reshape(tf.einsum('ijk,ijl->ijkl', gauss, harmonics), [tf.shape(xyzs)[0], tf.shape(xyzs)[1], -1])
+	pair_Zs = tf.gather(Zs, padding_mask[:,0])
+	channel_factors = tf.reshape(tf.gather(embed_factor, tf.reshape(pair_Zs, [-1])), [tf.shape(xyzs)[0], tf.shape(xyzs)[1], 4])
+	embeds = tf.reduce_sum(tf.expand_dims(embeds, axis=-1) * tf.expand_dims(channel_factors, axis=-2), axis=1)
 	return embeds
 
 def tf_gaush_element_channelv3(xyzs, Zs, elements, gauss_params, l_max):
@@ -1010,114 +928,7 @@ def tf_dsf_potential(dists, cutoff_dist, dsf_alpha, return_grad=False):
 	else:
 		return dsf_potential
 
-def safe_inv_norm(x_):
-	nrm = tf.clip_by_value(tf.norm(x_,axis=-1,keepdims=True),1e-36,1e36)
-	nrm_ok = tf.logical_and(tf.not_equal(nrm,0.),tf.logical_not(tf.is_nan(nrm)))
-	safe_nrm = tf.where(nrm_ok,nrm,tf.ones_like(nrm))
-	return tf.where(nrm_ok,1.0/safe_nrm,tf.zeros_like(nrm))
-
-def gs_canonicalize(xyzs, Zs):
-	"""
-	Canonicalize using nearest three atoms and Graham-Schmidt.
-	If there are not three linearly independent atoms within
-	4A, the output will not be rotationally invariant, although
-	The axes will still be as invariant as possible.
-
-	The axes are also smooth WRT radial displacments, because they are
-	smoothly mixed with each other.
-
-	Args:
-		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
-		ie: ... X i X i = (0.,0.,0.))
-	"""
-	padding_mask = tf.where(tf.not_equal(Zs, 0))
-	dxyzs = tf.expand_dims(tf.gather_nd(xyzs, padding_mask), axis=1) - tf.gather(xyzs, padding_mask[:,0])
-	Z_product = tf.expand_dims(tf.gather_nd(Zs, padding_mask), axis=1) * tf.gather(Zs, padding_mask[:,0])
-	mask = tf.expand_dims(tf.where(tf.not_equal(Z_product, 0), tf.ones_like(Z_product, dtype=eval(PARAMS["tf_prec"])),
-		tf.zeros_like(Z_product, dtype=eval(PARAMS["tf_prec"]))), axis=-1)
-	dxyzs = dxyzs * mask
-	argshape = tf.shape(dxyzs)
-	defaultAxes = tf.tile(tf.reshape(4.0 * tf.eye(3, dtype=eval(PARAMS["tf_prec"])), (1,3,3)),[argshape[0],1,1])
-	dxyzsandDef = tf.concat([dxyzs, defaultAxes], axis=1)
-
-	realdata = tf.reshape(dxyzs, (argshape[0], argshape[1], 3))
-	togather = tf.reshape(dxyzsandDef, (argshape[0], argshape[1]+3, 3))
-
-	nrm = tf.clip_by_value(-1.0*tf.norm(dxyzsandDef,axis=-1),-16.0,16.0)
-	nrm_ok = tf.logical_and(tf.logical_not(tf.is_nan(nrm)),tf.not_equal(nrm,0.))
-	weights = tf.where(nrm_ok,tf.exp(nrm),tf.zeros_like(nrm)) # Mol X MaxNAtom X MaxNAtom
-	maskedDs = tf.where(nrm_ok,weights,tf.zeros_like(weights))
-
-	# GS orth the first three vectors.
-	vals, inds = tf.nn.top_k(maskedDs,k=3)
-	inds = tf.reshape(inds,(argshape[0], 3))
-	vals = tf.reshape(vals,(argshape[0], 3))
-	v1i = tf.stack([tf.range(argshape[0]), inds[:,0]], axis=-1)
-	v2i = tf.stack([tf.range(argshape[0]), inds[:,1]], axis=-1)
-	v3i = tf.stack([tf.range(argshape[0]), inds[:,2]], axis=-1)
-	v10 = tf.gather_nd(togather,v1i)
-	v20 = tf.gather_nd(togather,v2i)
-	v30 = tf.gather_nd(togather,v3i)
-
-	d1 = tf.zeros_like(v10)
-	d2 = tf.zeros_like(v10)
-	d3 = tf.zeros_like(v10)
-	Im = tf.eye(3, dtype=eval(PARAMS["tf_prec"])) * 1e-14
-	d1 += Im[0][tf.newaxis,:]
-	d2 += Im[1][tf.newaxis,:]
-	d3 += Im[2][tf.newaxis,:]
-
-	w1 = tf.exp(-tf.clip_by_value(tf.norm(v10, axis=-1, keepdims=True), -16.0, 16.0))
-	w2 = tf.exp(-tf.clip_by_value(tf.norm(v20, axis=-1, keepdims=True), -16.0, 16.0))
-	w3 = tf.exp(-tf.clip_by_value(tf.norm(v30, axis=-1, keepdims=True), -16.0, 16.0))
-	v1 = w1*v10 + w2*v20 + d1
-	v1 *= safe_inv_norm(v1)
-	v2 = w2*v10 + w1*v20 + w3*v30 + d2
-	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
-	v2 *= safe_inv_norm(v2)
-	v3 = w2*v20 + w3*v30 + d3
-	v3 -= tf.einsum('ij,ij->i',v1,v3)[:,tf.newaxis]*v1
-	v3 -= tf.einsum('ij,ij->i',v2,v3)[:,tf.newaxis]*v2
-	v3 *= safe_inv_norm(v3)
-	vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
-	tore = tf.einsum('ijk,ilk->ijl',realdata,vs)
-	return tf.reshape(tore,tf.shape(dxyzs))
-
-def gs_canonicalizev2(dxyzs, pair_Zs):
-	"""
-	Canonicalize using nearest three atoms and Graham-Schmidt.
-	If there are not three linearly independent atoms within
-	4A, the output will not be rotationally invariant, although
-	The axes will still be as invariant as possible.
-	Args:
-		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
-		ie: ... X i X i = (0.,0.,0.))
-	"""
-	dist_tensor = tf.norm(dxyzs+1.e-16, axis=-1, keep_dims=True)
-	norm_dxyzs = dxyzs / dist_tensor
-	weights = 0.5 * (tf.cos(np.pi * dist_tensor / 7.0) + 1)
-	weights = tf.where(tf.equal(weights, 1.), tf.zeros_like(weights), weights)
-	weighted_xyz = tf.reduce_sum(norm_dxyzs * weights, axis=-2)
-	weighted_xyz += 1.e-6 * dxyzs[:,0]
-	weighted_norm = tf.norm(weighted_xyz+1.e-16, axis=-1, keep_dims=True)
-	first_axis = weighted_xyz / tf.where(tf.less(weighted_norm, 1.e-16), tf.ones_like(weighted_norm), weighted_norm)
-	fa_dot_ndxyzs = tf.expand_dims(first_axis, axis=-2) * tf.expand_dims(tf.einsum('ikj,ij->ik', norm_dxyzs, first_axis), axis=-1)
-	mask = tf.where(tf.less(dist_tensor, 1.e-16), tf.zeros_like(dist_tensor), tf.ones_like(dist_tensor))
-	rejection_dxyzs = (norm_dxyzs - fa_dot_ndxyzs) * mask
-	rej_dist_tensor = tf.norm(rejection_dxyzs+1.e-16, axis=-1, keep_dims=True)
-	norm_rej_xyzs = rejection_dxyzs / tf.where(tf.less(rej_dist_tensor, 1.e-12), tf.ones_like(rej_dist_tensor), rej_dist_tensor)
-	weighted_rej_xyz = tf.reduce_sum(norm_rej_xyzs * weights, axis=-2)
-	weighted_rej_xyz += 1.e-6 * dxyzs[:,1]
-	weighted_rej_norm = tf.norm(weighted_rej_xyz+1.e-16, axis=-1, keep_dims=True)
-	second_axis = weighted_rej_xyz / tf.where(tf.less(weighted_rej_norm, 1.e-16), tf.ones_like(weighted_rej_norm), weighted_rej_norm)
-	second_axis -= tf.expand_dims(tf.einsum('ij,ij->i',first_axis, second_axis), axis=-1) * first_axis
-	second_axis /= tf.norm(second_axis+1.e-16, axis=-1, keep_dims=True)
-	third_axis = tf.cross(first_axis, second_axis)
-	transform_matrix = tf.stack([first_axis, second_axis, third_axis], axis=1)
-	canon_xyzs = tf.einsum("lij,lkj->lki", transform_matrix, dxyzs)
-	return canon_xyzs
-
-def gs_canonicalizev3(dxyzs, nearest_neighbors):
+def gs_canonicalize(dxyzs, nearest_neighbors):
 	case_indices = tf.range(0, tf.shape(dxyzs)[0])
 	first_axis = tf.gather_nd(dxyzs, tf.stack([case_indices, nearest_neighbors[:,0]], axis=1))
 	first_axis /= tf.norm(first_axis, axis=-1, keep_dims=True)
@@ -1127,7 +938,16 @@ def gs_canonicalizev3(dxyzs, nearest_neighbors):
 	third_axis = tf.cross(first_axis, second_axis)
 	transform_matrix = tf.stack([first_axis, second_axis, third_axis], axis=1)
 	canon_xyzs = tf.einsum("lij,lkj->lki", transform_matrix, dxyzs)
-	return canon_xyzs
+
+	first_axis = tf.gather_nd(dxyzs, tf.stack([case_indices, nearest_neighbors[:,1]], axis=1))
+	first_axis /= tf.norm(first_axis, axis=-1, keep_dims=True)
+	second_axis = tf.gather_nd(dxyzs, tf.stack([case_indices, nearest_neighbors[:,0]], axis=1))
+	second_axis -= tf.expand_dims(tf.einsum('ij,ij->i',first_axis, second_axis), axis=-1) * first_axis
+	second_axis /= tf.norm(second_axis, axis=-1, keep_dims=True)
+	third_axis = tf.cross(first_axis, second_axis)
+	transform_matrix = tf.stack([first_axis, second_axis, third_axis], axis=1)
+	perm_canon_xyzs = tf.einsum("lij,lkj->lki", transform_matrix, dxyzs)
+	return canon_xyzs, perm_canon_xyzs
 
 
 def center_dxyzs(xyzs, Zs):

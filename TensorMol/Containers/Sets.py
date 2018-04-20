@@ -32,7 +32,7 @@ class MSet:
 		LOGGER.info("Saving set to: %s ", self.path+filename+self.suffix)
 		#print "Saving set to: ", self.path+self.name+self.suffix
 		f=open(self.path+filename+self.suffix,"wb")
-		pickle.dump(self.__dict__, f, protocol=pickle.HIGHEST_PROTOCOL)
+		pickle.dump(self.__dict__, f)
 		f.close()
 		return
 
@@ -46,7 +46,7 @@ class MSet:
 		LOGGER.info("Loaded, "+str(len(self.mols))+" molecules "+str(self.NAtoms())+" Atoms total "+str(self.AtomTypes())+" Types ")
 		return
 
-	def RemoveElementAverages(self, DoCharge=True):
+	def RemoveElementAverages(self):
 		"""
 		Removes average from energies and charges returns dictionaries mapping
 		AN=> element averages useful for normalizing training.
@@ -63,37 +63,87 @@ class MSet:
 		AvQ = {x:0. for x in At}
 		nmols = len(self.mols)
 		nele = len(AvE)
+		neled = max(At)+1
 		b = np.zeros(nmols)
-		a = np.zeros((nmols,nele))
-		noa = np.zeros(nele)
-		coa = np.zeros(nele)
+		# Use dense zero-padded arrays to avoid index logic.
+		a = np.zeros((nmols,neled))
+		noa = np.zeros(neled)
+		coa = np.zeros(neled)
 		for i,m in enumerate(self.mols):
-			for j,e in enumerate(At):
-				a[i,j] = m.NumOfAtomsE(e)
+			unique, counts = np.unique(m.atoms, return_counts=True)
+			stoich = np.zeros(neled)
+			for j in range(len(unique)):
+				stoich[unique[j]] = counts[j]
+			a[i] += stoich
+			noa += stoich
 			b[i] = m.properties["energy"]
 			for atom in range(m.NAtoms()):
-				noa[At.index(m.atoms[atom])]+=1
-				if DoCharge:
-					try:
-						coa[At.index(m.atoms[atom])]+=m.properties["charges"][atom]
-					except:
-						coa[At.index(m.atoms[atom])]+=m.properties["mul_charge"][atom]
-		if DoCharge:
-			x,r = np.linalg.lstsq(a,b)[:2]
-			averageqs = coa/noa
-			for i,e in enumerate(At):
-				AvE[e] = x[i]
-				AvQ[e] = averageqs[i]
-			self.AvE = AvE
-			self.AvQ = AvQ
-			return AvE,AvQ
-		else:
-			x,r = np.linalg.lstsq(a,b)[:2]
-			for i,e in enumerate(At):
-				AvE[e] = x[i]
-			self.AvE = AvE
-			return AvE
-	
+				try:
+					coa[m.atoms[atom]]+=m.properties["charges"][atom]
+				except:
+					coa[m.atoms[atom]]+=m.properties["mul_charge"][atom]
+		x,r = np.linalg.lstsq(a,b)[:2]
+		averageqs = coa/noa
+		for e in At:
+			AvE[e] = x[e]
+			AvQ[e] = averageqs[e]
+		# Report the residual information.
+		EErrors = np.zeros(nmols)
+		QErrors = np.zeros(nmols)
+		for i,m in enumerate(self.mols):
+			e0 = 0.0
+			for j,e in enumerate(At):
+				e0 += AvE[e]*a[i,e]
+			#print("Formula: ",a[i],m.properties["energy"],e0)
+			EErrors[i] = e0 - m.properties["energy"]
+		print("---- Results of Stoichiometric Model ----")
+		print("MAE  Energy: ", np.average(np.abs(EErrors)))
+		print("MXE  Energy: ", np.max(np.abs(EErrors)))
+		print("RMSE Energy: ", np.sqrt(np.average(EErrors*EErrors)))
+		print("AvE: ", AvE)
+		print("AvQ: ", AvQ)
+		self.AvE = AvE
+		self.AvQ = AvQ
+		return AvE,AvQ
+
+	def cut_max_num_atoms(self, max_n_atoms):
+		cut_down_mols = []
+		for mol in self.mols:
+			if mol.atoms.shape[0] <= max_n_atoms:
+				cut_down_mols.append(mol)
+		self.mols = cut_down_mols
+
+	def cut_randomselection(self, n_totake=100000.):
+		accept_fraction = (n_totake/(len(self.mols)))
+		cut_down_mols = []
+		for mol in self.mols:
+			if (random.random()<accept_fraction):
+				cut_down_mols.append(mol)
+		self.mols = cut_down_mols
+
+	def cut_max_grad(self, max_grad=1.0):
+		cut_down_mols = []
+		for mol in self.mols:
+			if (np.max(np.abs(mol.properties['gradients']))<max_grad):
+				cut_down_mols.append(mol)
+		self.mols = cut_down_mols
+
+	def cut_energy_outliers(self,max_diff=1.0):
+		"""
+		removes any molecules which are more than a hartree away from the mean.
+		"""
+		self.RemoveElementAverages()
+		cut_down_mols = []
+		for m in self.mols:
+			unique, counts = np.unique(m.atoms, return_counts=True)
+			e0=0.
+			for i in range(len(unique)):
+				e0+=counts[i]*self.AvE[unique[i]]
+			if abs(m.properties["energy"] - e0) < max_diff:
+				cut_down_mols.append(m)
+		self.mols = cut_down_mols
+		return
+
 	def DistortAlongNormals(self, npts=8, random=True, disp=.2):
 		'''
 		Create a distorted copy of a set
@@ -169,20 +219,6 @@ class MSet:
 		"""
 		for mol in self.mols:
 			mol.coords -= mol.Center()
-
-	def cut_max_num_atoms(self, max_n_atoms):
-		cut_down_mols = []
-		for mol in self.mols:
-			if mol.atoms.shape[0] <= max_n_atoms:
-				cut_down_mols.append(mol)
-		self.mols = cut_down_mols
-
-	def cut_max_grad(self, max_grad=1.0):
-		cut_down_mols = []
-		for mol in self.mols:
-			if (np.max(np.abs(mol.properties['gradients']))<max_grad):
-				cut_down_mols.append(mol)
-		self.mols = cut_down_mols
 
 	def NAtoms(self):
 		nat=0
