@@ -714,7 +714,7 @@ class TopologyMetaOpt(GeomOptimizer):
 			PARAMS["GSSearchAlpha"]=0.1
 		# Checks stability in each cartesian direction.
 		#prev_m.coords = LineSearchCart(Energy, prev_m.coords)
-		return self.MinimaCoords
+		return mol_hist
 
 	def AppendIfNew(self,m):
 		overlaps = []
