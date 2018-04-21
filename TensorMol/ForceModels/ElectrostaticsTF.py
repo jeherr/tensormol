@@ -76,7 +76,7 @@ def BendBump(x,bs,trips,nbump):
 		nbump: an integer determining the number of nonzero bumps.
 	"""
 	Dx = TFBend(x,trips)
-	w2 = 0.2*0.2
+	w2 = 0.523599*0.523599
 	rij = (bs[:nbump,...] - Dx[tf.newaxis,...])
 	ToExp = tf.reduce_sum(rij*rij,axis=-1)
 	ToSum = -0.01*tf.exp(-0.5*ToExp/w2)
@@ -101,7 +101,7 @@ def TorsionBump(x,bs,quads,nbump):
 		nbump: an integer determining the number of nonzero bumps.
 	"""
 	Dx = TFTorsion(x,quads)
-	w2 = 0.3*0.3
+	w2 = 4*0.523599*0.523599
 	rij = (bs[:nbump,...] - Dx[tf.newaxis,...])
 	ToExp = tf.reduce_sum(rij*rij,axis=-1)
 	ToSum = -0.5*tf.exp(-0.5*ToExp/w2)

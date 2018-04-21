@@ -38,6 +38,7 @@ def GetChemSpider12(a):
 	PARAMS["SwitchEpoch"] = 2
 	d = MolDigester(TreatedAtoms, name_="ANI1_Sym_Direct", OType_="EnergyAndDipole")  # Initialize a digester that apply descriptor for the fragme
 	tset = TensorMolData_BP_Direct_EE_WithEle(a, d, order_=1, num_indis_=1, type_="mol",  WithGrad_ = True)
+	print(dir(tset))
 	manager=TFMolManage("Mol_chemspider12_maxatom35_H2O_with_CH4_ANI1_Sym_Direct_fc_sqdiff_BP_Direct_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_act_sigmoid100_rightalpha", tset,False,"fc_sqdiff_BP_Direct_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout",False,False)
 	return manager
 
@@ -301,20 +302,25 @@ H         -2.03934        0.04074       -0.88709
 	# Test the hessian.
 	Opt = GeomOptimizer(F, efh_=EFH)
 	molecule = Opt.Opt(m, eff_thresh=0.0002)
-	# Gotta optimize before running spectra
-	w, v, i, TD = HarmonicSpectra(
-		lambda x: F(x,False),
-		m.coords,
-		m.atoms,
-		WriteNM_=True,
-		Mu_=DipoleField,
-		h_ = lambda x: EFH(x)[2])
-	print(molecule, w, i, TD)
-	exit(0)
 
-	MOpt = ScannedOptimization(F,m)
+	MOpt = TopologyMetaOpt(F,m)
 	m = MOpt.Search(m)
-	exit(0)
+
+	if (0):
+		# Gotta optimize before running spectra
+		w, v, i, TD = HarmonicSpectra(
+			lambda x: F(x,False),
+			m.coords,
+			m.atoms,
+			WriteNM_=True,
+			Mu_=DipoleField,
+			h_ = lambda x: EFH(x)[2])
+		print(molecule, w, i, TD)
+		exit(0)
+
+		MOpt = ScannedOptimization(F,m)
+		m = MOpt.Search(m)
+		exit(0)
 
 #Eval()
 #TestBetaHairpin()

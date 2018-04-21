@@ -14,7 +14,9 @@ renametable = {
 	'TensorMol.DigestMol': 'TensorMol.Containers.DigestMol',
 	'TensorMol.TFMolInstanceDirect': 'TensorMol.TFNetworks.TFMolInstanceDirect',
 	'TensorMol.Transformer': 'TensorMol.ForceModifiers.Transformer',
-	'TensorMolData_EE': 'TensorMolDataEE'
+	'TensorMolData_EE': 'TensorMolDataEE',
+	'MaxNAtoms': 'MaxNAtom',
+	'TensorMolData_BP_Direct_EE_WithEle.MaxNAtoms': 'TensorMolData_BP_Direct_EE_WithEle.MaxNAtom'
 	}
 
 def PickleMapName(name):
