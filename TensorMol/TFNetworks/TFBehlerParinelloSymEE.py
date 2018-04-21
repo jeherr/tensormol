@@ -2687,6 +2687,17 @@ class MolInstance_DirectBP_EandG_SymChannel_Multi(MolInstance_DirectBP_EandG_Sym
 		MolInstance_DirectBP_EandG_SymChannel.__init__(self, TData_,  Name_, Trainable_)
 		self.nchan = self.channels.shape[1]
 		self.channels_all_ele = PARAMS['AllEleChannels']
+		print ("Ele:", self.eles_np)
+		print ("self.SFPr2:",self.SFPr2.shape)
+		np.save("SFPsR",self.SFPr2)
+		print ("Rr_cut:", self.Rr_cut)
+		print ("Elep:",self.eles_pairs_np)
+		print ("self.SFPa2:",self.SFPa2.shape)
+		np.save("SFPsA",self.SFPa2)
+		print ("zeta:", self.zeta)
+		print ("eta:", self.eta)
+		print ("Ra_cut:", self.Ra_cut)
+
 
 	def TrainPrepare(self,  continue_training =False):
 		"""
@@ -2711,8 +2722,8 @@ class MolInstance_DirectBP_EandG_SymChannel_Multi(MolInstance_DirectBP_EandG_Sym
 			Elep = tf.Variable(self.eles_pairs_np, trainable=False, dtype = tf.int64)
 
 			Channels_All_Ele =  tf.Variable(self.channels_all_ele, trainable= False, dtype = self.tf_prec)
-			Channels = tf.Variable(self.channels, trainable= False, dtype = self.tf_prec)
-			Channel_pairs = tf.Variable(self.channel_pairs, trainable= False, dtype = self.tf_prec)
+			self.Channels = tf.Variable(self.channels, trainable= True, dtype = self.tf_prec)
+			self.Channel_pairs = tf.Variable(self.channel_pairs, trainable= True, dtype = self.tf_prec)
 
 			SFPa2 = tf.Variable(self.SFPa2, trainable= False, dtype = self.tf_prec)
 			SFPr2 = tf.Variable(self.SFPr2, trainable= False, dtype = self.tf_prec)
@@ -2724,7 +2735,7 @@ class MolInstance_DirectBP_EandG_SymChannel_Multi(MolInstance_DirectBP_EandG_Sym
 			#if self.with_hyb:			
 			#	self.Scatter_Sym, self.Sym_Index  = TFSymSet_Scattered_Linear_WithEle_ChannelHyb(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
 			#else:
-			self.Scatter_Sym = TFSymSet_Scattered_Linear_WithEle_Channel_Multi(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.channels, self.channel_pairs)
+			self.Scatter_Sym = TFSymSet_Scattered_Linear_WithEle_Channel_Multi(self.xyzs_pl, self.Zs_pl, Ele, SFPr2, Rr_cut, Elep, SFPa2, zeta, eta, Ra_cut, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.Channels, self.Channel_pairs)
 			#self.Hybrization = TFSymSet_Hybrization(self.xyzs_pl, self.Zs_pl, Ele, Elep,  2.2, self.Radp_Ele_pl, self.mil_j_pl, self.Angt_Elep_pl, self.mil_jk_pl)
 			self.Etotal = self.energy_inference(self.Scatter_Sym, self.Zs_pl, self.xyzs_pl, self.keep_prob_pl, self.channels, Channels_All_Ele)
 			self.gradient  = tf.gradients(self.Etotal, self.xyzs_pl, name="BPEGrad")
@@ -2825,7 +2836,7 @@ class MolInstance_DirectBP_EandG_SymChannel_Multi(MolInstance_DirectBP_EandG_Sym
 			batch_data = self.TData.GetTrainBatch(self.batch_size) + [self.keep_prob]
 			t0 = time.time()
 			actual_mols  = self.batch_size
-			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal = self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal], feed_dict=self.fill_feed_dict(batch_data))
+			dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal, Channels, Channel_pairs = self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal, self.Channels, self.Channel_pairs], feed_dict=self.fill_feed_dict(batch_data))
 
 			#dump_2, total_loss_value, loss_value, energy_loss, grads_loss, Etotal = self.sess.run([self.train_op, self.total_loss, self.loss, self.energy_loss, self.grads_loss, self.Etotal], feed_dict=self.fill_feed_dict(batch_data), options=self.options, run_metadata=self.run_metadata)
 			#fetched_timeline = timeline.Timeline(self.run_metadata.step_stats)
@@ -2844,5 +2855,7 @@ class MolInstance_DirectBP_EandG_SymChannel_Multi(MolInstance_DirectBP_EandG_Sym
 			#print ("Hyb:", Hyb[0])
 			#exit()
 			#print ("Scatter_Sym:", np.any(np.isnan(Scatter_Sym[1])),np.any(np.isnan(Scatter_Sym[2])),np.any(np.isnan(Scatter_Sym[0])), energy_loss, grads_loss)
+		print ("Channels:", Channels)
+		print ("Channel_pairs:", Channel_pairs)
 		self.print_training(step, train_loss, train_energy_loss, train_grads_loss, num_of_mols, duration)
 		return
