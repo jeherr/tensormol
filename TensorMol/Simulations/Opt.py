@@ -658,7 +658,7 @@ class TopologyMetaOpt(GeomOptimizer):
 		LOGGER.info("Bump added!")
 		return
 
-	def Search(self,m_=None, filename="MetaOptLog",Debug=False, SearchConfs_=True):
+	def Search(self,m_=None, filename="MetaOptLog", callback=None):
 		"""
 		Optimize using steepest descent  and an EnergyAndForce Function.
 
@@ -692,7 +692,6 @@ class TopologyMetaOpt(GeomOptimizer):
 				m.coords = m.coords + self.fscale*frc
 				rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/m.coords.shape[0]
 				LOGGER.info(filename+" step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
-				mol_hist.append(prev_m)
 				prev_m.WriteXYZfile("./results/", filename)
 				step+=1
 
@@ -701,7 +700,11 @@ class TopologyMetaOpt(GeomOptimizer):
 
 			d = self.OptGD(prev_m,"Dive"+str(ndives),FileOutput=False)
 			BM = prev_m.BondMatrix()
-			self.AppendIfNew(d)
+
+			if (self.AppendIfNew(d)):
+				mol_hist.append(d)
+				if (callback != None):
+					callback(mol_hist)
 			self.Bump(d.coords)
 			ndives += 1
 
@@ -721,7 +724,7 @@ class TopologyMetaOpt(GeomOptimizer):
 			self.MinimaCoords[self.NMinima] = m.coords
 			self.NMinima += 1
 			self.Bump(m.coords)
-			return
+			return True
 		for i in range(self.NMinima):
 			mdm = MolEmb.Make_DistMat(self.MinimaCoords[i])
 			odm = MolEmb.Make_DistMat(m.coords)
@@ -733,8 +736,10 @@ class TopologyMetaOpt(GeomOptimizer):
 			self.MinimaCoords[self.NMinima] = m.coords.copy()
 			self.NMinima += 1
 			self.Bump(m.coords)
+			return True
 		else:
 			print("Overlaps", overlaps)
+			return False
 		return
 
 class TopologyMetaOpt_old(GeomOptimizer):
