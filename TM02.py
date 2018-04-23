@@ -7,24 +7,7 @@ from TensorMol import *
 import numpy as np
 
 if (0):
-	# Linear molecules are a good test.
-	m=Mol()
-	m.FromXYZString("""5
-	Comment:
-	C   0.1506907344  0.0  0.0
-	C   -1.1550766934  0.0  0.0
-	S   -2.7208105787  0.0  0.0
-	C   1.4245508222  0.0  0.0
-	S   2.9488539653  0.0  0.0""")
-	m.properties["energy"]=-1000.0
-	m.properties["charges"]=np.array([0.,0.,0.,0.,0.])
-	m.properties["gradients"]=np.zeros((5,3))
-	m.properties["dipole"]=np.zeros((3))
-	for i in range(300):
-		b.mols.append(m)
-
-if (0):
-	a = MSet("kevin_rand1")
+	a = MSet("chemspider20_345_opt")
 	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
 	c = MSet("chemspider12_clean_maxatom35")
 	d = MSet("kevin_heteroatom.dat")
@@ -35,17 +18,7 @@ if (0):
 	b.mols = a.mols+b.mols+c.mols[:len(b.mols)]+d.mols
 	#b.Statistics()
 	b.cut_max_num_atoms(50)
-	b.cut_max_grad(2.0)
-	b.Save("Hybrid2")
-
-if 0:
-	b = MSet("Hybrid130")
-	c = MSet("kevin_heteroatom.dat")
-	b.Load()
-	c.Load()
-	b.mols = b.mols+c.mols
-	b.cut_max_num_atoms(40)
-	b.cut_max_grad(2.0)
+	b.cut_max_grad(1.0)
 	b.Save("Hybrid2")
 
 if 1:
@@ -217,7 +190,7 @@ class SparseCodedChargedGauSHNetwork:
 	"""
 	def __init__(self,aset=None):
 		self.prec = tf.float64
-		self.batch_size = 128 # Force learning strongly modulates what you can do.
+		self.batch_size = 256 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.MaxNeigh = self.MaxNAtom
 		self.learning_rate = 0.00012
@@ -226,7 +199,7 @@ class SparseCodedChargedGauSHNetwork:
 		#self.AtomCodes = np.random.random(size=(MAX_ATOMIC_NUMBER,6))
 		self.AtomTypes = [1,6,7,8]
 		self.l_max = 3
-		self.GaussParams = np.array([[ 0.38664542,  0.26217287], [ 0.67811722,  0.23477701],    [ 1.04543342,  0.23426948],    [ 1.38311757,  0.21758330],    [ 1.68369538,  0.21645779],    [ 2.04304538,  0.21420768],    [ 2.78418335,  0.15554105],    [ 3.13734002,  0.18086331],    [ 3.79258319,  0.17154482],    [ 4.90203694,  0.11153887],    [ 5.50218806,  0.10848024]])
+		self.GaussParams = np.array([[ 0.38664542,0.26217287], [ 0.67811722,0.23477701],[ 1.04543342,0.23426948],[ 1.38311757,0.21758330],[ 1.68369538,0.21645779],[ 2.04304538,0.21420768],[ 2.78418335,0.15554105],[ 3.13734002,0.18086331],[ 3.79258319,0.17154482],[ 4.90203694,0.11153887],[ 5.50218806,0.10848024]])
 		self.nrad = len(self.GaussParams)
 		self.nang = (self.l_max+1)**2
 		self.ncodes = self.AtomCodes.shape[-1]
@@ -814,7 +787,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.DoRotGrad = False
 		self.DoForceLearning = True
 		self.Canonicalize = True
-		self.DoCodeLearning = True
+		self.DoCodeLearning = False
 		self.DoDipoleLearning = False
 		self.DoChargeLearning = True
 		self.DoChargeEmbedding = True
@@ -972,7 +945,7 @@ class SparseCodedChargedGauSHNetwork:
 
 net = SparseCodedChargedGauSHNetwork(b)
 net.Load()
-#net.Train()
+net.Train()
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
@@ -1018,16 +991,17 @@ if 0:
 	for i,d in enumerate(np.linspace(-.3,.3,npts)):
 		print(d,EF(b.mols[i].coords)[1])
 
-if 0:
-	mi = np.random.randint(len(b.mols))
-	m = b.mols[mi]
-	print(m.atoms, m.coords)
-	EF = net.GetEnergyForceRoutine(m)
-	print(EF(m.coords))
-	Opt = GeomOptimizer(EF)
-	m=Opt.OptGD(m)
-	m.Distort(0.2)
-	m=Opt.OptGD(m,"FromDistorted")
+if 1:
+	for i in range(5):
+		mi = np.random.randint(len(b.mols))
+		m = b.mols[mi]
+		print(m.atoms, m.coords)
+		EF = net.GetEnergyForceRoutine(m)
+		print(EF(m.coords))
+		Opt = GeomOptimizer(EF)
+		m=Opt.Opt(m,"TEST"+str(i))
+		m.Distort(0.2)
+		m=Opt.Opt(m,"FromDistorted"+str(i))
 
 if 0:
 	from matplotlib import pyplot as plt
