@@ -4,3 +4,4 @@ from __future__ import print_function
 from .Statistics import *
 from .QuasiNewtonTools import *
 from .LinearOperations import *
+from .ZMatrix import * 

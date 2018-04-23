@@ -1256,7 +1256,10 @@ class MolInstance_DirectBP_Grad(MolInstance_fc_sqdiff_BP):
 		MolInstance.__init__(self, TData_,  Name_, Trainable_)
 		#if (Name_ != None):
 		#	return
-		self.MaxNAtom = self.TData.MaxNAtom
+		try:
+			self.MaxNAtom = self.TData.MaxNAtom
+		except: 
+			self.MaxNAtom = self.TData.MaxNAtoms
 		self.eles = self.TData.eles
 		self.n_eles = len(self.eles)
 		self.eles_np = np.asarray(self.eles).reshape((self.n_eles,1))

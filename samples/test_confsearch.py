@@ -301,20 +301,25 @@ H         -2.03934        0.04074       -0.88709
 	# Test the hessian.
 	Opt = GeomOptimizer(F, efh_=EFH)
 	molecule = Opt.Opt(m, eff_thresh=0.0002)
-	# Gotta optimize before running spectra
-	w, v, i, TD = HarmonicSpectra(
-		lambda x: F(x,False),
-		m.coords,
-		m.atoms,
-		WriteNM_=True,
-		Mu_=DipoleField,
-		h_ = lambda x: EFH(x)[2])
-	print(molecule, w, i, TD)
-	exit(0)
 
-	MOpt = ScannedOptimization(F,m)
+	MOpt = TopologyMetaOpt(F,m)
 	m = MOpt.Search(m)
-	exit(0)
+
+	if (0):
+		# Gotta optimize before running spectra
+		w, v, i, TD = HarmonicSpectra(
+			lambda x: F(x,False),
+			m.coords,
+			m.atoms,
+			WriteNM_=True,
+			Mu_=DipoleField,
+			h_ = lambda x: EFH(x)[2])
+		print(molecule, w, i, TD)
+		exit(0)
+
+		MOpt = ScannedOptimization(F,m)
+		m = MOpt.Search(m)
+		exit(0)
 
 #Eval()
 #TestBetaHairpin()

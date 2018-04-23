@@ -254,7 +254,7 @@ class ConjGradient:
 		betapr = np.sum((g)*(g - self.gold))/(np.sum(self.gold*self.gold))
 		self.gold = g.copy()
 		return max(0,betapr)
-	def __call__(self,x0):
+	def __call__(self,x0,DoLS = True):
 		"""
 		Iterate Conjugate Gradient.
 
@@ -266,8 +266,12 @@ class ConjGradient:
 		e,g = self.EForce(x0)
 		beta_n = self.BetaPR(g)
 		self.s = g + beta_n*self.s
-		self.xold = self.LineSearch(x0,self.s,self.thresh)
+		if (DoLS):
+			self.xold = self.LineSearch(x0,self.s,self.thresh)
+		else:
+			self.xold = self.s*0.3 + x0
 		return self.xold, e, g
+
 	def LineSearch(self, x0_, p_, thresh = 0.0001):
 		'''
 		golden section search to find the minimum of f on [a,b]
