@@ -449,6 +449,116 @@ class MetaOptimizer(GeomOptimizer):
 			print("Overlaps", overlaps)
 		return
 
+class ConfSearch(GeomOptimizer):
+	def __init__(self,f_,m,StopAfter_=20):
+		"""
+		Begin with an ensemble of random dihedral angles.
+		Optimize them all store unique.
+
+		Args:
+			f_: An EnergyForce routine
+			m: a molecules
+			StopAfter_: Look for this many nearby minima.
+		"""
+		GeomOptimizer.__init__(self,f_)
+		self.thresh = PARAMS["OptThresh"]*5.0
+		self.StopAfter = StopAfter_
+		self.m = m
+		self.fscale = 0.3
+		self.momentum = 0.1
+		self.thresh = 0.003
+		self.masses = np.array(map(lambda x: ATOMICMASSES[x-1], m.atoms))
+		self.natoms = m.NAtoms()
+		self.StopAfter = StopAfter_
+		self.MinimaCoords = np.zeros((self.StopAfter,self.natoms,3))
+		self.NMinima = 0
+		self.sampler = ZmatTools()
+		return
+
+	def WrappedBumpedEForce(self, x_ , DoForce = True, DoConstraint=False):
+		PE,PF = None, None
+		if (DoForce):
+			PE, PF = self.EnergyAndForce(x_, DoForce)
+			if (not DoConstraint):
+				return PE, PF/JOULEPERHARTREE
+		else:
+			PE = self.EnergyAndForce(x_, DoForce)
+			if (not DoConstraint):
+				return PE
+		if (DoForce):
+			frc = PF
+			frc = RemoveInvariantForce(x_, frc, self.m.atoms)
+			frc /= JOULEPERHARTREE
+			return PE,frc
+		else:
+			return PE
+
+	def Search(self,m_=None, filename="Search",callback=None):
+		"""
+		Pin a torsion between -pi and pi. Perform dives every interval
+		Give up on this DOF if the energy goes more than window above minimum.
+		Increasing interval and window increase speed at the expense of care.
+
+		TODO:
+		parallel version which would sow coordinates to dive on
+		then optimize them all at once as a MolSet using set-wise forces
+		which are 2x faster.
+
+		Args:
+			m: A distorted molecule to search for confs.
+			window: max energy above minimum to continue scanning this DOF.
+			interval: torsion difference to initiate a dive.
+		"""
+		# Sweeps one at a time
+		rmsdisp = 10.0
+		rmsgrad = 10.0
+		step=0
+		ndives = 0
+		m = Mol(self.m.atoms,self.m.coords)
+		if (m_ != None):
+			m = Mol(m_.atoms,m_.coords)
+
+		m=self.Opt(m,"Pre_opt",FileOutput=False,eff_thresh=0.0005)
+		self.AppendIfNew(m)
+		energy0,frc0  = self.WrappedBumpedEForce(m.coords)
+		mol_hist = [m]
+		energy = energy0
+		old_frc = frc0.copy()
+
+		while(self.NMinima < self.StopAfter):
+			feedset = self.sampler.DihedralSamples(m,nrand=self.StopAfter*10)
+			while(len(feedset.mols)):
+				curr_m = feedset.mols.pop()
+				curr_m = self.Opt(curr_m,"Dive"+str(ndives), FileOutput=True, eff_thresh=0.001, eff_max_step=100)
+				if (self.AppendIfNew(curr_m)):
+					mol_hist.append(curr_m)
+					if (callback != None):
+						callback(mol_hist)
+				ndives += 1
+		return mol_hist
+
+	def AppendIfNew(self,m):
+		overlaps = []
+		if (self.NMinima==0):
+			print("New Configuration!")
+			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
+			self.MinimaCoords[self.NMinima] = m.coords
+			self.NMinima += 1
+			return True
+		for i in range(self.NMinima):
+			mdm = MolEmb.Make_DistMat(self.MinimaCoords[i])
+			odm = MolEmb.Make_DistMat(m.coords)
+			tmp = (mdm-odm)
+			overlaps.append(np.sqrt(np.sum(tmp*tmp)/(mdm.shape[0]*mdm.shape[0])))
+		if (min(overlaps) > 0.02):
+			print("New Configuration!")
+			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
+			self.MinimaCoords[self.NMinima] = m.coords.copy()
+			self.NMinima += 1
+			return True
+		else:
+			print("Overlaps", overlaps)
+			return False
 
 class ScannedOptimization(GeomOptimizer):
 	def __init__(self,f_,m,StopAfter_=20):

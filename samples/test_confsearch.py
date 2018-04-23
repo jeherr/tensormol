@@ -41,7 +41,7 @@ def GetChemSpider12(a):
 	manager=TFMolManage("Mol_chemspider12_maxatom35_H2O_with_CH4_ANI1_Sym_Direct_fc_sqdiff_BP_Direct_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout_act_sigmoid100_rightalpha", tset,False,"fc_sqdiff_BP_Direct_EE_ChargeEncode_Update_vdw_DSF_elu_Normalize_Dropout",False,False)
 	return manager
 
-def ConfSearch():
+def ConfSearchp():
 	"""
 	Gather statistics about the metadynamics exploration process varying bump depth, and width.
 	"""
@@ -189,6 +189,10 @@ H         -2.03934        0.04074       -0.88709
 	m = Mol()
 	m.FromXYZString(alanine)
 
+#	m.GreedyOrdering()
+#	ZmatTools().DihedralScans(m)
+	ZmatTools().DihedralSamples(m)
+
 	#d,t,q = m.Topology()
 	#print("Topology",d,t,q)
 
@@ -302,8 +306,8 @@ H         -2.03934        0.04074       -0.88709
 	Opt = GeomOptimizer(F, efh_=EFH)
 	molecule = Opt.Opt(m, eff_thresh=0.0002)
 
-	MOpt = TopologyMetaOpt(F,m)
-	m = MOpt.Search(m)
+	CS = ConfSearch(F,m)
+	m = CS.Search(m)
 
 	if (0):
 		# Gotta optimize before running spectra
@@ -325,4 +329,4 @@ H         -2.03934        0.04074       -0.88709
 #TestBetaHairpin()
 #TestUrey()
 #HarmonicSpectra()
-ConfSearch()
+ConfSearchp()
