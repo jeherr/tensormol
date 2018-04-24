@@ -254,7 +254,10 @@ class TopologyBumper(ForceHolder):
 			self.bnd_BE = self.tw_pl*BendBump(self.x_pl, self.tb_pl, self.t_pl, self.nb_pl)
 			self.t_BE = self.qw_pl*TorsionBump(self.x_pl, self.qb_pl, self.q_pl, self.nb_pl)
 			self.BE = self.bd_BE + self.bnd_BE + self.t_BE
+			self.nobond_BE = self.bnd_BE + self.t_BE
+
 			self.SparseGrad = tf.gradients(self.BE,self.x_pl)[0]
+			self.nobond_SparseGrad = tf.gradients(self.nobond_BE,self.x_pl)[0]
 
 			self.bd_CE = self.dw_pl*BondHarm(self.x_pl, self.db_pl, self.d_pl) # Bonds are constrained to orig values!!
 			self.bnd_CE = self.tw_pl*BendHarm(self.x_pl, self.tb_pl, self.t_pl)
@@ -265,6 +268,7 @@ class TopologyBumper(ForceHolder):
 			with tf.control_dependencies([self.zero_grad]):
 				# The above will be IndexedSlices and can be converted out as follows:
 				self.BF = tf.clip_by_value(-1.0*tf.scatter_add(self.grad_out,self.SparseGrad.indices,self.SparseGrad.values),-2.0,2.0)
+				self.nobond_BF = tf.clip_by_value(-1.0*tf.scatter_add(self.grad_out,self.nobond_SparseGrad.indices,self.nobond_SparseGrad.values),-2.0,2.0)
 
 			with tf.control_dependencies([self.zero_gradC]):
 				self.CF = tf.clip_by_value(-1.0*tf.scatter_add(self.grad_outC,self.SparseConstraintGrad.indices,self.SparseConstraintGrad.values),-2.0,2.0)
@@ -314,6 +318,22 @@ class TopologyBumper(ForceHolder):
 					self.db_pl:self.dbumps,self.tb_pl:self.tbumps,self.qb_pl:self.qbumps,
 					self.dw_pl:dw,self.tw_pl:tw,self.qw_pl:qw}
 		BE,BF = self.sess.run([self.BE,self.BF],feed_dict=feed_dict)
+		return BE,BF
+	def BumpNoBond(self,x_,dw=0.0,tw=-0.1,qw=-0.6):
+		"""
+		Returns the Bump energy, force.
+		Bonds are constrained at initial lengths, angles and torsions are
+		repulsively bumped.
+
+		Args:
+			dw: weight of bond bump 1.0 = attractive. -1.0 = repulsive.
+		"""
+		if (self.nbump < 1):
+			return 0.0, np.zeros(x_.shape)
+		feed_dict={self.x_pl:x_,self.x_pl:x_,self.d_pl:self.dubs,self.t_pl:self.trips,self.q_pl:self.quads,self.nb_pl:self.nbump,
+					self.db_pl:self.dbumps,self.tb_pl:self.tbumps,self.qb_pl:self.qbumps,
+					self.dw_pl:dw,self.tw_pl:tw,self.qw_pl:qw}
+		BE,BF = self.sess.run([self.nobond_BE,self.nobond_BF],feed_dict=feed_dict)
 		return BE,BF
 
 class MolInstance_DirectForce(MolInstance_fc_sqdiff_BP):

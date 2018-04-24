@@ -500,7 +500,31 @@ class Mol:
 		of this molecule.
 		"""
 		mdm = MolEmb.Make_DistMat(self.coords)
-		return np.where(mdm < 1.3,np.ones(mdm.shape),np.zeros(mdm.shape))
+		return np.where(mdm < 1.5,np.ones(mdm.shape),np.zeros(mdm.shape))
+
+	def GreedyOrdering(self):
+		"""
+		find a random ordering which puts bonded atoms near each other
+		in the ordering returns the permutation but doesn't apply it.
+		"""
+		perm = np.random.permutation(self.NAtoms())
+		tmpcoords = self.coords[perm]
+		dm = MolEmb.Make_DistMat(tmpcoords)
+		new = []
+		old = list(range(self.NAtoms()))
+		new.append(old.pop(0))
+		while(len(old)):
+			found = False
+			dists = dm[new[-1]][old]
+			# choose randomly from atoms bonded to the last atom.
+			bondeds = [i for i in range(len(old)) if dists[i]<1.5]
+			if (len(bondeds)>0):
+				new.append(old.pop(random.choice(bondeds)))
+			else:
+				new.append(old.pop(0))
+		# Compose these permutations.
+		totalp = perm[new]
+		return totalp
 
 	def SpanningGrid(self,num=250,pad=4.,Flatten=True, Cubic = True):
 		''' Returns a regular grid the molecule fits into '''

@@ -1095,8 +1095,7 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 	double rng;
 	int nreal;
 	int DoPerms;
-  bool sortns;
-	if (!PyArg_ParseTuple(args, "O!O!diib", &PyArray_Type, &xyzs, &PyArray_Type, &zs, &rng, &nreal, &DoPerms, &sortns))
+	if (!PyArg_ParseTuple(args, "O!O!dii", &PyArray_Type, &xyzs, &PyArray_Type, &zs, &rng, &nreal, &DoPerms))
 		return NULL;
 	double *xyzs_data;
 	int32_t *z_data;
@@ -1110,11 +1109,10 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 		double dist;
 		int z;
 	};
-	// Penalize H by 0.5 Angstrom.
-	struct by_dist_and_z {
+	struct by_dist {
 			bool operator()(ind_dist const &a, ind_dist const &b) {
 				if (a.dist > 0.01 && b.dist > 0.01)
-					return (a.dist + (a.z==1)? 0.5:0.0) < (b.dist + (b.z==1)? 0.5:0.0);
+					return a.dist < b.dist;
 				else if (a.dist > 0.01)
 					return true;
 				else
@@ -1158,8 +1156,8 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 				double dij = sqrt(dx*dx+dy*dy+dz*dz) + 0.0000000000001;
 				if (dij < rng)
 				{
-					ind_dist Id = {I,dij,z_data[k*(nat)+I]};
-					ind_dist Jd = {J,dij,z_data[k*(nat)+J]};
+					ind_dist Id = {I,dij};
+					ind_dist Jd = {J,dij};
 					if (I<J)
 					{
 						tmp[I].push_back(Jd);
@@ -1187,10 +1185,7 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 		{
 			if (tmp[j].size() > MaxNeigh)
 				MaxNeigh = tmp[j].size();
-      if (sortns)
-  			std::sort(tmp[j].begin(), tmp[j].end(), by_dist_and_z());
-      else
-        std::random_shuffle(tmp[j].begin(), tmp[j].end());
+			std::sort(tmp[j].begin(), tmp[j].end(), by_dist());
 		}
 	}
 	npy_intp outdim2[3] = {nmol,nat,MaxNeigh};
