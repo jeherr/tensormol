@@ -511,7 +511,7 @@ class Mol:
 		tmpcoords = self.coords[perm]
 		dm = MolEmb.Make_DistMat(tmpcoords)
 		new = []
-		old = range(self.NAtoms())
+		old = list(range(self.NAtoms()))
 		new.append(old.pop(0))
 		while(len(old)):
 			found = False
