@@ -517,8 +517,9 @@ class ConfSearch(GeomOptimizer):
 		if (m_ != None):
 			m = Mol(m_.atoms,m_.coords)
 
-		self.AppendIfNew(m)
 		energy0,frc0  = self.WrappedBumpedEForce(m.coords)
+		m.properties['energy'] = energy0
+		self.AppendIfNew(m)
 		mol_hist = [m]
 		energy = energy0
 		old_frc = frc0.copy()
