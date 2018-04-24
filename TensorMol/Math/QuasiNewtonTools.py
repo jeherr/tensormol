@@ -264,12 +264,12 @@ class ConjGradient:
 			Next point, energy, and gradient.
 		"""
 		e,g = self.EForce(x0)
+		if (not DoLS):
+			self.xold = 0.3*g + x0
+			return self.xold, e, g
 		beta_n = self.BetaPR(g)
 		self.s = g + beta_n*self.s
-		if (DoLS):
-			self.xold = self.LineSearch(x0,self.s,self.thresh)
-		else:
-			self.xold = self.s*0.3 + x0
+		self.xold = self.LineSearch(x0,self.s,self.thresh)
 		return self.xold, e, g
 
 	def LineSearch(self, x0_, p_, thresh = 0.0001):

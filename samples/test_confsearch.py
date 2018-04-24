@@ -189,10 +189,6 @@ H         -2.03934        0.04074       -0.88709
 	m = Mol()
 	m.FromXYZString(alanine)
 
-#	m.GreedyOrdering()
-#	ZmatTools().DihedralScans(m)
-	ZmatTools().DihedralSamples(m)
-
 	#d,t,q = m.Topology()
 	#print("Topology",d,t,q)
 
@@ -304,7 +300,7 @@ H         -2.03934        0.04074       -0.88709
 
 	# Test the hessian.
 	Opt = GeomOptimizer(F, efh_=EFH)
-	molecule = Opt.Opt(m, eff_thresh=0.0002)
+	molecule = Opt.Opt(m, eff_thresh=0.001)
 
 	CS = ConfSearch(F,m)
 	m = CS.Search(m)

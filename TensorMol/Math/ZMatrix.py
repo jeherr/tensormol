@@ -41,27 +41,33 @@ class ZmatTools:
 		natom = mol.NAtoms()
 		from ..Containers.Mol import Mol
 		import MolEmb
-		while (len(tore.mols)<nrand):
+		maxiter = 9999999
+		iter = 0
+		while (len(tore.mols)<nrand and iter < maxiter):
+			iter += 1
 			perturbed = False
 			perm = mol.GreedyOrdering()
 			self.read_cartesian(mol.atoms[perm], mol.coords[perm])
 			dm = MolEmb.Make_DistMat(mol.coords[perm])
 			self.cartesian_to_zmatrix()
 			rnd = np.random.normal(scale=Pi,size=(natom-3))
-			rndbnd = np.random.normal(scale=Pi/6.,size=(natom-3))
-			for j in range(2,natom):
+			rndbnd = np.random.normal(scale=Pi/6.,size=(natom))
+			rndstr = np.random.normal(scale=.1,size=(natom))
+			for j in range(1,natom):
 				atomb = self.zmatrix[j][1][0][0]
-				atomc = self.zmatrix[j][1][1][0]
-				connectivity12 = (dm[j][atomb] < 1.5 and dm[atomb][atomc] < 1.5)
-				if (connectivity12):
-					self.zmatrix[j][1][1][1] += rndbnd[j-3]
-				if (j>=3):
-					# Only tweak a dihedral if there is 1,2,3,4 connectivity.
-					atomd = self.zmatrix[j][1][2][0]
-					connectivity123 = (connectivity12 and dm[atomd][atomc] < 1.5)
-					if (connectivity123):
-						self.zmatrix[j][1][2][1] += rnd[j-3]
-						perturbed = True
+				self.zmatrix[j][1][0][1] += rndstr[j]
+				if (j>=2):
+					atomc = self.zmatrix[j][1][1][0]
+					connectivity12 = (dm[j][atomb] < 1.5 and dm[atomb][atomc] < 1.5)
+					if (connectivity12):
+						self.zmatrix[j][1][1][1] += rndbnd[j]
+					if (j>=3):
+						# Only tweak a dihedral if there is 1,2,3,4 connectivity.
+						atomd = self.zmatrix[j][1][2][0]
+						connectivity123 = (connectivity12 and dm[atomd][atomc] < 1.5)
+						if (connectivity123):
+							self.zmatrix[j][1][2][1] += rnd[j-3]
+							perturbed = True
 			if (not perturbed):
 				continue
 			self.zmatrix_to_cartesian()
@@ -69,10 +75,13 @@ class ZmatTools:
 			coords = np.zeros((natom,3))
 			for j in range(natom):
 				coords[j] = self.cartesian[j][1]
+			# Exclude clashes.
+			dm = MolEmb.Make_DistMat(coords) + np.eye(natom)
+			if (np.any(dm<0.4)):
+				continue
 			coords -= np.mean(coords,axis=0)
 			tore.mols.append(Mol(atoms[np.argsort(perm)],coords[np.argsort(perm)]))  #[np.argsort(perm)],coords[np.argsort(perm)]))
-			print(len(tore.mols))
-		tore.WriteXYZ("InitalConfs")
+		#tore.WriteXYZ("InitalConfs")
 		return tore
 
 	def read_zmatrix(self, atoms, coords):

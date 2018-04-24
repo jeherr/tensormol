@@ -67,9 +67,8 @@ class GeomOptimizer:
 		step=0
 		mol_hist = []
 		prev_m = Mol(m.atoms, m.coords)
-#		print("Orig Mol:\n", m)
 		CG = ConjGradient(self.WrappedEForce, m.coords)
-		while( step < self.max_opt_step and rmsgrad > self.thresh and (rmsdisp > 0.000001 or step<5) ):
+		while( step < max_step and rmsgrad > thresh and (rmsdisp > 0.00000001 or step<5) ):
 			prev_m = Mol(m.atoms, m.coords)
 			m.coords, energy, frc = CG(m.coords,rmsgrad<0.003)
 			rmsgrad = np.sum(np.linalg.norm(frc,axis=1))/m.coords.shape[0]
@@ -84,7 +83,7 @@ class GeomOptimizer:
 			if (FileOutput):
 				prev_m.WriteXYZfile("./results/", filename,'a',True)
 			step+=1
-		# Checks stability in each cartesian direction.
+			#print(thresh,rmsgrad,rmsdisp)
 		FinalE = self.EnergyAndForce(prev_m.coords,False)
 		print("Final Energy:", FinalE)
 		prev_m.properties['energy']=FinalE
@@ -470,7 +469,7 @@ class ConfSearch(GeomOptimizer):
 		self.masses = np.array(map(lambda x: ATOMICMASSES[x-1], m.atoms))
 		self.natoms = m.NAtoms()
 		self.StopAfter = StopAfter_
-		self.MinimaCoords = np.zeros((self.StopAfter,self.natoms,3))
+		self.MinimaCoords = np.zeros((self.StopAfter+1,self.natoms,3))
 		self.NMinima = 0
 		self.sampler = ZmatTools()
 		return
@@ -518,7 +517,6 @@ class ConfSearch(GeomOptimizer):
 		if (m_ != None):
 			m = Mol(m_.atoms,m_.coords)
 
-		m=self.Opt(m,"Pre_opt",FileOutput=False,eff_thresh=0.0005)
 		self.AppendIfNew(m)
 		energy0,frc0  = self.WrappedBumpedEForce(m.coords)
 		mol_hist = [m]
@@ -529,6 +527,7 @@ class ConfSearch(GeomOptimizer):
 			feedset = self.sampler.DihedralSamples(m,nrand=self.StopAfter*10)
 			while(len(feedset.mols)):
 				curr_m = feedset.mols.pop()
+				PARAMS["GSSearchAlpha"] = 0.05
 				curr_m = self.Opt(curr_m,"Dive"+str(ndives), FileOutput=True, eff_thresh=0.001, eff_max_step=100)
 				if (self.AppendIfNew(curr_m)):
 					mol_hist.append(curr_m)
