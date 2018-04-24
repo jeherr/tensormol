@@ -523,7 +523,7 @@ class ConfSearch(GeomOptimizer):
 		energy = energy0
 		old_frc = frc0.copy()
 
-		while(self.NMinima < self.StopAfter):
+		while(len(mol_hist) < self.StopAfter):
 			feedset = self.sampler.DihedralSamples(m,nrand=self.StopAfter*10)
 			while(len(feedset.mols)):
 				curr_m = feedset.mols.pop()
