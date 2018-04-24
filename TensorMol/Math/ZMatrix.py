@@ -65,7 +65,7 @@ class ZmatTools:
 			for j in range(natom):
 				coords[j] = self.cartesian[j][1]
 			coords -= np.mean(coords,axis=0)
-		 	tore.mols.append(Mol(atoms[np.argsort(perm)],coords[np.argsort(perm)]))  #[np.argsort(perm)],coords[np.argsort(perm)]))
+			tore.mols.append(Mol(atoms[np.argsort(perm)],coords[np.argsort(perm)]))  #[np.argsort(perm)],coords[np.argsort(perm)]))
 		tore.WriteXYZ("InitalConfs")
 		return tore
 

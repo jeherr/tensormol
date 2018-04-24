@@ -2,6 +2,15 @@
 This revision shares low-layers to avoid overfitting, and save time.
 It's a little recurrent-y.
 """
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
+HAS_MATPLOTLIB=True
+try:
+	import matplotlib.pyplot as plt
+	HAS_MATPLOTLIB=True
+except Exception as Ex:
+	HAS_MATPLOTLIB=False
+
 
 from TensorMol import *
 import numpy as np
@@ -23,7 +32,7 @@ if (0):
 
 if 1:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("HNCO_small")
+	b = MSet("Hybrid2")
 	b.Load()
 	b.cut_max_num_atoms(55)
 	b.cut_max_grad(2.0)
@@ -144,11 +153,11 @@ class SparseCodedChargedGauSHNetwork:
 	"""
 	def __init__(self,aset=None,load=False,load_averages=False,mode='train'):
 		self.prec = tf.float64
-		self.batch_size = 150 # Force learning strongly modulates what you can do.
+		self.batch_size = 64 # Force learning strongly modulates what you can do.
 		self.MaxNAtom = 32
 		self.MaxNeigh = self.MaxNAtom
-		self.learning_rate = 0.0000
-		self.ncan = 2
+		self.learning_rate = 0.0002
+		self.ncan = 6
 		self.DoHess=False
 		self.mode = mode
 		if (mode == 'eval'):
@@ -802,7 +811,9 @@ class SparseCodedChargedGauSHNetwork:
 				print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i])
 				if (self.DoChargeEmbedding):
 					print("MolCoulEnergy: ", qens[i])
-			MAEF = np.average(np.abs(frcs-feed_dict[self.groundTruthG_pl]))
+			diffF = frcs-feed_dict[self.groundTruthG_pl]
+			MAEF = np.average(np.abs(diffF))
+			RMSF = np.sqrt(np.average(diffF*diffF))
 			if (MAEF > 1.0 or np.any(np.isnan(MAEF))):
 				# locate the problem case.
 				for i,m in enumerate(mols):
@@ -813,8 +824,24 @@ class SparseCodedChargedGauSHNetwork:
 						print(frcs[i])
 						print(feed_dict[self.groundTruthG_pl][i])
 						print("--------------")
-			print("Mean Abs Error: (Energy)", np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
+			diffE = ens-feed_dict[self.groundTruthE_pl]
+			MAEE = np.average(np.abs(diffE))
+			worst_mol = np.argmax(np.abs(diffE))
+			print ("Worst Molecule:",mols[worst_mol])
+			if (HAS_MATPLOTLIB):
+				plt.title("Histogram with 'auto' bins")
+				plt.hist(diffE, bins='auto')
+				plt.savefig('./logs/EError.png', bbox_inches='tight')
+				# Plot error as a function of total energy.
+				plt.clf()
+				plt.scatter(feed_dict[self.groundTruthE_pl],diffE[:,np.newaxis])
+				plt.savefig('./logs/EError2.png', bbox_inches='tight')
+				plt.clf()
+			RMSE = np.sqrt(np.average(np.abs(ens-feed_dict[self.groundTruthE_pl])))
+			print("Mean Abs Error: (Energy)", MAEE)
 			print("Mean Abs Error (Force): ", MAEF)
+			print("RMS Error (Energ): ", RMSE)
+			print("RMS Error (Force): ", RMSF)
 			if (self.DoDipoleLearning):
 				print("Mean Abs Error (Dipole): ", np.average(np.abs(dipoles-feed_dict[self.groundTruthD_pl])))
 			if (self.DoChargeLearning):
@@ -998,8 +1025,9 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
-#net.Train(300)
+net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=False,mode='train')
+#net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
+net.Train()
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
