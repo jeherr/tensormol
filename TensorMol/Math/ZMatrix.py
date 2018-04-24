@@ -39,33 +39,39 @@ class ZmatTools:
 	def DihedralSamples(self,mol,nrand = 2000):
 		tore = MSet("Dihedrals")
 		natom = mol.NAtoms()
-		for i in range(nrand):
-			perm = mol.GreedyDihedOrdering()
+		from ..Containers.Mol import Mol
+		import MolEmb
+		while (len(tore.mols)<nrand):
+			perturbed = False
+			perm = mol.GreedyOrdering()
 			self.read_cartesian(mol.atoms[perm], mol.coords[perm])
-			import MolEmb
-			#print(MolEmb.Make_DistMat(mol.coords[perm]))
+			dm = MolEmb.Make_DistMat(mol.coords[perm])
 			self.cartesian_to_zmatrix()
-			#print(self.zmatrix)
-			rnd = np.random.normal(scale=Pi/6.,size=(natom-3))
-			for j in range(3,natom):
-				self.zmatrix[j][1][2][1] += rnd[j-3]
-				# Only tweak a dihedral if there is 1,2,3,4 connectivity.
-				if 0:
-					atomb = self.zmatrix[j][1][0][0]
-					atomc = self.zmatrix[j][1][1][0]
+			rnd = np.random.normal(scale=Pi,size=(natom-3))
+			rndbnd = np.random.normal(scale=Pi/6.,size=(natom-3))
+			for j in range(2,natom):
+				atomb = self.zmatrix[j][1][0][0]
+				atomc = self.zmatrix[j][1][1][0]
+				connectivity12 = (dm[j][atomb] < 1.5 and dm[atomb][atomc] < 1.5)
+				if (connectivity12):
+					self.zmatrix[j][1][1][1] += rndbnd[j-3]
+				if (j>=3):
+					# Only tweak a dihedral if there is 1,2,3,4 connectivity.
 					atomd = self.zmatrix[j][1][2][0]
-					print((self.zmatrix[j][1][0][1] < 1.5),np.linalg.norm(self.cartesian[atomb][1]-self.cartesian[atomc][1]) < 1.5)
-					connectivity = ((self.zmatrix[j][1][0][1] < 1.5) and np.linalg.norm(self.cartesian[atomb][1]-self.cartesian[atomc][1]) < 1.5)
-					if (connectivity):
+					connectivity123 = (connectivity12 and dm[atomd][atomc] < 1.5)
+					if (connectivity123):
 						self.zmatrix[j][1][2][1] += rnd[j-3]
+						perturbed = True
+			if (not perturbed):
+				continue
 			self.zmatrix_to_cartesian()
-			from ..Containers.Mol import Mol
 			atoms = np.array([c[0] for c in self.cartesian],dtype=np.int32)
 			coords = np.zeros((natom,3))
 			for j in range(natom):
 				coords[j] = self.cartesian[j][1]
 			coords -= np.mean(coords,axis=0)
 			tore.mols.append(Mol(atoms[np.argsort(perm)],coords[np.argsort(perm)]))  #[np.argsort(perm)],coords[np.argsort(perm)]))
+			print(len(tore.mols))
 		tore.WriteXYZ("InitalConfs")
 		return tore
 
@@ -170,35 +176,6 @@ class ZmatTools:
 			self.add_atom_to_cartesian(atom)
 		self.remove_dummy_atoms()
 		return self.cartesian
-
-	def add_first_three_to_zmatrix_old(self):
-		'''The first three atoms need to be treated differently'''
-		# First atom
-		self.zmatrix = []
-		name, position = self.cartesian[0]
-		self.zmatrix.append([name, [[0,0], [0,0], [0,0]]])
-
-		# Second atom
-		name, position = self.cartesian[1]
-		atom1 = self.cartesian[0]
-		pos1 = atom1[1]
-		q = pos1 - position
-		distance = m.sqrt(np.dot(q, q))
-		self.zmatrix.append([name, [[0, distance], [0,0], [0,0]]])
-
-		# Third atom
-		name, position = self.cartesian[2]
-		atom1, atom2 = self.cartesian[:2]
-		pos1, pos2 = atom1[1], atom2[1]
-		q = pos1 - position
-		r = pos2 - pos1
-		q_u = q / np.sqrt(np.dot(q, q))
-		r_u = r / np.sqrt(np.dot(r, r))
-		distance = np.sqrt(np.dot(q, q))
-		# Angle between a and b = acos( dot product of the unit vectors )
-		angle = m.acos(np.dot(-q_u, r_u))
-		self.zmatrix.append(
-		[name, [[0, distance], [1, angle], [0,0]]])
 
 	def add_first_three_to_zmatrix(self):
 		'''The first three atoms need to be treated differently'''

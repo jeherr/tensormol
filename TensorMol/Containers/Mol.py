@@ -505,7 +505,7 @@ class Mol:
 	def GreedyOrdering(self):
 		"""
 		find a random ordering which puts bonded atoms near each other
-		in the ordering returns the permutation.
+		in the ordering returns the permutation but doesn't apply it.
 		"""
 		perm = np.random.permutation(self.NAtoms())
 		tmpcoords = self.coords[perm]
@@ -516,41 +516,12 @@ class Mol:
 		while(len(old)):
 			found = False
 			dists = dm[new[-1]][old]
-			bestdists=np.argsort(dists)
-			#print(new,dists,old,bestdists)
-			new.append(old.pop(bestdists[0]))
-		# Compose these permutations.
-		totalp = perm[new]
-		#self.atoms = self.atoms[totalp]
-		#self.coords = self.coords[totalp]
-		#print(MolEmb.Make_DistMat(self.coords))
-		return totalp
-
-	def GreedyDihedOrdering(self):
-		"""
-		find a random ordering which puts bonded atoms near each other
-		in the ordering returns the permutation.
-
-		this one tries to have an ordering where
-		quadruples are abcd bonded as much as possible.
-		"""
-		perm = np.random.permutation(self.NAtoms())
-		tmpcoords = self.coords[perm]
-		dm = MolEmb.Make_DistMat(tmpcoords)
-		new = []
-		old = range(self.NAtoms())
-		new.append(old.pop(0))
-		while(len(old)):
-			found = False
-			dists = dm[new[-1]][old]
-			nextguess = 0
-			# Look for abcd ordering.
-			if (len(new)>=2):
-				dists += 1.0/(dm[new[-2]][old]+0.1)
-			elif (len(new)>=3):
-				dists += 1.0/(dm[new[-3]][old]+0.1)
-			bestdists=np.argsort(dists)
-			new.append(old.pop(bestdists[0]))
+			# choose randomly from atoms bonded to the last atom.
+			bondeds = [i for i in range(len(old)) if dists[i]<1.5]
+			if (len(bondeds)>0):
+				new.append(old.pop(random.choice(bondeds)))
+			else:
+				new.append(old.pop(0))
 		# Compose these permutations.
 		totalp = perm[new]
 		return totalp
