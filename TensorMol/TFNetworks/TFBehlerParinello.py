@@ -144,7 +144,7 @@ class BehlerParinelloNetwork(object):
 
 	def restart_training(self):
 		self.reload_set()
-		self.load_data_to_scratch()
+		self.load_data()
 		self.train_prepare(restart=True)
 		self.train()
 
@@ -436,7 +436,7 @@ class BehlerParinelloNetwork(object):
 		branches=[]
 		variables=[]
 		output = tf.zeros([self.batch_size, self.max_num_atoms], dtype=self.tf_precision)
-		with tf.name_scope("energy_network", reuse=tf.AUTO_REUSE):
+		with tf.variable_scope("energy_network", reuse=tf.AUTO_REUSE):
 			for e in range(len(self.elements)):
 				branches.append([])
 				inputs = inp[e]
