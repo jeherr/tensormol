@@ -142,10 +142,28 @@ def GetEnergyVariance(MName_):
 
 	np.savetxt(MName_, ensmav)
 
-net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
+def Element_EF(MName_):
+	"""
+	Energy and force evaluation on elment
+	coder networks.
+
+	Args: 
+		MName_: Name of dataset as a string
+
+	Returns:
+		Energy and Force
+
+	"""
+	a = MSet(MName_)
+	a.Load()
+	net = SparseCodedChargedGauSHNetwork(aset=a,load=True,load_averages=True,mode='eval')
+	for mol in a.mols:
+		net.GetEnergyForceRoutine(mol)
+
 
 
 # GetEnergyAndForceFromManager("Mol_DavidMetaMD_ANI1_Sym_Direct_fc_sqdiff_BP_Direct_Grad_Linear_1", "Hybrid")
 # CompareAllData()
 #print(TestOptimization("Mol_DavidMetaMD_ANI1_Sym_Direct_fc_sqdiff_BP_Direct_Grad_Linear_1"))
 # GetEnergyVariance()
+Element_EF()
