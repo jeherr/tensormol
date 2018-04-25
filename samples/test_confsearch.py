@@ -222,17 +222,6 @@ H    -1.665100    -3.343358    -1.229830
 	m = Mol()
 	m.FromXYZString(jordan)
 
-	m.DihedralSamples()
-	#d,t,q = m.Topology()
-	#print("Topology",d,t,q)
-
-	#from MolEmb import EmptyInterfacedFunction, Make_NListNaive, Make_NListLinear
-	#print("READ MOL XFOIUDOFIUDFO")
-	#print(m.coords,15.0,m.NAtoms(),True)
-	#EmptyInterfacedFunction(np.zeros((10,3)),13)
-	#print("Passed test")
-	#return
-
 	s = MSet()
 	s.mols.append(m)
 	mgr = GetChemSpider12(s)
@@ -336,12 +325,12 @@ H    -1.665100    -3.343358    -1.229830
 	Opt = GeomOptimizer(F, efh_=EFH)
 	molecule = Opt.Opt(m, eff_thresh=0.001)
 
-	if 1:
+	if 0:
 		CS = ConfSearch(F,m,StopAfter_=6)
 		m = CS.Search(m)
 
-	RS = RelaxedScan(F,m,at1=0,at2=1)
-	m = CS.Scan(m,minr=1.0,maxr=6.0,nstep_=20)
+	RS = RelaxedScan(F,m,at1=3,at2=6,nstep_=20)
+	m = RS.Scan(m,maxr=15.0)
 
 	if (0):
 		# Gotta optimize before running spectra

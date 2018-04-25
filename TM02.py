@@ -15,22 +15,22 @@ except Exception as Ex:
 from TensorMol import *
 import numpy as np
 
-if (0):
-	a = MSet("chemspider20_345_opt")
-	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
-	c = MSet("chemspider12_clean_maxatom35")
+if (1):
+	a = MSet("kevin_rand1")
+	b = MSet("Kevin_Heavy")
+	c = MSet("chemspider12_clean_maxatom35_small")
 	d = MSet("kevin_heteroatom.dat")
 	a.Load()
 	b.Load()
 	c.Load()
 	d.Load()
-	b.mols = a.mols+b.mols+c.mols[:len(b.mols)]+d.mols
+	b.mols = a.mols+b.mols+c.mols+d.mols
 	#b.Statistics()
 	b.cut_max_num_atoms(50)
 	b.cut_max_grad(1.0)
-	b.Save("Hybrid2")
+	b.Save("PeriodicTable")
 
-if 1:
+if 0:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
 	b = MSet("Hybrid2")
 	b.Load()
@@ -873,7 +873,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.DoRotGrad = False
 		self.DoForceLearning = True
 		self.Canonicalize = True
-		self.DoCodeLearning = False
+		self.DoCodeLearning = True
 		self.DoDipoleLearning = False
 		self.DoChargeLearning = True
 		self.DoChargeEmbedding = True
@@ -1025,7 +1025,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=False,mode='train')
+net = SparseCodedChargedGauSHNetwork(aset=b,load=False,load_averages=False,mode='train')
 #net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
 net.Train()
 
