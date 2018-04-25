@@ -798,28 +798,11 @@ class SparseCodedChargedGauSHNetwork:
 			l2pe = tf.concat([l2e,CODES_wq],axis=-1)
 			l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
 			AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))*AtomEStds+AvEs
-
 		return AtomEnergies, AtomCharges
 
 
 	def train_step(self,step):
 		feed_dict, mols = self.NextBatch(self.mset)
-		#DEBUGFLEARNING = self.sess.run(tf.gradients(self.Gloss,tf.trainable_variables()), feed_dict=feed_dict)[0]
-		#print(DEBUGFLEARNING)
-		#for t in DEBUGFLEARNING:
-		#	if (np.any(np.isnan(t))):
-		#		print("NanLearning!!!", t)
-		#tvars = tf.trainable_variables()
-		#for var in tvars:
-			#print("var", var)
-		if 0:
-			a,b = self.sess.run([self.dxyzs, self.cdxyzs_p], feed_dict=feed_dict)
-			for i,d in enumerate(a[:10]):
-				print(mols[i])
-				print(" --- ",d)
-			for i,d in enumerate(b[:10]):
-				print(mols[i])
-				print(" --- ",d)
 		_ , train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
 		self.print_training(step, train_loss)
 		return
