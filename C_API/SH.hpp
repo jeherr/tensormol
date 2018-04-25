@@ -6,7 +6,7 @@
 
 #ifdef __clang__
  #if __clang_major__ >= 5
-  #if __clang_major__ < 7
+  #if __clang_major__ < 10
    #include <tr1/array>
    using namespace std::tr1;
   #else

@@ -200,6 +200,59 @@ class BumpHolder(ForceHolder):
 		"""
 		return self.sess.run([self.BowlE,self.BowlF], feed_dict = {self.x_pl:x_})
 
+class BondConstraint(ForceHolder):
+	def __init__(self,m_,at1,at2):
+		"""
+		Constraint and Basin-Filling for bond distances, angles, and torsions
+		The idea is to hold bonds together, while perturbing angles and torsions.
+		So actually a constraint potential is added to bond lengths,
+		while the others get perturbations.
+		"""
+		natom_ = m_.NAtoms()
+		self.natom = natom_
+		ForceHolder.__init__(self, natom_)
+		self.maxbump = maxbump_
+		self.at1 = at1
+		self.at2 = at2
+		self.Prepare()
+		return
+	def Prepare(self):
+		with tf.Graph().as_default():
+			self.x_pl=tf.placeholder(tf.float64, shape=tuple([self.natom,3]))
+			self.db_pl=tf.placeholder(tf.float64, shape=tuple([1,1]))
+			#self.db_pl=tf.placeholder(tf.float64, shape=tuple([self.maxbump,self.NDoub]))
+			self.d_pl=tf.constant([[self.at1,self.at2]],dtype=tf.int32)
+			self.nb_pl=tf.constant(1,tf.int32)
+
+			self.grad_out = tf.Variable(np.zeros([self.natom,3]),dtype=tf.float64)
+			self.zero_grad = tf.assign(self.grad_out,tf.zeros_like(self.grad_out))
+			self.grad_outC = tf.Variable(np.zeros([self.natom,3]),dtype=tf.float64)
+			self.zero_gradC = tf.assign(self.grad_outC,tf.zeros_like(self.grad_out))
+			self.Bonds = tf.norm(tf.gather(self.x_pl,self.d_pl[...,0],axis=0)-tf.gather(self.x_pl,self.d_pl[...,1],axis=0),axis=-1)
+
+			self.bd_CE = BondHarm(self.x_pl, self.db_pl, self.d_pl) # Bonds are constrained to orig values!!
+			self.CE = self.bd_CE
+			self.SparseConstraintGrad = tf.gradients(self.CE,self.x_pl)[0]
+
+			with tf.control_dependencies([self.zero_gradC]):
+				self.CF = tf.clip_by_value(-1.0*tf.scatter_add(self.grad_outC,self.SparseConstraintGrad.indices,self.SparseConstraintGrad.values),-2.0,2.0)
+
+			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+			#self.summary_writer = tf.summary.FileWriter(self.train_dir, self.sess.graph)
+			init = tf.global_variables_initializer()
+			self.sess.run(init)
+		return
+
+	def Constraint(self,x_,r_):
+		"""
+		Tries to keep things together while harmonically forcing a torsion
+		To adopt a certain value. Assumes that self.dbumps etc.
+		are filled with the desired quantities by PreConstraint
+		"""
+		feed_dict={self.x_pl:x_,self.db_pl:r_}
+		CE,CF = self.sess.run([self.CE,self.CF],feed_dict=feed_dict)
+		return CE,CF
+
 class TopologyBumper(ForceHolder):
 	def __init__(self,m_,maxbump_=500):
 		"""
@@ -292,7 +345,7 @@ class TopologyBumper(ForceHolder):
 		To adopt a certain value. Assumes that self.dbumps etc.
 		are filled with the desired quantities by PreConstraint
 		"""
-		feed_dict={self.x_pl:x_,self.x_pl:x_,self.d_pl:self.dubs,self.t_pl:self.trips,self.q_pl:self.quads,self.nb_pl:self.nbump,
+		feed_dict={self.x_pl:x_,self.d_pl:self.dubs,self.t_pl:self.trips,self.q_pl:self.quads,self.nb_pl:self.nbump,
 					self.db_pl:self.dbumps,self.tb_pl:self.tbumps,self.qb_pl:self.qbumps,
 					self.dw_pl:dw,self.tw_pl:tw,self.qw_pl:qw}
 		CE,CF = self.sess.run([self.CE,self.CF],feed_dict=feed_dict)
