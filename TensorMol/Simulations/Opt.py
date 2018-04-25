@@ -550,7 +550,7 @@ class ConfSearch(GeomOptimizer):
 			odm = MolEmb.Make_DistMat(m.coords)
 			tmp = (mdm-odm)
 			overlaps.append(np.sqrt(np.sum(tmp*tmp)/(mdm.shape[0]*mdm.shape[0])))
-		if (min(overlaps) > 0.02):
+		if (min(overlaps) > 0.02 and self.NMinima<self.StopAfter):
 			print("New Configuration!")
 			m.WriteXYZfile("./results/","NewMin"+str(self.NMinima))
 			self.MinimaCoords[self.NMinima] = m.coords.copy()
