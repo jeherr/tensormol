@@ -211,7 +211,6 @@ class BondConstraint(ForceHolder):
 		natom_ = m_.NAtoms()
 		self.natom = natom_
 		ForceHolder.__init__(self, natom_)
-		self.maxbump = maxbump_
 		self.at1 = at1
 		self.at2 = at2
 		self.Prepare()
@@ -219,7 +218,8 @@ class BondConstraint(ForceHolder):
 	def Prepare(self):
 		with tf.Graph().as_default():
 			self.x_pl=tf.placeholder(tf.float64, shape=tuple([self.natom,3]))
-			self.db_pl=tf.placeholder(tf.float64, shape=tuple([1,1]))
+			self.db_pl=tf.placeholder(tf.float64, shape=tuple())
+			self.db_pl2=tf.reshape(self.db_pl,[1,1])
 			#self.db_pl=tf.placeholder(tf.float64, shape=tuple([self.maxbump,self.NDoub]))
 			self.d_pl=tf.constant([[self.at1,self.at2]],dtype=tf.int32)
 			self.nb_pl=tf.constant(1,tf.int32)
@@ -230,7 +230,7 @@ class BondConstraint(ForceHolder):
 			self.zero_gradC = tf.assign(self.grad_outC,tf.zeros_like(self.grad_out))
 			self.Bonds = tf.norm(tf.gather(self.x_pl,self.d_pl[...,0],axis=0)-tf.gather(self.x_pl,self.d_pl[...,1],axis=0),axis=-1)
 
-			self.bd_CE = BondHarm(self.x_pl, self.db_pl, self.d_pl) # Bonds are constrained to orig values!!
+			self.bd_CE = BondHarm(self.x_pl, self.db_pl2, self.d_pl) # Bonds are constrained to orig values!!
 			self.CE = self.bd_CE
 			self.SparseConstraintGrad = tf.gradients(self.CE,self.x_pl)[0]
 
