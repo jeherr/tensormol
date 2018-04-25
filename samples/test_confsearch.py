@@ -186,22 +186,41 @@ O         -1.34343        0.66280       -1.07666
 H         -2.03934        0.04074       -0.88709
 """
 
+	jordan = """29
+
+C    -5.995425    -2.278984     0.302448
+C    -4.745397    -1.443618     0.061077
+H    -6.882756    -1.637767     0.290518
+H    -5.952000    -2.780980     1.273894
+H    -6.126485    -3.037438    -0.475235
+C    -3.446544    -2.250327     0.184740
+H    -4.732384    -0.616015     0.780078
+H    -4.817036    -1.007098    -0.942611
+C    -2.225120    -1.334103    -0.001192
+C    -0.892789    -2.099292     0.053220
+H    -2.240371    -0.555889     0.771124
+H    -2.300977    -0.841999    -0.979836
+C     0.294472    -1.129340     0.044860
+C     1.636491    -1.851357     0.187100
+H     0.186373    -0.405431     0.861590
+H     0.297690    -0.566424    -0.897293
+C     2.801361    -0.872660     0.13718
+H     1.763943    -2.597576    -0.606490
+H     1.666808    -2.408956     1.131421
+O     4.016218    -1.585269     0.325716
+H     2.716108    -0.121152     0.928460
+H     2.840640    -0.365165    -0.832146
+H     4.741028    -0.947056     0.213952
+O    -3.406550    -3.278814    -0.805683
+H    -3.392092    -2.730727     1.168793
+H    -4.128095    -3.903795    -0.612212
+O    -0.775431    -2.955555    -1.081243
+H    -0.856739    -2.722685     0.954079
+H    -1.665100    -3.343358    -1.229830
+"""
+
 	m = Mol()
-	m.FromXYZString(alanine)
-
-#	m.GreedyOrdering()
-#	ZmatTools().DihedralScans(m)
-	ZmatTools().DihedralSamples(m)
-
-	#d,t,q = m.Topology()
-	#print("Topology",d,t,q)
-
-	#from MolEmb import EmptyInterfacedFunction, Make_NListNaive, Make_NListLinear
-	#print("READ MOL XFOIUDOFIUDFO")
-	#print(m.coords,15.0,m.NAtoms(),True)
-	#EmptyInterfacedFunction(np.zeros((10,3)),13)
-	#print("Passed test")
-	#return
+	m.FromXYZString(jordan)
 
 	s = MSet()
 	s.mols.append(m)
@@ -304,10 +323,14 @@ H         -2.03934        0.04074       -0.88709
 
 	# Test the hessian.
 	Opt = GeomOptimizer(F, efh_=EFH)
-	molecule = Opt.Opt(m, eff_thresh=0.0002)
+	molecule = Opt.Opt(m, eff_thresh=0.001)
 
-	CS = ConfSearch(F,m)
-	m = CS.Search(m)
+	if 0:
+		CS = ConfSearch(F,m,StopAfter_=6)
+		m = CS.Search(m)
+
+	RS = RelaxedScan(F,m,at1=3,at2=6,nstep_=20)
+	m = RS.Scan(m,maxr=15.0)
 
 	if (0):
 		# Gotta optimize before running spectra

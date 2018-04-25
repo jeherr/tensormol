@@ -1,5 +1,12 @@
 CC= g++
-CFLAGS= -std=c++11
+CFLAGS= -g -std=gnu++11
+TARGETS= NeighborList NaiveNeighborList
 
-neighborlist: NeighborList.cpp
+all: $(TARGETS)
+
+%: %.cpp
 	$(CC) $(CFLAGS) $< -o $@
+	rm -rf *.dSYM
+
+clean:
+	rm -f $(TARGETS)
