@@ -142,8 +142,10 @@ def GetEnergyVariance(MName_):
 
 	np.savetxt(MName_, ensmav)
 
+net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
+
 
 # GetEnergyAndForceFromManager("Mol_DavidMetaMD_ANI1_Sym_Direct_fc_sqdiff_BP_Direct_Grad_Linear_1", "Hybrid")
 # CompareAllData()
-print(TestOptimization("Mol_DavidMetaMD_ANI1_Sym_Direct_fc_sqdiff_BP_Direct_Grad_Linear_1"))
+#print(TestOptimization("Mol_DavidMetaMD_ANI1_Sym_Direct_fc_sqdiff_BP_Direct_Grad_Linear_1"))
 # GetEnergyVariance()
