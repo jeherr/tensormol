@@ -502,6 +502,72 @@ class Mol:
 		mdm = MolEmb.Make_DistMat(self.coords)
 		return np.where(mdm < 1.5,np.ones(mdm.shape),np.zeros(mdm.shape))
 
+	def DihedralSamples(self,nsamp=1000):
+		"""
+		Randomly tweaks dihedrals
+		"""
+		coords0 = self.coords.copy()
+		atoms0 = self.atoms.copy()
+		perm = self.GreedyOrdering()
+		self.atoms,self.coords = self.atoms[perm],self.coords[perm]
+		cm0 = MolEmb.Make_DistMat(self.coords)<1.4
+		da,t,q = self.Topology()
+		d = da.tolist()
+		# Now find the longest chain of bonds recursively.
+		d1 = [copy.copy(x[0]) for x in d]
+		d2 = [copy.copy(x[1]) for x in d]
+		tore = MSet("Dihedrals")
+		while (len(tore.mols)<nsamp):
+			bondi = np.random.randint(0,len(d)-1)
+			theta = np.random.uniform(-Pi/2,Pi/2)
+			#self.coords = coords0.copy()
+			I = d[bondi][0]
+			J = d[bondi][1]
+			L = self.KevinBacon(d1,d2,I,tips=[],bridge = [J])
+			R = self.KevinBacon(d1,d2,J,tips=[],bridge = [I])
+			if (len(L)<2 or len(R)<2 or len([k for k in L if k in R])>0):
+				continue
+			axis = self.coords[I]-self.coords[J]
+			center = (self.coords[I]+self.coords[J])/2
+			Lrot = RotationMatrix(axis,theta)
+			Rrot = RotationMatrix(axis,-theta)
+			#print(Lrot,Rrot)
+			tmp = self.coords.copy()
+ 			self.coords[L] = np.einsum("ij,kj->ik",self.coords[L]-center,Lrot)
+			self.coords[R] = np.einsum("ij,kj->ik",self.coords[R]-center,Rrot)
+			self.coords -= np.mean(self.coords,axis=0)
+			cmp = MolEmb.Make_DistMat(self.coords)<1.4
+			if (np.any(np.not_equal(cm0,cmp))):
+				self.coords = tmp.copy()
+				continue
+			tore.mols.append(Mol(self.atoms[np.argsort(perm)],self.coords[np.argsort(perm)]))
+		#tore.WriteXYZ("InitalConfs")
+		self.coords=coords0.copy()
+		self.atoms=atoms0.copy()
+		return tore
+
+	def KevinBacon(self,d1,d2,i,degree=-1,tips=[],bridge=[]):
+		"""
+		returns all j connected to i given pairwise connectivity d.
+		"""
+		oldtips = len(tips)
+		if len(tips)==0:
+			tips.append(i)
+		else:
+			for t in tips:
+				if t in d1:
+					for tp in [d2[k] for k in range(len(d1)) if d1[k]==t]:
+						if (not tp in bridge and not tp in tips):
+							tips.append(tp)
+				if t in d2:
+					for tp in [d1[k] for k in range(len(d1)) if d2[k]==t]:
+						if (not tp in bridge and not tp in tips):
+							tips.append(tp)
+		if (oldtips == len(tips) or degree==0):
+			return tips
+		else:
+			return self.KevinBacon(d1,d2,i,degree=degree-1,tips=tips,bridge=bridge)
+
 	def GreedyOrdering(self):
 		"""
 		find a random ordering which puts bonded atoms near each other
@@ -516,12 +582,8 @@ class Mol:
 		while(len(old)):
 			found = False
 			dists = dm[new[-1]][old]
-			# choose randomly from atoms bonded to the last atom.
-			bondeds = [i for i in range(len(old)) if dists[i]<1.5]
-			if (len(bondeds)>0):
-				new.append(old.pop(random.choice(bondeds)))
-			else:
-				new.append(old.pop(0))
+			bestdists = np.argsort(dists)
+			new.append(old.pop(bestdists[0]))
 		# Compose these permutations.
 		totalp = perm[new]
 		return totalp

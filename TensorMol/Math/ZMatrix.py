@@ -11,79 +11,6 @@ class ZmatTools:
 		self.cartesian = []
 		self.zmatrix = []
 
-	def DihedralScans(self,mol):
-		tore = MSet("Dihedrals")
-		natom = mol.NAtoms()
-		tore.mols.append(mol)
-		self.read_cartesian(mol.atoms, mol.coords)
-		self.cartesian_to_zmatrix()
-		zmat0 = copy.deepcopy(self.zmatrix)
-		for j in range(3,natom):
-			for angle in np.linspace(-Pi,Pi,10):
-				self.zmatrix = copy.deepcopy(zmat0)
-				atoma = self.zmatrix[j][1][1][0]
-				atomb = self.zmatrix[j][1][2][0]
-				self.zmatrix[j][1][2][1] = angle
-				print(angle,self.zmatrix)
-				self.zmatrix_to_cartesian()
-				from ..Containers.Mol import Mol
-				atoms = np.array([c[0] for c in self.cartesian],dtype=np.int32)
-				coords = np.zeros((natom,3))
-				for k in range(natom):
-					coords[k] = self.cartesian[k][1]
-				coords -= np.mean(coords,axis=0)
-				tore.mols.append(Mol(atoms,coords))  #[np.argsort(perm)],coords[np.argsort(perm)]))
-		tore.WriteXYZ("scans")
-		return tore
-
-	def DihedralSamples(self,mol,nrand = 2000):
-		tore = MSet("Dihedrals")
-		natom = mol.NAtoms()
-		from ..Containers.Mol import Mol
-		import MolEmb
-		maxiter = 9999999
-		iter = 0
-		while (len(tore.mols)<nrand and iter < maxiter):
-			iter += 1
-			perturbed = False
-			perm = mol.GreedyOrdering()
-			self.read_cartesian(mol.atoms[perm], mol.coords[perm])
-			dm = MolEmb.Make_DistMat(mol.coords[perm])
-			self.cartesian_to_zmatrix()
-			rnd = np.random.normal(scale=Pi,size=(natom-3))
-			rndbnd = np.random.normal(scale=Pi/6.,size=(natom))
-			rndstr = np.random.normal(scale=.1,size=(natom))
-			for j in range(1,natom):
-				atomb = self.zmatrix[j][1][0][0]
-				self.zmatrix[j][1][0][1] += rndstr[j]
-				if (j>=2):
-					atomc = self.zmatrix[j][1][1][0]
-					connectivity12 = (dm[j][atomb] < 1.5 and dm[atomb][atomc] < 1.5)
-					if (connectivity12):
-						self.zmatrix[j][1][1][1] += rndbnd[j]
-					if (j>=3):
-						# Only tweak a dihedral if there is 1,2,3,4 connectivity.
-						atomd = self.zmatrix[j][1][2][0]
-						connectivity123 = (connectivity12 and dm[atomd][atomc] < 1.5)
-						if (connectivity123):
-							self.zmatrix[j][1][2][1] += rnd[j-3]
-							perturbed = True
-			if (not perturbed):
-				continue
-			self.zmatrix_to_cartesian()
-			atoms = np.array([c[0] for c in self.cartesian],dtype=np.int32)
-			coords = np.zeros((natom,3))
-			for j in range(natom):
-				coords[j] = self.cartesian[j][1]
-			# Exclude clashes.
-			dm = MolEmb.Make_DistMat(coords) + np.eye(natom)
-			if (np.any(dm<0.4)):
-				continue
-			coords -= np.mean(coords,axis=0)
-			tore.mols.append(Mol(atoms[np.argsort(perm)],coords[np.argsort(perm)]))  #[np.argsort(perm)],coords[np.argsort(perm)]))
-		#tore.WriteXYZ("InitalConfs")
-		return tore
-
 	def read_zmatrix(self, atoms, coords):
 		'''
 		The z-matrix is a list of triples in the form
@@ -219,7 +146,8 @@ class ZmatTools:
 		'''Generates an atom for the zmatrix
 		(assumes that three previous atoms have been placed in the cartesian coordiantes)'''
 		name, position = line
-		atom1, atom2, atom3 = self.cartesian[:3]
+		#print(i-3,i,self.cartesian[i-3:i:-1],len(self.cartesian))
+		atom1, atom2, atom3 = self.cartesian[i-3:i][::-1]
 		pos1, pos2, pos3 = atom1[1], atom2[1], atom3[1]
 		# Create vectors pointing from one atom to the next
 		q = pos1 - position
@@ -243,8 +171,8 @@ class ZmatTools:
 		# Convert to signed dihedral angle
 		if np.dot(np.cross(plane1, plane2), r_u) < 0:
 			dihedral = -dihedral
-		coords = [[0, distance], [1, angle], [
-			2, dihedral]]
+		coords = [[i-1, distance], [i-2, angle], [
+			i-3, dihedral]]
 		atom = [name, coords]
 		self.zmatrix.append(atom)
 
@@ -252,8 +180,8 @@ class ZmatTools:
 		'''Convert the cartesian coordinates to a zmatrix'''
 		self.zmatrix=[]
 		self.add_first_three_to_zmatrix()
-		for i, atom in enumerate(self.cartesian[3:], start=3):
-			self.add_atom_to_zmatrix(i, atom)
+		for i in range(3,len(self.cartesian)):
+			self.add_atom_to_zmatrix(i, self.cartesian[i])
 		return self.zmatrix
 
 	def remove_dummy_atoms(self):
