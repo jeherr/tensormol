@@ -533,7 +533,7 @@ class Mol:
 			Rrot = RotationMatrix(axis,-theta)
 			#print(Lrot,Rrot)
 			tmp = self.coords.copy()
- 			self.coords[L] = np.einsum("ij,kj->ik",self.coords[L]-center,Lrot)
+				self.coords[L] = np.einsum("ij,kj->ik",self.coords[L]-center,Lrot)
 			self.coords[R] = np.einsum("ij,kj->ik",self.coords[R]-center,Rrot)
 			self.coords -= np.mean(self.coords,axis=0)
 			cmp = MolEmb.Make_DistMat(self.coords)<1.4
