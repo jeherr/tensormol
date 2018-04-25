@@ -686,6 +686,11 @@ class SparseCodedChargedGauSHNetwork:
 		Atom12Real4 = tf.tile(Atom12Real,[1,1,1,nchan])
 		Atom12Real5 = tf.tile(Atom12Real,[1,1,1,nchan+1])
 
+		with tf.variable_scope("AtomVariance", reuse=tf.AUTO_REUSE):
+			stdinit = tf.constant(np.ones(MAX_ATOMIC_NUMBER),dtype=self.prec)
+			self.AtomEStd = tf.get_variable(name="AtomEStd",dtype=self.prec,initializer=stdinit)
+			AtomEStds = tf.reshape(tf.gather(self.AtomEStd, Zs, axis=0),(self.batch_size,self.MaxNAtom,1))
+
 		jcodes0 = tf.reshape(tf.gather(atom_codes,zjs),(self.batch_size,self.MaxNAtom,self.MaxNeigh,nchan))
 		jcodes = tf.where(Atom12Real4 , jcodes0 , tf.zeros_like(jcodes0))# mol X maxNatom X maxnieh X 4
 
@@ -764,7 +769,7 @@ class SparseCodedChargedGauSHNetwork:
 			# in the final layer use the atom code information.
 			l2pe = tf.concat([l2e,CODES_wq],axis=-1)
 			l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
-			AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))+AvEs
+			AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))*AtomEStds+AvEs
 
 		return AtomEnergies, AtomCharges
 
@@ -889,10 +894,10 @@ class SparseCodedChargedGauSHNetwork:
 		self.groundTruthQ_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom), dtype = tf.float64,name="GTQs") # Charges
 
 		# Constants
-		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec)
-		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec)
-		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec)
-		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec)
+		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec,name="atom_codes")
+		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec,name="gauss_params")
+		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec,name="av_energies")
+		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec,name="av_charges")
 		if 0:
 			self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec,name="atom_codes")
 			self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec,name="gauss_params")
@@ -1025,7 +1030,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=False,mode='train')
+net = SparseCodedChargedGauSHNetwork(aset=b,load=False,load_averages=False,mode='train')
 #net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
 net.Train()
 
