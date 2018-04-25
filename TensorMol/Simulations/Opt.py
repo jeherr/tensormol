@@ -624,12 +624,11 @@ class RelaxedScan(ConfSearch):
 			self.r_target = rcons
 			PARAMS["GSSearchAlpha"] = 0.05
 			curr_m = self.Opt(curr_m,"Dive"+str(self.NMinima), FileOutput=False, eff_thresh=0.001, eff_max_step=100)
+			curr_m.properties["rs_r"] = rcons
 			if (self.AppendIfNew(curr_m)):
 				mol_hist.append(curr_m)
 				if (callback != None):
 					callback(mol_hist)
-
-		print([x.properties for x in mol_hist])
 		return mol_hist
 
 
