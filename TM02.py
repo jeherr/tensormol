@@ -11,7 +11,6 @@ try:
 except Exception as Ex:
 	HAS_MATPLOTLIB=False
 
-
 from TensorMol import *
 import numpy as np
 
@@ -20,17 +19,20 @@ if (0):
 	b = MSet("KevinHeavy")
 	c = MSet("chemspider12_clean_maxatom35_small")
 	d = MSet("kevin_heteroatom.dat")
+	e = MSet("MHMO_withcharge")
 	a.Load()
 	b.Load()
 	c.Load()
 	d.Load()
-	b.mols = a.mols+b.mols+c.mols+d.mols
+	e.Load()
+	b.mols = a.mols+b.mols+c.mols+d.mols+e.mols
 	#b.Statistics()
-	b.cut_max_num_atoms(50)
-	b.cut_max_grad(1.0)
+	#b.cut_max_num_atoms(50)
+	b.cut_max_grad(3.0)
+	b.cut_energy_outliers()
 	b.Save("PeriodicTable")
 
-if (1):
+if (0):
 	a = MSet("chemspider20_345_opt")
 	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
 	c = MSet("chemspider20_1_meta_withcharge_noerror_all")
@@ -55,10 +57,10 @@ if (1):
 
 if 0:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("Hybrid2")
+	b = MSet("PeriodicTable")
 	b.Load()
-	b.cut_max_num_atoms(55)
-	b.cut_max_grad(2.0)
+	#b.cut_max_num_atoms(55)
+	#b.cut_max_grad(2.0)
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -397,7 +399,10 @@ class SparseCodedChargedGauSHNetwork:
 			true_ae[i]=m.properties["energy"]
 			true_force[i,:m.NAtoms()]=m.properties["gradients"]
 			qs[i,:m.NAtoms()]=m.properties["charges"]
-			ds[i]=m.properties["dipole"]
+			try:
+				ds[i]=m.properties["dipole"]
+			except:
+				pass
 		nlt, MaxNeigh = self.NLTensors(xyzs,zs)
 		if (MaxNeigh > self.MaxNeigh):
 			print("Too Many Neighbors.")
@@ -793,28 +798,11 @@ class SparseCodedChargedGauSHNetwork:
 			l2pe = tf.concat([l2e,CODES_wq],axis=-1)
 			l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
 			AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))*AtomEStds+AvEs
-
 		return AtomEnergies, AtomCharges
 
 
 	def train_step(self,step):
 		feed_dict, mols = self.NextBatch(self.mset)
-		#DEBUGFLEARNING = self.sess.run(tf.gradients(self.Gloss,tf.trainable_variables()), feed_dict=feed_dict)[0]
-		#print(DEBUGFLEARNING)
-		#for t in DEBUGFLEARNING:
-		#	if (np.any(np.isnan(t))):
-		#		print("NanLearning!!!", t)
-		#tvars = tf.trainable_variables()
-		#for var in tvars:
-			#print("var", var)
-		if 0:
-			a,b = self.sess.run([self.dxyzs, self.cdxyzs_p], feed_dict=feed_dict)
-			for i,d in enumerate(a[:10]):
-				print(mols[i])
-				print(" --- ",d)
-			for i,d in enumerate(b[:10]):
-				print(mols[i])
-				print(" --- ",d)
 		_ , train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
 		self.print_training(step, train_loss)
 		return
