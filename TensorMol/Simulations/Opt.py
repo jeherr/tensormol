@@ -70,7 +70,7 @@ class GeomOptimizer:
 		CG = ConjGradient(self.WrappedEForce, m.coords)
 		while( step < max_step and rmsgrad > thresh and (rmsdisp > 0.00000001 or step<5) ):
 			prev_m = Mol(m.atoms, m.coords)
-			m.coords, energy, frc = CG(m.coords,rmsgrad<0.003)
+			m.coords, energy, frc = CG(m.coords,rmsgrad<0.003 or rmsgrad>0.1)
 			rmsgrad = np.sum(np.linalg.norm(frc,axis=1))/m.coords.shape[0]
 			rmsdisp = np.sum(np.linalg.norm(m.coords-prev_m.coords,axis=1))/m.coords.shape[0]
 			LOGGER.info(filename+"step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
