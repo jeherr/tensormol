@@ -11,31 +11,33 @@ try:
 except Exception as Ex:
 	HAS_MATPLOTLIB=False
 
-
 from TensorMol import *
 import numpy as np
 
-if (1):
+if (0):
 	a = MSet("kevin_rand1")
 	b = MSet("Kevin_Heavy")
 	c = MSet("chemspider12_clean_maxatom35_small")
 	d = MSet("kevin_heteroatom.dat")
+	e = MSet("MHMO_withcharge")
 	a.Load()
 	b.Load()
 	c.Load()
 	d.Load()
-	b.mols = a.mols+b.mols+c.mols+d.mols
+	e.Load()
+	b.mols = a.mols+b.mols+c.mols+d.mols+e.mols
 	#b.Statistics()
-	b.cut_max_num_atoms(50)
-	b.cut_max_grad(1.0)
+	#b.cut_max_num_atoms(50)
+	b.cut_max_grad(3.0)
+	b.cut_energy_outliers()
 	b.Save("PeriodicTable")
 
-if 0:
+if 1:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("Hybrid2")
+	b = MSet("PeriodicTable")
 	b.Load()
-	b.cut_max_num_atoms(55)
-	b.cut_max_grad(2.0)
+	#b.cut_max_num_atoms(55)
+	#b.cut_max_grad(2.0)
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -374,7 +376,10 @@ class SparseCodedChargedGauSHNetwork:
 			true_ae[i]=m.properties["energy"]
 			true_force[i,:m.NAtoms()]=m.properties["gradients"]
 			qs[i,:m.NAtoms()]=m.properties["charges"]
-			ds[i]=m.properties["dipole"]
+			try:
+				ds[i]=m.properties["dipole"]
+			except:
+				pass
 		nlt, MaxNeigh = self.NLTensors(xyzs,zs)
 		if (MaxNeigh > self.MaxNeigh):
 			print("Too Many Neighbors.")
@@ -871,7 +876,7 @@ class SparseCodedChargedGauSHNetwork:
 		tf.reset_default_graph()
 
 		self.DoRotGrad = False
-		self.DoForceLearning = True
+		self.DoForceLearning = False
 		self.Canonicalize = True
 		self.DoCodeLearning = True
 		self.DoDipoleLearning = False
@@ -889,15 +894,10 @@ class SparseCodedChargedGauSHNetwork:
 		self.groundTruthQ_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom), dtype = tf.float64,name="GTQs") # Charges
 
 		# Constants
-		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec)
-		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec)
-		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec)
-		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec)
-		if 0:
-			self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec,name="atom_codes")
-			self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec,name="gauss_params")
-			self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec,name="av_energies")
-			self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec,name="av_charges")
+		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec,name="atom_codes")
+		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec,name="gauss_params")
+		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec,name="av_energies")
+		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec,name="av_charges")
 
 		Atom1Real = tf.tile(tf.greater(self.zs_pl,0)[:,:,tf.newaxis,:],(1,1,self.MaxNeigh,1))
 		nl = tf.reshape(self.nl_pl,(self.batch_size,self.MaxNAtom,self.MaxNeigh,1))
