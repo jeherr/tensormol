@@ -535,6 +535,8 @@ class ConfSearch(GeomOptimizer):
 					if (callback != None):
 						callback(mol_hist)
 				ndives += 1
+				if (not self.NMinima < self.StopAfter-1): 
+					break
 		return mol_hist
 
 	def AppendIfNew(self,m):
