@@ -237,11 +237,11 @@ class Mol:
 					read_dipoles = (properties_line.split(";")[i]).split(",")
 					for j in range(3):
 						self.properties['dipole'][j] = float(read_dipoles[j])
-				if mol_property == "mulliken_charges":
-					self.properties["mulliken_charges"] = np.zeros((natoms))
+				if mol_property == "charges":
+					self.properties["charges"] = np.zeros((natoms))
 					read_charges = (properties_line.split(";")[i]).split(",")
 					for j in range(natoms):
-						self.properties["mulliken_charges"] = float(read_charges[j])
+						self.properties["charges"][j] = float(read_charges[j])
 			f.close()
 		except Exception as Ex:
 			print("Read Failed.", Ex)

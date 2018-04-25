@@ -1,7 +1,6 @@
 // Neighborlist
 
 // Includes
-//#include "Python.h"
 #include <list>
 #include <unordered_map>
 #include <string>
@@ -54,7 +53,7 @@ typedef list<Atom> *cell_list_ptr;
 typedef vector<vector<vector<cell_list_ptr> > > grid;
 typedef list<pair<int, int>> neighborlist;
 
-#define R_CUT 5.0 // Cutoff radius (Angstroms)
+#define R_CUT 15. // Cutoff radius (Angstroms)
 #define pair pair<int,int>
 #define Cell Heads[x][y][z]
 
@@ -161,6 +160,7 @@ int main() {
 
 	neighborlist neighbors = compute_neighbor_list(Heads);
 
+/*
 	for (auto it = neighbors.begin(); it != neighbors.end(); it++) {
 		printf("%s: %9.6f %9.6f %9.6f ||| %s: %9.6f %9.6f %9.6f ... %9.6f\n", get_atom_name(xyzs[it->first][3]).c_str(), xyzs[it->first][0],
 					xyzs[it->first][1], xyzs[it->first][2],
@@ -171,7 +171,7 @@ int main() {
 					+ pow((xyzs[it->first][2] - xyzs[it->second][2]), 2) )
 					);
 	}
-
+*/
 }
 
 neighborlist compute_neighbor_list(grid Heads) {
@@ -260,8 +260,7 @@ neighborlist compute_neighbor_list(grid Heads) {
 				vector<int> z_coords = {x + 1, y + 1, z + 1};
 				all_cells.push_back(z_coords);
 
-				/* TODO NEXT ==> ALL THE CONDITIONS FOR WHETHER TO INSERT
-				THE COORDS INTO THE TO_VISIT VECTOR */
+				/* Inserting into the to_visit */
 				for (size_t i = 0; i < all_cells.size(); i++) {
 					if (all_cells[i][0] >= 0 && all_cells[i][0] < xbuckets &&
 							all_cells[i][1] >= 0 && all_cells[i][1] < ybuckets &&
