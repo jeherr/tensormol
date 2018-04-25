@@ -16,7 +16,7 @@ import numpy as np
 
 if (0):
 	a = MSet("kevin_rand1")
-	b = MSet("Kevin_Heavy")
+	b = MSet("KevinHeavy")
 	c = MSet("chemspider12_clean_maxatom35_small")
 	d = MSet("kevin_heteroatom.dat")
 	e = MSet("MHMO_withcharge")
@@ -32,7 +32,30 @@ if (0):
 	b.cut_energy_outliers()
 	b.Save("PeriodicTable")
 
-if 1:
+if (0):
+	a = MSet("chemspider20_345_opt")
+	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
+	c = MSet("chemspider20_1_meta_withcharge_noerror_all")
+	d = MSet("kevin_heteroatom.dat")
+	e = MSet("chemspider20_24578_opt")
+	f = MSet("chemspider12_clean_maxatom35")
+	g = MSet("KevinHeavy")
+	sets = [d,b,c,a,e,f,g]
+	UniqueSet = MSet("UniqueConnectivities")
+	MasterSet = MSet("MasterSet")
+	for aset in sets:
+		aset.Load()
+		for i,amol in enumerate(aset.mols):
+			amol.GenSummary()
+			if i%10000 == 0:
+				print(i)
+		MasterSet.mols = MasterSet.mols+aset.mols
+		aset.cut_unique_bond_hash()
+		UniqueSet.mols = UniqueSet.mols+aset.mols
+		UniqueSet.Save("UniqueBonds")
+		MasterSet.Save("MasterSet")
+
+if 0:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
 	b = MSet("PeriodicTable")
 	b.Load()
@@ -691,6 +714,11 @@ class SparseCodedChargedGauSHNetwork:
 		Atom12Real4 = tf.tile(Atom12Real,[1,1,1,nchan])
 		Atom12Real5 = tf.tile(Atom12Real,[1,1,1,nchan+1])
 
+		with tf.variable_scope("AtomVariance", reuse=tf.AUTO_REUSE):
+			stdinit = tf.constant(np.ones(MAX_ATOMIC_NUMBER),dtype=self.prec)
+			self.AtomEStd = tf.get_variable(name="AtomEStd",dtype=self.prec,initializer=stdinit)
+			AtomEStds = tf.reshape(tf.gather(self.AtomEStd, Zs, axis=0),(self.batch_size,self.MaxNAtom,1))
+
 		jcodes0 = tf.reshape(tf.gather(atom_codes,zjs),(self.batch_size,self.MaxNAtom,self.MaxNeigh,nchan))
 		jcodes = tf.where(Atom12Real4 , jcodes0 , tf.zeros_like(jcodes0))# mol X maxNatom X maxnieh X 4
 
@@ -769,7 +797,7 @@ class SparseCodedChargedGauSHNetwork:
 			# in the final layer use the atom code information.
 			l2pe = tf.concat([l2e,CODES_wq],axis=-1)
 			l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
-			AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))+AvEs
+			AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))*AtomEStds+AvEs
 
 		return AtomEnergies, AtomCharges
 
@@ -876,7 +904,7 @@ class SparseCodedChargedGauSHNetwork:
 		tf.reset_default_graph()
 
 		self.DoRotGrad = False
-		self.DoForceLearning = False
+		self.DoForceLearning = True
 		self.Canonicalize = True
 		self.DoCodeLearning = True
 		self.DoDipoleLearning = False
