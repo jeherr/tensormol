@@ -15,9 +15,9 @@ except Exception as Ex:
 from TensorMol import *
 import numpy as np
 
-if (1):
+if (0):
 	a = MSet("kevin_rand1")
-	b = MSet("Kevin_Heavy")
+	b = MSet("KevinHeavy")
 	c = MSet("chemspider12_clean_maxatom35_small")
 	d = MSet("kevin_heteroatom.dat")
 	a.Load()
@@ -29,6 +29,29 @@ if (1):
 	b.cut_max_num_atoms(50)
 	b.cut_max_grad(1.0)
 	b.Save("PeriodicTable")
+
+if (1):
+	a = MSet("chemspider20_345_opt")
+	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
+	c = MSet("chemspider20_1_meta_withcharge_noerror_all")
+	d = MSet("kevin_heteroatom.dat")
+	e = MSet("chemspider20_24578_opt")
+	f = MSet("chemspider12_clean_maxatom35")
+	g = MSet("KevinHeavy")
+	sets = [d,b,c,a,e,f,g]
+	UniqueSet = MSet("UniqueConnectivities")
+	MasterSet = MSet("MasterSet")
+	for aset in sets:
+		aset.Load()
+		for i,amol in enumerate(aset.mols):
+			amol.GenSummary()
+			if i%10000 == 0:
+				print(i)
+		MasterSet.mols = MasterSet.mols+aset.mols
+		aset.cut_unique_bond_hash()
+		UniqueSet.mols = UniqueSet.mols+aset.mols
+		UniqueSet.Save("UniqueBonds")
+		MasterSet.Save("MasterSet")
 
 if 0:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")

@@ -45,7 +45,10 @@ class Mol:
 		bondhash = hasher.hexdigest()
 		hasher.update(str(np.round(self.DistMatrix,decimals=6)).encode('utf-8'))
 		ghash = hasher.hexdigest()
-		return {"MW":MW, "formula":formula, "bond_hash":bondhash, "geom_hash":ghash}
+		tore = {"MW":MW, "formula":formula, "bond_hash":bondhash, "geom_hash":ghash}
+		for akey in tore.keys():
+			self.properties[akey] = tore[akey]
+		return tore
 
 	def MolecularWeight(self):
 		MW = 0.0

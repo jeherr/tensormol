@@ -106,6 +106,15 @@ class MSet:
 		self.AvQ = AvQ
 		return AvE,AvQ
 
+	def cut_unique_bond_hash(self):
+		cut_down_mols = []
+		known_hashes = []
+		for mol in self.mols:
+			if (not mol.properties['bond_hash'] in known_hashes):
+				cut_down_mols.append(mol)
+				known_hashes.append(mol.properties['bond_hash'])
+		self.mols = cut_down_mols
+
 	def cut_max_num_atoms(self, max_n_atoms):
 		cut_down_mols = []
 		for mol in self.mols:
