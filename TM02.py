@@ -44,6 +44,10 @@ if (0):
 		UniqueSet.Save("UniqueBonds")
 		MasterSet.Save("MasterSet")
 
+if 1:
+	b = MSet("MasterSet")
+	b.Load()
+
 MAX_ATOMIC_NUMBER = 55
 
 def sftpluswparam(x):
@@ -173,8 +177,26 @@ class SparseCodedChargedGauSHNetwork:
 		self.AtomCodes = ELEMENTCODES
 		#self.AtomCodes = np.random.random(size=(MAX_ATOMIC_NUMBER,6))
 		self.AtomTypes = [1,6,7,8]
-		self.l_max = 3
-		self.GaussParams = np.array([[ 0.38664542,0.26217287], [ 0.67811722,0.23477701],[ 1.04543342,0.23426948],[ 1.38311757,0.21758330],[ 1.68369538,0.21645779],[ 2.04304538,0.21420768],[ 2.78418335,0.15554105],[ 3.13734002,0.18086331],[ 3.79258319,0.17154482],[ 4.90203694,0.11153887],[ 5.50218806,0.10848024]])
+		self.l_max = 4
+		self.GaussParams = np.array([[0.41032325, 0.27364972],
+	       [1.13528593, 0.2502231 ],
+	       [1.86024862, 0.22679649],
+	       [2.5852113 , 0.20336987],
+	       [3.31017398, 0.17994325],
+	       [4.03513666, 0.15651663],
+	       [4.76009935, 0.13309002],
+	       [5.48506203, 0.1096634 ]])
+		if 0:
+			self.GaussParams = np.array([[0.41032325, 0.27364972],
+		       [0.97418311, 0.25542902],
+		       [1.53804298, 0.23720832],
+		       [2.10190284, 0.21898761],
+		       [2.66576271, 0.20076691],
+		       [3.22962257, 0.18254621],
+		       [3.79348244, 0.16432551],
+		       [4.3573423 , 0.1461048 ],
+		       [4.92120217, 0.1278841 ],
+		       [5.48506203, 0.1096634 ]])
 		self.nrad = len(self.GaussParams)
 		self.nang = (self.l_max+1)**2
 		self.ncodes = self.AtomCodes.shape[-1]
@@ -869,9 +891,9 @@ class SparseCodedChargedGauSHNetwork:
 		tf.reset_default_graph()
 
 		self.DoRotGrad = False
-		self.DoForceLearning = True
+		self.DoForceLearning = False
 		self.Canonicalize = True
-		self.DoCodeLearning = True
+		self.DoCodeLearning = False
 		self.DoDipoleLearning = False
 		self.DoChargeLearning = True
 		self.DoChargeEmbedding = True
@@ -1014,7 +1036,6 @@ class SparseCodedChargedGauSHNetwork:
 		else:
 			self.options = None
 			self.run_metadata = None
-
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
