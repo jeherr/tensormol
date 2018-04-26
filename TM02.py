@@ -15,36 +15,25 @@ from TensorMol import *
 import numpy as np
 
 if (0):
-	a = MSet("kevin_rand1")
-	b = MSet("KevinHeavy")
-	c = MSet("chemspider12_clean_maxatom35_small")
-	d = MSet("kevin_heteroatom.dat")
-	e = MSet("MHMO_withcharge")
-	a.Load()
-	b.Load()
-	c.Load()
-	d.Load()
-	e.Load()
-	b.mols = a.mols+b.mols+c.mols+d.mols+e.mols
-	#b.Statistics()
-	#b.cut_max_num_atoms(50)
-	b.cut_max_grad(3.0)
-	b.cut_energy_outliers()
-	b.Save("PeriodicTable")
-
-if (0):
 	a = MSet("chemspider20_345_opt")
 	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
 	c = MSet("chemspider20_1_meta_withcharge_noerror_all")
 	d = MSet("kevin_heteroatom.dat")
 	e = MSet("chemspider20_24578_opt")
-	f = MSet("chemspider12_clean_maxatom35")
 	g = MSet("KevinHeavy")
-	sets = [d,b,c,a,e,f,g]
-	UniqueSet = MSet("UniqueConnectivities")
+	sets = [g]
+	sets[-1].Load()
+	f = MSet("chemspider12_clean_maxatom35")
+	f.Load()
+	while (len(f.mols)>0): 
+		sets.append(MSet())
+		while(len(f.mols)>0 and len(sets[-1].mols)<100000):
+			sets[-1].mols.append(f.mols.pop())
+	UniqueSet = MSet("UniqueBonds")
+	UniqueSet.Load()
 	MasterSet = MSet("MasterSet")
+	MasterSet.Load()
 	for aset in sets:
-		aset.Load()
 		for i,amol in enumerate(aset.mols):
 			amol.GenSummary()
 			if i%10000 == 0:
@@ -54,13 +43,6 @@ if (0):
 		UniqueSet.mols = UniqueSet.mols+aset.mols
 		UniqueSet.Save("UniqueBonds")
 		MasterSet.Save("MasterSet")
-
-if 0:
-	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("PeriodicTable")
-	b.Load()
-	#b.cut_max_num_atoms(55)
-	#b.cut_max_grad(2.0)
 
 MAX_ATOMIC_NUMBER = 55
 
