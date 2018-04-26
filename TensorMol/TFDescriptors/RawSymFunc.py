@@ -3435,3 +3435,164 @@ def NNInterface(R, Zs, eles_, GM):
 		NAtomOfEle=tf.shape(GatherList[-1])[0]
 		IndexList.append(tf.reshape(tf.slice(GatherList[-1],[0,0],[NAtomOfEle,1]),[NAtomOfEle]))
 	return SymList, IndexList
+
+def TFSymSet_Scattered_Linear_WithEle_Channel_Multitmp(dxyzs, pair_Zs, elements, element_pairs, element_codes, radial_gauss, radial_cutoff, angular_gauss, angular_cutoff, zeta, eta):
+	"""
+	A tensorflow implementation of the AN1 symmetry function for a set of molecule.
+	Args:
+		dxyzs: nmol X maxnatom X 3 tensor of coordinates.
+		Zs: nmol X max_n_atom tensor of atomic numbers.
+		elements: a neles X 1 tensor of elements present in the data.
+		element_pairs: a nelepairs X 2 X 12tensor of elements pairs present in the data.
+		element_codes: n_elements x 4 tensor of codes for embedding elements
+		radial_gauss: A symmetry function parameter of radius part
+		radial_cutoff: Radial Cutoff of radius part
+		angular_gauss: A symmetry function parameter of angular part
+		angular_cutoff: Radial Cutoff of angular part
+	Returns:
+		Digested Mol. In the shape nmol X maxnatom X (Dimension of radius part + Dimension of angular part)
+	"""
+
+	radial_embed = tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta)
+	return TFSymASet_Linear_WithEle_Channel3tmp(dxyzs, pair_Zs, elements, element_pairs, element_codes, angular_gauss, angular_cutoff, zeta, eta)
+	# GMA = tf.reshape(TFSymASet_Linear_WithEle_Channel3tmp(R, Zs, eleps_, SFPsA_, zeta,  eta, Ra_cut,  AngtEle, mil_jk, channel_eleps),[nmol, natom,-1], name="FinishGMA")
+	# GM = tf.concat([GMR, GMA], axis=2, name="ConcatRadAngHyb")
+	return tf.reshape(GM,[nmol, natom, -1, tf.shape(channel_eles)[1]])
+
+def tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta):
+	"""
+	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
+	Here j,k are all other atoms, but implicitly the output
+	is separated across elements as well. eleps_ is a list of element pairs
+	G = 2**(1-zeta) \sum_{j,k \neq i} (Angular triple) (radial triple) f_c(R_{ij}) f_c(R_{ik})
+	a-la MolEmb.cpp. Also depends on PARAMS for zeta, eta, theta_s r_s
+	This version appends the element type (by its index in eles_) in RadpairEle, and it is sorted by m,i,l,j
+
+	Args:
+		dxyzs: n_case X max_neighbors X 3 tensor of coordinates.
+		Zs: n_case X max_neighbors tensor of atomic numbers.
+		element_codes: n_elements x 4 tensor of codes for embedding element type
+		radial_gauss: n_gauss tensor of radial gaussian centers
+		radial_cutoff: radial cutoff distance
+		eta: radial gaussian width parameter
+	Returns:
+		radial_embed: n_case X 4 x n_gauss tensor of atoms embeded into central atoms environment
+	"""
+	dist_tensor = tf.norm(dxyzs+1.e-16, axis=-1)
+	exponent = tf.square(tf.expand_dims(dist_tensor, axis=-1) - radial_gauss)
+	exponent *= -1.0 * eta
+	gauss = tf.exp(exponent)
+	cutoff = 0.5 * (tf.cos(np.pi * dist_tensor / radial_cutoff) + 1.0)
+	pair_codes = tf.gather(element_codes, pair_Zs)
+	radial_embed = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(tf.expand_dims(cutoff, axis=-1) * pair_codes, axis=-1)
+	return tf.reduce_sum(radial_embed, axis=1)
+
+def TFSymASet_Linear_WithEle_Channel3tmp(R, Zs, eleps_, SFPs_, zeta, eta, R_cut, AngtriEle, mil_jk2, channel_eleps, prec=tf.float64):
+	"""
+	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
+	Here j,k are all other atoms, but implicitly the output
+	is separated across elements as well. eleps_ is a list of element pairs
+	G = 2**(1-zeta) \sum_{j,k \neq i} (Angular triple) (radial triple) f_c(R_{ij}) f_c(R_{ik})
+	a-la MolEmb.cpp. Also depends on PARAMS for zeta, eta, theta_s r_s
+	This version improves append ele pair index at the end of triples with
+	sorted order: m, i, l, j, k
+
+	Args:
+		R: a nmol X maxnatom X 3 tensor of coordinates.
+		Zs : nmol X maxnatom X 1 tensor of atomic numbers.
+		eleps_: a nelepairs X 2 tensor of element pairs present in the data.
+		SFP: A symmetry function parameter tensor having the number of elements
+		as the SF output. 4 X nzeta X neta X thetas X nRs. For example, SFPs_[0,0,0,0,0]
+		is the first zeta parameter. SFPs_[3,0,0,0,1] is the second R parameter.
+		R_cut: Radial Cutoff
+		AngtriEle: angular triples within the cutoff. m, i, j, k, l
+		prec: a precision.
+	Returns:
+		Digested Mol. In the shape nmol X maxnatom X nelepairs X nZeta X nEta X nThetas X nRs
+	"""
+
+	Rij = DifferenceVectorsLinear(R, Rij_inds)
+	RijRij2 = tf.sqrt(tf.reduce_sum(Rij*Rij,axis=1)+infinitesimal)
+	Rik = DifferenceVectorsLinear(R, Rik_inds)
+	RikRik2 = tf.sqrt(tf.reduce_sum(Rik*Rik,axis=1)+infinitesimal)
+	RijRik2 = tf.reduce_sum(Rij*Rik, axis=1)
+	denom = RijRij2*RikRik2
+	#Mask any troublesome entries.
+	ToACos = RijRik2/denom
+	ToACos = tf.where(tf.greater_equal(ToACos,1.0),tf.ones_like(ToACos, dtype=prec)*onescalar, ToACos)
+	ToACos = tf.where(tf.less_equal(ToACos,-1.0),-1.0*tf.ones_like(ToACos, dtype=prec)*onescalar, ToACos)
+	Thetaijk = tf.acos(ToACos)
+	#thetatmp = tf.cast(tf.tile(tf.reshape(SFPs_[0],[1,ntheta,nr]),[nnzt,1,1]),prec)
+	# Broadcast the thetas and ToCos together
+	#tct = tf.tile(tf.reshape(Thetaijk,[nnzt,1,1]),[1,ntheta,nr])
+	thetatmp = tf.cast(tf.expand_dims(SFPs_[0], axis=0),prec)
+	tct = tf.expand_dims(tf.expand_dims(Thetaijk, axis=1), axis=-1)
+	ToCos = tct-thetatmp
+	Tijk = tf.cos(ToCos) # shape: natom3 X ...
+	# complete factor 1
+	fac1 = tf.pow(tf.cast(2.0, prec),1.0-zeta)*tf.pow((1.0+Tijk),zeta)
+	rtmp = tf.cast(tf.reshape(SFPs_[1],[1,ntheta,nr]),prec) # ijk X zeta X eta ....
+	ToExp = ((RijRij2+RikRik2)/2.0)
+	tet = tf.tile(tf.reshape(ToExp,[nnzt,1,1]),[1,ntheta,nr]) - rtmp
+	fac2 = tf.exp(-eta*tet*tet)
+	# And finally the last two factors
+	fac3 = 0.5*(tf.cos(3.14159265359*RijRij2/R_cut)+1.0)
+	fac4 = 0.5*(tf.cos(3.14159265359*RikRik2/R_cut)+1.0)
+	## assemble the full symmetry function for all triples.
+	fac34t =  tf.tile(tf.reshape(fac3*fac4,[nnzt,1,1]),[1,ntheta,nr])
+	Gm = tf.reshape(fac1*fac2*fac34t,[nnzt*ntheta*nr]) # nnz X nzeta X neta X ntheta X nr
+	## Finally scatter out the symmetry functions where they belong.
+	#jk2 = tf.add(tf.multiply(tf.slice(AngtriEle,[0,2],[nnzt,1]), tf.cast(natom, dtype=tf.int64)), tf.slice(AngtriEle,[0,3],[nnzt, 1]))
+	#mil_jk2 = tf.concat([tf.slice(AngtriEle,[0,0],[nnzt,2]),tf.slice(AngtriEle,[0,4],[nnzt,1]),tf.reshape(jk2,[nnzt,1])],axis=-1)
+	jk_max = tf.reduce_max(tf.slice(mil_jk2,[0,3], [nnzt, 1])) + 1
+	Gm2= tf.reshape(Gm, [nnzt, nsym])
+
+	#tomult = tf.cast(tf.reshape(channel_eleps,[1,1,nelep,1]), dtype=tf.float64)
+	#to_reduce2 = tf.scatter_nd(mil_jk2, Gm2, tf.cast([nmol,natom, nelep, tf.cast(jk_max, tf.int32), nsym], dtype=tf.int64))
+	#to_reduce3 = tf.reduce_sum(to_reduce2, axis=3)
+	#to_reduce4 = tomult*to_reduce3
+	#return tf.reduce_sum(to_reduce4, axis=2)
+
+	tomult = tf.reshape(tf.gather_nd(channel_eleps, tf.reshape(mil_jk2[:,2],[-1,1])),[nnzt,-1])
+
+	#hyb_channel_clean = tf.where(tf.is_nan(hyb_channel), tf.zeros_like(hyb_channel, dtype=prec), hyb_channel)
+
+	Gm2_mult = tf.reshape(tf.expand_dims(tomult, 1)*tf.expand_dims(Gm2, 2), [nnzt, -1])
+
+	mi_jk2 =  tf.concat([mil_jk2[:,:2],tf.reshape(mil_jk2[:,3],[-1,1])], axis=-1)
+	to_reduce2 = tf.scatter_nd(mi_jk2, Gm2_mult, tf.cast([nmol, tf.cast(natom, tf.int32), tf.cast(jk_max, tf.int32), nsym*(tf.shape(channel_eleps)[1])], dtype=tf.int64))
+	return tf.reduce_sum(to_reduce2, axis=2)
+
+def sparse_coords(xyzs, Zs, pairs):
+	padding_mask = tf.where(tf.not_equal(Zs, 0))
+	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
+	pairs = tf.gather_nd(pairs, padding_mask)
+	padded_pairs = tf.equal(pairs, -1)
+	tmp_pairs = tf.where(padded_pairs, tf.zeros_like(pairs), pairs)
+	gather_pairs = tf.stack([tf.cast(tf.tile(padding_mask[:,:1], [1, tf.shape(pairs)[1]]), tf.int32), tmp_pairs], axis=-1)
+	pair_coords = tf.gather_nd(xyzs, gather_pairs)
+	dxyzs = tf.expand_dims(central_atom_coords, axis=1) - pair_coords
+	pair_mask = tf.where(padded_pairs, tf.zeros_like(pairs), tf.ones_like(pairs))
+	dxyzs *= tf.cast(tf.expand_dims(pair_mask, axis=-1), eval(PARAMS["tf_prec"]))
+	pair_Zs = tf.gather_nd(Zs, gather_pairs)
+	pair_Zs *= pair_mask
+	return dxyzs, pair_Zs
+
+def sparse_triples(xyzs, Zs, pairs):
+	padding_mask = tf.where(tf.not_equal(Zs, 0))
+	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
+	pairs = tf.gather_nd(pairs, padding_mask)
+	idx_sorted_pairs, _ = tf.nn.top_k(pairs, tf.shape(pairs)[1], True)
+	idx_sorted_pairs = idx_sorted_pairs[:,::-1]
+	tiled_sorted_pairs = tf.tile(tf.expand_dims(idx_sorted_pairs, axis=-2), [1, tf.shape(idx_sorted_pairs)[1], 1])
+	return tf.concat([tf.expand_dims(idx_sorted_pairs, axis=-1), tiled_sorted_pairs], axis=-1)
+	padded_pairs = tf.equal(pairs, -1)
+	tmp_pairs = tf.where(padded_pairs, tf.zeros_like(pairs), pairs)
+	gather_pairs = tf.stack([tf.cast(tf.tile(padding_mask[:,:1], [1, tf.shape(pairs)[1]]), tf.int32), tmp_pairs], axis=-1)
+	pair_coords = tf.gather_nd(xyzs, gather_pairs)
+	dxyzs = tf.expand_dims(central_atom_coords, axis=1) - pair_coords
+	pair_mask = tf.where(padded_pairs, tf.zeros_like(pairs), tf.ones_like(pairs))
+	dxyzs *= tf.cast(tf.expand_dims(pair_mask, axis=-1), eval(PARAMS["tf_prec"]))
+	pair_Zs = tf.gather_nd(Zs, gather_pairs)
+	pair_Zs *= pair_mask
+	return dxyzs, pair_Zs
