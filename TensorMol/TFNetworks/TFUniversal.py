@@ -98,6 +98,24 @@ class UniversalNetwork(object):
 				pass
 		return state
 
+	def set_symmetry_function_params(self):
+		self.element_pairs = np.array([[self.elements[i], self.elements[j]] for i in range(len(self.elements)) for j in range(i, len(self.elements))])
+		self.zeta = PARAMS["AN1_zeta"]
+		self.eta = PARAMS["AN1_eta"]
+
+		#Define radial grid parameters
+		num_radial_rs = PARAMS["AN1_num_r_Rs"]
+		self.radial_cutoff = PARAMS["AN1_r_Rc"]
+		self.radial_rs = self.radial_cutoff * np.linspace(0, (num_radial_rs - 1.0) / num_radial_rs, num_radial_rs)
+
+		#Define angular grid parameters
+		num_angular_rs = PARAMS["AN1_num_a_Rs"]
+		num_angular_theta_s = PARAMS["AN1_num_a_As"]
+		self.angular_cutoff = PARAMS["AN1_a_Rc"]
+		self.theta_s = 2.0 * np.pi * np.linspace(0, (num_angular_theta_s - 1.0) / num_angular_theta_s, num_angular_theta_s)
+		self.angular_rs = self.angular_cutoff * np.linspace(0, (num_angular_rs - 1.0) / num_angular_rs, num_angular_rs)
+		return
+
 	def assign_activation(self):
 		LOGGER.debug("Assigning Activation Function: %s", PARAMS["NeuronType"])
 		try:
@@ -129,9 +147,6 @@ class UniversalNetwork(object):
 	def shifted_softplus(self, x):
 		return tf.nn.softplus(x) - tf.cast(tf.log(2.0), self.tf_precision)
 
-	def sigmoid_with_param(self, x):
-		return tf.log(1.0+tf.exp(tf.multiply(tf.cast(PARAMS["sigmoid_alpha"], dtype=self.tf_precision), x)))/tf.cast(PARAMS["sigmoid_alpha"], dtype=self.tf_precision)
-
 	def start_training(self):
 		self.load_data_to_scratch()
 		self.compute_normalization()
@@ -141,32 +156,11 @@ class UniversalNetwork(object):
 
 	def restart_training(self):
 		self.reload_set()
-		self.load_data_to_scratch()
+		self.load_data()
 		self.train_prepare(restart=True)
 		self.train()
 
 	def train(self):
-		if self.train_dipole:
-			mini_test_loss = 1e10
-			for step in range(1, 51):
-				self.dipole_train_step(step)
-				if step%self.test_freq==0:
-					test_loss = self.dipole_test_step(step)
-					if (test_loss < mini_test_loss):
-						mini_test_loss = test_loss
-						self.save_checkpoint(step)
-			LOGGER.info("Continue training dipole until new best checkpoint found.")
-			train_energy_flag = False
-			step += 1
-			while train_energy_flag == False:
-				self.dipole_train_step(step)
-				test_loss = self.dipole_test_step(step)
-				if (test_loss < mini_test_loss):
-					mini_test_loss = test_loss
-					self.save_checkpoint(step)
-					train_energy_flag=True
-					LOGGER.info("New best checkpoint found. Starting energy network training.")
-				step += 1
 		for i in range(self.max_steps):
 			self.step += 1
 			self.energy_train_step(self.step)
@@ -196,8 +190,6 @@ class UniversalNetwork(object):
 
 	def load_network(self):
 		LOGGER.info("Loading TFInstance")
-		# import TensorMol.PickleTM
-		# network_member_variables = TensorMol.PickleTM.UnPickleTM(f)
 		network = pickle.load(open(self.path+"/"+self.name+".tfn","rb"))
 		self.__dict__.update(network.__dict__)
 		return
@@ -277,24 +269,6 @@ class UniversalNetwork(object):
 		LOGGER.debug("Number of test cases: %i", self.num_test_cases)
 		return
 
-	def get_dipole_train_batch(self, batch_size):
-		if self.train_pointer + batch_size >= self.num_train_cases:
-			np.random.shuffle(self.train_idxs)
-			self.train_pointer = 0
-		self.train_pointer += batch_size
-		xyzs = self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
-		Zs = self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
-		energies = self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
-		gradients = self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
-		num_atoms = self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
-		if self.train_dipoles:
-			dipoles = self.dipole_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
-		if self.train_quadrupoles:
-			quadrupoles = self.quadrupole_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
-		if self.train_sparse:
-			pairs = self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
-		return [xyzs, Zs, dipoles, quadrupoles, gradients, num_atoms]
-
 	def get_energy_train_batch(self, batch_size):
 		if self.train_pointer + batch_size >= self.num_train_cases:
 			np.random.shuffle(self.train_idxs)
@@ -306,25 +280,17 @@ class UniversalNetwork(object):
 		batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
-		batch_data.append(self.nearest_neighbors_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		# batch_data.append(self.nearest_neighbors_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		NL = NeighborListSet(self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]], self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]], True, True, self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]], sort_=True)
+		rad_p_ele, ang_t_elep, mil_j, mil_jk = NL.buildPairsAndTriplesWithEleIndexLinear(self.radial_cutoff, self.angular_cutoff, self.elements, self.element_pairs)
+		batch_data.append(rad_p_ele)
+		batch_data.append(ang_t_elep)
+		batch_data.append(mil_j)
+		batch_data.append(mil_jk)
 		if self.train_sparse:
 			pair_batch_data = np.concatenate((self.batch_mol_idxs, self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]), axis=-1)
 			batch_data.append(pair_batch_data)
 		return batch_data
-
-	def get_dipole_test_batch(self, batch_size):
-		if self.test_pointer + batch_size >= self.num_test_cases:
-			self.test_pointer = 0
-		self.test_pointer += batch_size
-		xyzs = self.xyz_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
-		Zs = self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
-		energies = self.energy_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
-		dipoles = self.dipole_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
-		quadrupoles = self.quadrupole_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
-		gradients = self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
-		num_atoms = self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
-		mulliken_charges = self.mulliken_charges_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
-		return [xyzs, Zs, dipoles, quadrupoles, gradients, num_atoms, mulliken_charges]
 
 	def get_energy_test_batch(self, batch_size):
 		if self.test_pointer + batch_size >= self.num_test_cases:
@@ -336,7 +302,13 @@ class UniversalNetwork(object):
 		batch_data.append(self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.energy_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
-		batch_data.append(self.nearest_neighbors_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		# batch_data.append(self.nearest_neighbors_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		NL = NeighborListSet(self.xyz_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]], self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]], True, True, self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]], sort_=True)
+		rad_p_ele, ang_t_elep, mil_j, mil_jk = NL.buildPairsAndTriplesWithEleIndexLinear(self.radial_cutoff, self.angular_cutoff, self.elements, self.element_pairs)
+		batch_data.append(rad_p_ele)
+		batch_data.append(ang_t_elep)
+		batch_data.append(mil_j)
+		batch_data.append(mil_jk)
 		if self.train_sparse:
 			pair_batch_data = np.concatenate((self.batch_mol_idxs, self.pairs_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]), axis=-1)
 			batch_data.append(pair_batch_data)
@@ -366,20 +338,6 @@ class UniversalNetwork(object):
 			tf.add_to_collection('energy_losses', weightdecay)
 		return variable
 
-	def fill_dipole_feed_dict(self, batch_data):
-		"""
-		Fill the tensorflow feed dictionary.
-
-		Args:
-			batch_data: a list of numpy arrays containing inputs, bounds, matrices and desired energies in that order.
-			and placeholders to be assigned. (it can be longer than that c.f. TensorMolData_BP)
-
-		Returns:
-			Filled feed dictionary.
-		"""
-		feed_dict={i: d for i, d in zip([self.xyzs_pl, self.Zs_pl, self.dipole_pl, self.quadrupole_pl, self.gradients_pl, self.num_atoms_pl], batch_data)}
-		return feed_dict
-
 	def fill_energy_feed_dict(self, batch_data):
 		"""
 		Fill the tensorflow feed dictionary.
@@ -391,7 +349,11 @@ class UniversalNetwork(object):
 		Returns:
 			Filled feed dictionary.
 		"""
-		pl_list = [self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.energy_pl, self.gradients_pl, self.nearest_neighbors_pl]
+		pl_list = [self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.energy_pl, self.gradients_pl]#, self.nearest_neighbors_pl]
+		pl_list.append(self.Radp_Ele_pl)
+		pl_list.append(self.Angt_Elep_pl)
+		pl_list.append(self.mil_j_pl)
+		pl_list.append(self.mil_jk_pl)
 		if self.train_sparse:
 			pl_list.append(self.pairs_pl)
 		feed_dict={i: d for i, d in zip(pl_list, batch_data)}
@@ -443,64 +405,6 @@ class UniversalNetwork(object):
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
-	def dipole_inference(self, inp, indexs, xyzs, natom):
-		"""
-		Builds a Behler-Parinello graph
-
-		Args:
-			inp: a list of (num_of atom type X flattened input shape) matrix of input cases.
-			index: a list of (num_of atom type X batchsize) array which linearly combines the elements
-		Returns:
-			The BP graph output
-		"""
-		xyzs *= BOHRPERA
-		branches=[]
-		variables=[]
-		atom_outputs_charge = []
-		output = tf.zeros([self.batch_size, self.max_num_atoms], dtype=self.tf_precision)
-		with tf.name_scope("dipole_network"):
-			for e in range(len(self.elements)):
-				branches.append([])
-				inputs = inp[e]
-				index = indexs[e]
-				for i in range(len(self.hidden_layers)):
-					if i == 0:
-						with tf.name_scope(str(self.elements[e])+'_hidden1'):
-							weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
-									stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
-							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-							branches[-1].append(self.activation_function(tf.matmul(inputs, weights) + biases))
-							variables.append(weights)
-							variables.append(biases)
-					else:
-						with tf.name_scope(str(self.elements[e])+'_hidden'+str(i+1)):
-							weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
-									stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
-							biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
-							branches[-1].append(self.activation_function(tf.matmul(branches[-1][-1], weights) + biases))
-							variables.append(weights)
-							variables.append(biases)
-				with tf.name_scope(str(self.elements[e])+'_regression_linear'):
-					weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 1],
-							stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
-					biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
-					branches[-1].append(tf.squeeze(tf.matmul(branches[-1][-1], weights) + biases, axis=1))
-					variables.append(weights)
-					variables.append(biases)
-					output += tf.scatter_nd(index, branches[-1][-1], [self.batch_size, self.max_num_atoms])
-
-			tf.verify_tensor_all_finite(output,"Nan in output!!!")
-			net_charge = tf.reduce_sum(output, axis=1)
-			delta_charge = net_charge / tf.cast(natom, self.tf_precision)
-			charges = output - tf.expand_dims(delta_charge, axis=1)
-			dipole = tf.reduce_sum(xyzs * tf.expand_dims(charges, axis=-1), axis=1)
-			if (PARAMS["train_quadrupole"]):
-				quadrupole_coords = 3 * tf.stack([tf.stack([tf.square(xyzs[...,0]), xyzs[...,0] * xyzs[...,1], tf.square(xyzs[...,1])], axis=-1),
-									tf.stack([xyzs[...,0] * xyzs[...,2], xyzs[...,1] * xyzs[...,2], tf.square(xyzs[...,2])], axis=-1)], axis=-2)
-				quadrupole_coords -= tf.expand_dims(tf.reduce_sum(tf.square(xyzs), axis=-1, keepdims=True), axis=-1)
-				quadrupole = tf.reduce_sum(quadrupole_coords * tf.expand_dims(tf.expand_dims(charges, axis=-1), axis=-1), axis=1)
-		return dipole, quadrupole, charges, net_charge, variables
-
 	def optimizer(self, loss, learning_rate, momentum, variables=None):
 		"""
 		Sets up the training Ops.
@@ -527,36 +431,6 @@ class UniversalNetwork(object):
 	def loss_op(self, error):
 		loss = tf.nn.l2_loss(error)
 		return loss
-
-	def dipole_train_step(self, step):
-		"""
-		Perform a single training step (complete processing of all input), using minibatches of size self.batch_size
-
-		Args:
-			step: the index of this step.
-		"""
-		Ncase_train = self.num_train_cases
-		start_time = time.time()
-		train_loss =  0.0
-		train_energy_loss = 0.0
-		train_dipole_loss = 0.0
-		train_quadrupole_loss = 0.0
-		# train_charge_loss = 0.0
-		train_gradient_loss = 0.0
-		num_mols = 0
-		for ministep in range (0, int(Ncase_train/self.batch_size)):
-			batch_data = self.get_dipole_train_batch(self.batch_size)
-			feed_dict = self.fill_dipole_feed_dict(batch_data)
-			_, total_loss, dipole_loss, quadrupole_loss = self.sess.run([self.dipole_train_op, self.dipole_losses, self.dipole_loss, self.quadrupole_loss], feed_dict=feed_dict)
-			train_loss += total_loss
-			train_dipole_loss += dipole_loss
-			train_quadrupole_loss += quadrupole_loss
-			# train_charge_loss += charge_loss
-			num_mols += self.batch_size
-		duration = time.time() - start_time
-		LOGGER.info("step: %5d    duration: %10.5f  train loss: %13.10f  dipole loss: %13.10f  quadrupole loss: %13.10f", step, duration,
-			train_loss / num_mols, train_dipole_loss / num_mols, train_quadrupole_loss / num_mols)
-		return
 
 	def energy_train_step(self, step):
 		"""
@@ -597,68 +471,6 @@ class UniversalNetwork(object):
 		duration = time.time() - start_time
 		self.print_epoch(step, duration, train_loss, train_energy_loss, train_gradient_loss)
 		return
-
-	def dipole_test_step(self, step):
-		"""
-		Perform a single test step (complete processing of all input), using minibatches of size self.batch_size
-
-		Args:
-			step: the index of this step.
-		"""
-		print( "testing...")
-		test_loss =  0.0
-		start_time = time.time()
-		Ncase_test = self.num_test_cases
-		num_mols = 0
-		test_loss = 0.0
-		test_dipole_loss = 0.0
-		test_quadrupole_loss = 0.0
-		# test_charge_loss = 0.0
-		test_epoch_dipole_labels, test_epoch_dipole_outputs = [], []
-		test_epoch_quadrupole_labels, test_epoch_quadrupole_outputs = [], []
-		test_net_charges = []
-		for ministep in range (0, int(Ncase_test/self.batch_size)):
-			batch_data = self.get_dipole_test_batch(self.batch_size)
-			feed_dict = self.fill_dipole_feed_dict(batch_data[:-1])
-			dipoles, dipole_labels, total_loss, dipole_loss, quadrupoles, quadrupole_labels, quadrupole_loss, charges = self.sess.run([self.dipoles, self.dipole_labels,
-			self.dipole_losses, self.dipole_loss, self.quadrupoles, self.quadrupole_pl, self.quadrupole_loss, self.charges],  feed_dict=feed_dict)
-			num_mols += self.batch_size
-			test_loss += total_loss
-			test_dipole_loss += dipole_loss
-			test_quadrupole_loss += quadrupole_loss
-			# test_charge_loss += charge_loss
-			test_epoch_dipole_labels.append(dipole_labels)
-			test_epoch_dipole_outputs.append(dipoles)
-			test_epoch_quadrupole_labels.append(quadrupole_labels)
-			test_epoch_quadrupole_outputs.append(quadrupoles)
-			# test_net_charges.append(net_charges)
-		test_epoch_dipole_labels = np.concatenate(test_epoch_dipole_labels)
-		test_epoch_dipole_outputs = np.concatenate(test_epoch_dipole_outputs)
-		test_epoch_dipole_errors = test_epoch_dipole_labels - test_epoch_dipole_outputs
-		test_epoch_quadrupole_labels = np.concatenate(test_epoch_quadrupole_labels)
-		test_epoch_quadrupole_outputs = np.concatenate(test_epoch_quadrupole_outputs)
-		test_epoch_quadrupole_errors = test_epoch_quadrupole_labels - test_epoch_quadrupole_outputs
-		# test_net_charges = np.concatenate(test_net_charges)
-		duration = time.time() - start_time
-		# for i in [random.randint(0, self.batch_size - 1) for _ in xrange(20)]:
-		# 	LOGGER.info("Net Charges: %11.8f", test_net_charges[i])
-		for i in [random.randint(0, self.batch_size - 1) for _ in xrange(20)]:
-			LOGGER.info("Dipole label: %s  Dipole output: %s", test_epoch_dipole_labels[i], test_epoch_dipole_outputs[i])
-		for i in [random.randint(0, self.batch_size - 1) for _ in xrange(20)]:
-			LOGGER.info("Quadrupole label: %s  Quadrupole output: %s", test_epoch_quadrupole_labels[i], test_epoch_quadrupole_outputs[i])
-		# LOGGER.info("MAE  Dipole: %11.8f  Net Charge: %11.8f", np.mean(np.abs(test_epoch_dipole_errors)), np.mean(np.abs(test_net_charges)))
-		# LOGGER.info("MSE  Dipole: %11.8f  Net Charge: %11.8f", np.mean(test_epoch_dipole_errors), np.mean(test_net_charges))
-		# LOGGER.info("RMSE Dipole: %11.8f  Net Charge: %11.8f", np.sqrt(np.mean(np.square(test_epoch_dipole_errors))), np.sqrt(np.mean(np.square(test_net_charges))))
-		LOGGER.info("MAE  Dipole: %11.8f  MAE  Quadrupole: %11.8f", np.mean(np.abs(test_epoch_dipole_errors)), np.mean(np.abs(test_epoch_quadrupole_errors)))
-		LOGGER.info("MSE  Dipole: %11.8f  MSE  Quadrupole: %11.8f", np.mean(test_epoch_dipole_errors), np.mean(test_epoch_quadrupole_errors))
-		LOGGER.info("RMSE Dipole: %11.8f  RMSE Quadrupole: %11.8f", np.sqrt(np.mean(np.square(test_epoch_dipole_errors))), np.sqrt(np.mean(np.square(test_epoch_quadrupole_errors))))
-		for i in range(10):
-			print("Charge     " + str(i) + ": " + str(charges[i]))
-			print("Batch      " + str(i) + ": " + str(batch_data[-1][i]))
-			print("Net Charge " + str(i) + ": " + str(np.sum(charges[i])))
-		LOGGER.info("step: %5d    duration: %10.5f   test loss: %13.10f  dipole loss: %13.10f  quadrupole loss: %13.10f", step, duration,
-			test_loss / num_mols, test_dipole_loss / num_mols, test_quadrupole_loss / num_mols)
-		return test_loss
 
 	def energy_test_step(self, step):
 		"""
@@ -737,29 +549,42 @@ class UniversalNetwork(object):
 			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
 			self.dipole_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, 3])
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
-			self.nearest_neighbors_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, 2])
+			# self.nearest_neighbors_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, 2])
+			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
+			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
+			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
+			self.mil_j_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
 			if self.train_sparse:
 				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 3])
-			self.gaussian_params = tf.Variable(self.gaussian_params, trainable=False, dtype=self.tf_precision)
-			elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
+
+			elements = tf.constant(self.elements, dtype = tf.int32)
+			element_pairs = tf.constant(self.element_pairs, dtype = tf.int32)
+			radial_rs = tf.Variable(self.radial_rs, trainable=False, dtype = self.tf_precision)
+			angular_rs = tf.Variable(self.angular_rs, trainable=False, dtype = self.tf_precision)
+			theta_s = tf.Variable(self.theta_s, trainable=False, dtype = self.tf_precision)
+			radial_cutoff = tf.Variable(self.radial_cutoff, trainable=False, dtype = self.tf_precision)
+			angular_cutoff = tf.Variable(self.angular_cutoff, trainable=False, dtype = self.tf_precision)
+			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_precision)
+			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_precision)
 			self.element_codes = tf.Variable(self.element_codes, trainable=False, dtype=self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 			with tf.name_scope('embedding'):
-				if self.train_sparse:
-					dxyzs, pair_Zs = sparsify_coords(self.xyzs_pl, self.Zs_pl, self.pairs_pl)
-					canon_xyzs = gs_canonicalizev2(dxyzs, self.Zs_pl)
-					embed, mol_idx = tf_sparse_gaush_element_channel(canon_xyzs, self.Zs_pl, pair_Zs,
-									elements, self.gaussian_params, self.l_max)
-				else:
-					dxyzs, padding_mask = center_dxyzs(self.xyzs_pl, self.Zs_pl)
-					nearest_neighbors = tf.gather_nd(self.nearest_neighbors_pl, padding_mask)
-					canon_xyzs, perm_canon_xyzs = gs_canonicalize(dxyzs, nearest_neighbors)
-					embed = tf_gaush_embed_channel(canon_xyzs, self.Zs_pl,
-									elements, self.gaussian_params, self.l_max, self.element_codes)
-					perm_embed = tf_gaush_embed_channel(perm_canon_xyzs, self.Zs_pl,
-											elements, self.gaussian_params, self.l_max, self.element_codes)
-					atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
+				self.Scatter_Sym = TFSymSet_Scattered_Linear_WithEle_Channel_Multi(self.xyzs_pl, self.Zs_pl, elements, radial_rs, radial_cutoff, element_pairs, angular_rs, zeta, eta, angular_cutoff, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.element_codes)
+				# if self.train_sparse:
+				# 	dxyzs, pair_Zs = sparsify_coords(self.xyzs_pl, self.Zs_pl, self.pairs_pl)
+				# 	canon_xyzs = gs_canonicalizev2(dxyzs, self.Zs_pl)
+				# 	embed, mol_idx = tf_sparse_gaush_element_channel(canon_xyzs, self.Zs_pl, pair_Zs,
+				# 					elements, self.gaussian_params, self.l_max)
+				# else:
+				# 	dxyzs, padding_mask = center_dxyzs(self.xyzs_pl, self.Zs_pl)
+				# 	nearest_neighbors = tf.gather_nd(self.nearest_neighbors_pl, padding_mask)
+				# 	canon_xyzs, perm_canon_xyzs = gs_canonicalize(dxyzs, nearest_neighbors)
+				# 	embed = tf_gaush_embed_channel(canon_xyzs, self.Zs_pl,
+				# 					elements, self.gaussian_params, self.l_max, self.element_codes)
+				# 	perm_embed = tf_gaush_embed_channel(perm_canon_xyzs, self.Zs_pl,
+				# 							elements, self.gaussian_params, self.l_max, self.element_codes)
+				# 	atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			with tf.name_scope('energy_inference'):
 				atom_energies, energy_variables = self.energy_inference(embed, atom_codes, padding_mask)
 				perm_atom_energies, _ = self.energy_inference(perm_embed, atom_codes, padding_mask)
