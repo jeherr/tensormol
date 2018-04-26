@@ -610,26 +610,26 @@ class RelaxedScan(ConfSearch):
 		m=self.Opt(m,"Pre_opt",FileOutput=False,eff_thresh=0.001)
 		self.AppendIfNew(m)
 		energy0,frc0  = self.WrappedBumpedEForce(m.coords)
-		m.properties['energy'] = energy0
-		mol_hist = [m]
 		energy = energy0
 		old_frc = frc0.copy()
 
 		diff =  m.coords[self.at1]- m.coords[self.at2]
 		r0 = np.sqrt(np.sum(diff*diff))
 		curr_m = Mol(m.atoms,m.coords)
+		curr_m.properties["rs_r"] = r0
+		curr_m.properties['energy'] = energy0
+		mol_hist = [curr_m]
 
 		self.cons_on = True
 		for rcons in np.linspace(r0,maxr,self.StopAfter)[1:]:
 			self.r_target = rcons
 			PARAMS["GSSearchAlpha"] = 0.05
 			curr_m = self.Opt(curr_m,"Dive"+str(self.NMinima), FileOutput=False, eff_thresh=0.001, eff_max_step=100)
+			curr_m.properties["rs_r"] = rcons
 			if (self.AppendIfNew(curr_m)):
 				mol_hist.append(curr_m)
 				if (callback != None):
 					callback(mol_hist)
-
-		print([x.properties for x in mol_hist])
 		return mol_hist
 
 

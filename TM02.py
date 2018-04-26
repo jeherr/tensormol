@@ -11,31 +11,56 @@ try:
 except Exception as Ex:
 	HAS_MATPLOTLIB=False
 
-
 from TensorMol import *
 import numpy as np
 
-if (1):
+if (0):
 	a = MSet("kevin_rand1")
-	b = MSet("Kevin_Heavy")
+	b = MSet("KevinHeavy")
 	c = MSet("chemspider12_clean_maxatom35_small")
 	d = MSet("kevin_heteroatom.dat")
+	e = MSet("MHMO_withcharge")
 	a.Load()
 	b.Load()
 	c.Load()
 	d.Load()
-	b.mols = a.mols+b.mols+c.mols+d.mols
+	e.Load()
+	b.mols = a.mols+b.mols+c.mols+d.mols+e.mols
 	#b.Statistics()
-	b.cut_max_num_atoms(50)
-	b.cut_max_grad(1.0)
+	#b.cut_max_num_atoms(50)
+	b.cut_max_grad(3.0)
+	b.cut_energy_outliers()
 	b.Save("PeriodicTable")
+
+if (0):
+	a = MSet("chemspider20_345_opt")
+	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
+	c = MSet("chemspider20_1_meta_withcharge_noerror_all")
+	d = MSet("kevin_heteroatom.dat")
+	e = MSet("chemspider20_24578_opt")
+	f = MSet("chemspider12_clean_maxatom35")
+	g = MSet("KevinHeavy")
+	sets = [d,b,c,a,e,f,g]
+	UniqueSet = MSet("UniqueConnectivities")
+	MasterSet = MSet("MasterSet")
+	for aset in sets:
+		aset.Load()
+		for i,amol in enumerate(aset.mols):
+			amol.GenSummary()
+			if i%10000 == 0:
+				print(i)
+		MasterSet.mols = MasterSet.mols+aset.mols
+		aset.cut_unique_bond_hash()
+		UniqueSet.mols = UniqueSet.mols+aset.mols
+		UniqueSet.Save("UniqueBonds")
+		MasterSet.Save("MasterSet")
 
 if 0:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("Hybrid2")
+	b = MSet("PeriodicTable")
 	b.Load()
-	b.cut_max_num_atoms(55)
-	b.cut_max_grad(2.0)
+	#b.cut_max_num_atoms(55)
+	#b.cut_max_grad(2.0)
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -374,7 +399,10 @@ class SparseCodedChargedGauSHNetwork:
 			true_ae[i]=m.properties["energy"]
 			true_force[i,:m.NAtoms()]=m.properties["gradients"]
 			qs[i,:m.NAtoms()]=m.properties["charges"]
-			ds[i]=m.properties["dipole"]
+			try:
+				ds[i]=m.properties["dipole"]
+			except:
+				pass
 		nlt, MaxNeigh = self.NLTensors(xyzs,zs)
 		if (MaxNeigh > self.MaxNeigh):
 			print("Too Many Neighbors.")
@@ -686,6 +714,11 @@ class SparseCodedChargedGauSHNetwork:
 		Atom12Real4 = tf.tile(Atom12Real,[1,1,1,nchan])
 		Atom12Real5 = tf.tile(Atom12Real,[1,1,1,nchan+1])
 
+		with tf.variable_scope("AtomVariance", reuse=tf.AUTO_REUSE):
+			stdinit = tf.constant(np.ones(MAX_ATOMIC_NUMBER),dtype=self.prec)
+			self.AtomEStd = tf.get_variable(name="AtomEStd",dtype=self.prec,initializer=stdinit)
+			AtomEStds = tf.reshape(tf.gather(self.AtomEStd, Zs, axis=0),(self.batch_size,self.MaxNAtom,1))
+
 		jcodes0 = tf.reshape(tf.gather(atom_codes,zjs),(self.batch_size,self.MaxNAtom,self.MaxNeigh,nchan))
 		jcodes = tf.where(Atom12Real4 , jcodes0 , tf.zeros_like(jcodes0))# mol X maxNatom X maxnieh X 4
 
@@ -764,29 +797,12 @@ class SparseCodedChargedGauSHNetwork:
 			# in the final layer use the atom code information.
 			l2pe = tf.concat([l2e,CODES_wq],axis=-1)
 			l3e = tf.layers.dense(l2pe,units=1,activation=None,use_bias=False,name="Dense3e")*msk
-			AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))+AvEs
-
+			AtomEnergies = tf.reshape(l3e,(self.batch_size,self.MaxNAtom,1))*AtomEStds+AvEs
 		return AtomEnergies, AtomCharges
 
 
 	def train_step(self,step):
 		feed_dict, mols = self.NextBatch(self.mset)
-		#DEBUGFLEARNING = self.sess.run(tf.gradients(self.Gloss,tf.trainable_variables()), feed_dict=feed_dict)[0]
-		#print(DEBUGFLEARNING)
-		#for t in DEBUGFLEARNING:
-		#	if (np.any(np.isnan(t))):
-		#		print("NanLearning!!!", t)
-		#tvars = tf.trainable_variables()
-		#for var in tvars:
-			#print("var", var)
-		if 0:
-			a,b = self.sess.run([self.dxyzs, self.cdxyzs_p], feed_dict=feed_dict)
-			for i,d in enumerate(a[:10]):
-				print(mols[i])
-				print(" --- ",d)
-			for i,d in enumerate(b[:10]):
-				print(mols[i])
-				print(" --- ",d)
 		_ , train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
 		self.print_training(step, train_loss)
 		return
@@ -889,15 +905,10 @@ class SparseCodedChargedGauSHNetwork:
 		self.groundTruthQ_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom), dtype = tf.float64,name="GTQs") # Charges
 
 		# Constants
-		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec)
-		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec)
-		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec)
-		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec)
-		if 0:
-			self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec,name="atom_codes")
-			self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec,name="gauss_params")
-			self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec,name="av_energies")
-			self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec,name="av_charges")
+		self.atom_codes = tf.Variable(self.AtomCodes,trainable=self.DoCodeLearning,dtype = self.prec,name="atom_codes")
+		self.gp_tf  = tf.Variable(self.GaussParams,trainable=self.DoCodeLearning, dtype = self.prec,name="gauss_params")
+		self.AvE_tf = tf.Variable(self.AverageElementEnergy, trainable=False, dtype = self.prec,name="av_energies")
+		self.AvQ_tf = tf.Variable(self.AverageElementCharge, trainable=False, dtype = self.prec,name="av_charges")
 
 		Atom1Real = tf.tile(tf.greater(self.zs_pl,0)[:,:,tf.newaxis,:],(1,1,self.MaxNeigh,1))
 		nl = tf.reshape(self.nl_pl,(self.batch_size,self.MaxNAtom,self.MaxNeigh,1))
