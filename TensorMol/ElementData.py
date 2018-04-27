@@ -1,4 +1,4 @@
-,-#
+#
 # This is a tentative set of atomic identity data.
 # Anyone got an opinion about a better spot for this?
 #
