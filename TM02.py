@@ -25,7 +25,7 @@ if (0):
 	sets[-1].Load()
 	f = MSet("chemspider12_clean_maxatom35")
 	f.Load()
-	while (len(f.mols)>0): 
+	while (len(f.mols)>0):
 		sets.append(MSet())
 		while(len(f.mols)>0 and len(sets[-1].mols)<100000):
 			sets[-1].mols.append(f.mols.pop())
@@ -45,7 +45,8 @@ if (0):
 		MasterSet.Save("MasterSet")
 
 if 1:
-	b = MSet("MasterSet")
+	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
+	b = MSet("PeriodicTable")
 	b.Load()
 
 MAX_ATOMIC_NUMBER = 55
@@ -168,7 +169,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.MaxNAtom = 32
 		self.MaxNeigh = self.MaxNAtom
 		self.learning_rate = 0.0002
-		self.ncan = 6
+		self.ncan = 2
 		self.DoHess=False
 		self.mode = mode
 		if (mode == 'eval'):
@@ -890,10 +891,10 @@ class SparseCodedChargedGauSHNetwork:
 	def Prepare(self):
 		tf.reset_default_graph()
 
-		self.DoRotGrad = False
+		self.DoRotGrad = True
 		self.DoForceLearning = False
 		self.Canonicalize = True
-		self.DoCodeLearning = False
+		self.DoCodeLearning = True
 		self.DoDipoleLearning = False
 		self.DoChargeLearning = True
 		self.DoChargeEmbedding = True
@@ -990,7 +991,7 @@ class SparseCodedChargedGauSHNetwork:
 
 		# Optional. Verify that the canonicalized differences are invariant.
 		if self.DoRotGrad:
-			self.RotGrad = tf.gradients(self.embedded,psis)[0]
+			self.RotGrad = tf.gradients(self.AtomNetEnergies,psis)[0]
 			tf.summary.scalar('RotGrad',tf.reduce_sum(self.RotGrad))
 
 		self.Eloss = tf.nn.l2_loss(self.MolEnergies - self.groundTruthE_pl,name='Eloss')/tf.cast(self.batch_size,self.prec)

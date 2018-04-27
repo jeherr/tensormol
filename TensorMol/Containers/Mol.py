@@ -520,7 +520,9 @@ class Mol:
 		d1 = [copy.copy(x[0]) for x in d]
 		d2 = [copy.copy(x[1]) for x in d]
 		tore = MSet("Dihedrals")
-		while (len(tore.mols)<nsamp):
+		maxiter = 1000000
+		iter = 0
+		while (len(tore.mols)<nsamp and iter < maxiter):
 			bondi = np.random.randint(0,len(d)-1)
 			theta = np.random.uniform(-Pi/2,Pi/2)
 			#self.coords = coords0.copy()
@@ -540,6 +542,7 @@ class Mol:
 			self.coords[R] = np.einsum("ij,kj->ik",self.coords[R]-center,Rrot)
 			self.coords -= np.mean(self.coords,axis=0)
 			cmp = MolEmb.Make_DistMat(self.coords)<1.4
+			iter = iter + 1
 			if (np.any(np.not_equal(cm0,cmp))):
 				self.coords = tmp.copy()
 				continue
