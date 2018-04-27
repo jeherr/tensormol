@@ -3584,8 +3584,14 @@ def sparse_triples(xyzs, Zs, pairs):
 	pairs = tf.gather_nd(pairs, padding_mask)
 	idx_sorted_pairs, _ = tf.nn.top_k(pairs, tf.shape(pairs)[1], True)
 	idx_sorted_pairs = idx_sorted_pairs[:,::-1]
-	tiled_sorted_pairs = tf.tile(tf.expand_dims(idx_sorted_pairs, axis=-2), [1, tf.shape(idx_sorted_pairs)[1], 1])
-	return tf.concat([tf.expand_dims(idx_sorted_pairs, axis=-1), tiled_sorted_pairs], axis=-1)
+	case_idx = tf.tile(tf.expand_dims(tf.expand_dims(tf.range(tf.shape(padding_mask)[0]), axis=-1), axis=-1), [1, tf.shape(idx_sorted_pairs)[1], tf.shape(idx_sorted_pairs)[1]])
+	tiled_sorted_pairs1 = tf.tile(tf.expand_dims(idx_sorted_pairs, axis=-1), [1, 1, tf.shape(idx_sorted_pairs)[1]])
+	tiled_sorted_pairs2 = tf.tile(tf.expand_dims(idx_sorted_pairs, axis=-2), [1, tf.shape(idx_sorted_pairs)[1], 1])
+	all_triples = tf.stack([case_idx, tiled_sorted_pairs1, tiled_sorted_pairs2], axis=-1)
+	triples_mask = tf.logical_and(tf.not_equal(all_triples[...,1], -1), tf.not_equal(all_triples[...,2], -1))
+	triples_mask = tf.where(tf.logical_and(tf.less(all_triples[...,1], all_triples[...,2]), triples_mask))
+	triples_idx = tf.gather_nd(all_triples, triples_mask)
+	return triples_idx
 	padded_pairs = tf.equal(pairs, -1)
 	tmp_pairs = tf.where(padded_pairs, tf.zeros_like(pairs), pairs)
 	gather_pairs = tf.stack([tf.cast(tf.tile(padding_mask[:,:1], [1, tf.shape(pairs)[1]]), tf.int32), tmp_pairs], axis=-1)
