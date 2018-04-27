@@ -550,10 +550,10 @@ class UniversalNetwork(object):
 			self.dipole_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, 3])
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
 			# self.nearest_neighbors_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, 2])
-			self.Radp_Ele_pl=tf.placeholder(tf.int64, shape=tuple([None,4]))
-			self.Angt_Elep_pl=tf.placeholder(tf.int64, shape=tuple([None,5]))
-			self.mil_jk_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
-			self.mil_j_pl = tf.placeholder(tf.int64, shape=tuple([None,4]))
+			self.Radp_Ele_pl=tf.placeholder(tf.int32, shape=tuple([None,4]))
+			self.Angt_Elep_pl=tf.placeholder(tf.int32, shape=tuple([None,5]))
+			self.mil_jk_pl = tf.placeholder(tf.int32, shape=tuple([None,4]))
+			self.mil_j_pl = tf.placeholder(tf.int32, shape=tuple([None,4]))
 			if self.train_sparse:
 				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 3])
 
