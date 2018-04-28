@@ -148,7 +148,7 @@ def tf_gauss(dist_tensor, gauss_params):
 	return gaussian_embed * tf.expand_dims(cutoff_factor, axis=-1)
 
 def tf_spherical_harmonics_0(inv_dist_tensor):
-	return tf.fill(tf.shape(inv_dist_tensor), tf.constant(0.28209479177387814, dtype=eval(PARAMS["tf_prec"])))
+	return tf.fill(tf.shape(inv_dist_tensor), tf.constant(0.28209479177387814, dtype=inv_dist_tensor.dtype))
 
 def tf_spherical_harmonics_1(dxyzs, inv_dist_tensor, invariant=False):
 	lower_order_harmonics = tf_spherical_harmonics_0(tf.expand_dims(inv_dist_tensor, axis=-1))
