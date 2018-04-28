@@ -616,7 +616,8 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 	double rng;
 	int nreal;
 	int DoPerms;
-	if (!PyArg_ParseTuple(args, "O!O!dii", &PyArray_Type, &xyzs, &PyArray_Type, &zs, &rng, &nreal, &DoPerms))
+	int DoSort;
+	if (!PyArg_ParseTuple(args, "O!O!diii", &PyArray_Type, &xyzs, &PyArray_Type, &zs, &rng, &nreal, &DoPerms, &DoSort))
 		return NULL;
 	double *xyzs_data;
 	int32_t *z_data;
@@ -705,7 +706,8 @@ static PyObject* Make_NLTensor(PyObject *self, PyObject  *args)
 		{
 			if (tmp[j].size() > MaxNeigh)
 				MaxNeigh = tmp[j].size();
-			std::sort(tmp[j].begin(), tmp[j].end(), by_dist());
+			if (DoSort)
+				std::sort(tmp[j].begin(), tmp[j].end(), by_dist());
 		}
 	}
 	npy_intp outdim2[3] = {nmol,nat,MaxNeigh};
