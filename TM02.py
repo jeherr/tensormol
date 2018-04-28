@@ -5,11 +5,11 @@ It's a little recurrent-y.
 import os
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 HAS_MATPLOTLIB=False
-try:
-	import matplotlib.pyplot as plt
-	HAS_MATPLOTLIB=True
-except Exception as Ex:
-	HAS_MATPLOTLIB=False
+#try:
+#	import matplotlib.pyplot as plt
+#	HAS_MATPLOTLIB=True
+#except Exception as Ex:
+#	HAS_MATPLOTLIB=False
 
 from TensorMol import *
 import numpy as np
@@ -46,7 +46,7 @@ if (0):
 
 if 1:
 	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("PeriodicTable")
+	b = MSet("HNCO_small")
 	b.Load()
 
 MAX_ATOMIC_NUMBER = 55
@@ -164,13 +164,13 @@ class SparseCodedChargedGauSHNetwork:
 	This is the basic TensorMol0.2 model chemistry.
 	"""
 	def __init__(self,aset=None,load=False,load_averages=False,mode='train'):
-		self.prec = tf.float32
+		self.prec = tf.float64
 		self.batch_size = 20
 		self.MaxNAtom = 32
 		self.MaxNeigh_NN = self.MaxNAtom
 		self.MaxNeigh_J = self.MaxNAtom
-		self.learning_rate = 0.0002
-		self.ncan = 6
+		self.learning_rate = 0.0001
+		self.ncan = 12
 		self.DoHess=False
 		self.mode = mode
 		if (mode == 'eval'):
@@ -626,9 +626,8 @@ class SparseCodedChargedGauSHNetwork:
 		if (self.ncan == 2):
 			orders = [[0,1],[1,0]]
 		#elif (self.ncan == 6):
-	#		orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
+		#	orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
 		elif (self.ncan == 6):
-			# Neighbor Permtutations.
 			orders = [[0,1],[1,0],[1,2],[2,1],[3,2],[2,3]]
 		elif (self.ncan == 12):
 			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
