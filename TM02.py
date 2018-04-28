@@ -4,7 +4,7 @@ It's a little recurrent-y.
 """
 import os
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
-HAS_MATPLOTLIB=True
+HAS_MATPLOTLIB=False
 try:
 	import matplotlib.pyplot as plt
 	HAS_MATPLOTLIB=True
@@ -629,7 +629,7 @@ class SparseCodedChargedGauSHNetwork:
 	#		orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
 		elif (self.ncan == 6):
 			# Neighbor Permtutations.
-			orders = [[0,1],[1,0],[1,2],[2,1],[[3,2],[2,3]]
+			orders = [[0,1],[1,0],[1,2],[2,1],[3,2],[2,3]]
 		elif (self.ncan == 12):
 			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
 		tore = []
@@ -881,9 +881,11 @@ class SparseCodedChargedGauSHNetwork:
 		Atom12Real3 = tf.tile(Atom12Real,[1,1,1,3])
 		Atom12Real4 = tf.tile(Atom12Real,[1,1,1,4])
 
+		Atom1Real_j = tf.tile(tf.greater(self.zs_pl,0)[:,:,tf.newaxis,:],(1,1,self.MaxNeigh_J,1))
 		nl_j = tf.reshape(self.nl_j_pl,(self.batch_size,self.MaxNAtom,self.MaxNeigh_J,1))
-		Atom12Real_j = tf.logical_and(Atom1Real,tf.greater_equal(nl_j,0))
+		Atom12Real_j = tf.logical_and(Atom1Real_j,tf.greater_equal(nl_j,0))
 		Atom12Real2_j = tf.tile(Atom12Real_j,[1,1,1,2])
+		Atom12Real3_j = tf.tile(Atom12Real_j,[1,1,1,3])
 
 		molis = tf.tile(tf.range(self.batch_size)[:,tf.newaxis,tf.newaxis],[1,self.MaxNAtom,self.MaxNeigh_NN])[:,:,:,tf.newaxis]
 		gather_inds0 = tf.concat([molis,nl],axis=-1)
@@ -892,9 +894,10 @@ class SparseCodedChargedGauSHNetwork:
 		gather_inds = tf.where(Atom12Real2, gather_inds0, gather_inds0p) # Mol X MaxNatom X maxN X 2
 		self.sparse_mask = tf.cast(Atom12Real,self.prec) # nmol X maxnatom X maxneigh X 1
 
-		gather_inds0_j = tf.concat([molis,nl_j],axis=-1)
+		molis_j = tf.tile(tf.range(self.batch_size)[:,tf.newaxis,tf.newaxis],[1,self.MaxNAtom,self.MaxNeigh_J])[:,:,:,tf.newaxis]
+		gather_inds0_j = tf.concat([molis_j,nl_j],axis=-1)
 		it1_j = (self.MaxNAtom-1)*tf.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_J,1),dtype=tf.int32)
-		gather_inds0p_j = tf.concat([molis,it1_j],axis=-1)
+		gather_inds0p_j = tf.concat([molis_j,it1_j],axis=-1)
 		gather_inds_j = tf.where(Atom12Real2_j, gather_inds0_j, gather_inds0p_j) # Mol X MaxNatom X maxN X 2
 
 		# sparse version of dxyzs.
@@ -938,10 +941,13 @@ class SparseCodedChargedGauSHNetwork:
 			tf.add_to_collection('losses', self.Qloss)
 			tf.add_to_collection('losses', self.Dloss)
 			if (self.DoChargeEmbedding):
+				coord2_j = tf.gather_nd(tmpxyzs,gather_inds_j)
+				diff0_j = (coord1-coord2_j)
+				dxyzs_j = tf.where(Atom12Real3_j, diff0_j, tf.zeros_like(diff0_j))
 				q2 = tf.gather_nd(self.AtomCharges, gather_inds_j)
 				q1q2unmsk = (self.AtomCharges[:,:,tf.newaxis]*q2)
 				q1q2s = tf.where(Atom12Real_j[:,:,:,0],q1q2unmsk,tf.zeros_like(q1q2unmsk))
-				self.AtomCoulEnergies = tf.where(tf.greater(self.zs_pl,0),self.CoulombAtomEnergies(tf.norm(self.dxyzs,axis=-1),q1q2s),tf.zeros_like(self.AtomNetEnergies))
+				self.AtomCoulEnergies = tf.where(tf.greater(self.zs_pl,0),self.CoulombAtomEnergies(tf.norm(dxyzs_j,axis=-1),q1q2s),tf.zeros_like(self.AtomNetEnergies))
 			else:
 				self.AtomCoulEnergies = tf.zeros_like(self.AtomNetEnergies)
 		else:
