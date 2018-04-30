@@ -3515,12 +3515,10 @@ def TFSymASet_Linear_WithEle_Channel3tmp(dtxyzs, triples_Zs, element_codes, angu
 	dij_dik = tf.reduce_prod(dist_jk_tensor, axis=-1)
 	ij_dot_ik = tf.reduce_sum(dtxyzs[...,0,:] * dtxyzs[...,1,:], axis=-1)
 	cos_angle = ij_dot_ik / dij_dik
-	#cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle, dtype=eval(PARAMS["tf_prec"])) - 1.e-16, cos_angle)
-	#cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle, dtype=eval(PARAMS["tf_prec"])) - 1.e-16, cos_angle)
+	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle, dtype=eval(PARAMS["tf_prec"])) - 1.e-16, cos_angle)
+	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle, dtype=eval(PARAMS["tf_prec"])) - 1.e-16, cos_angle)
 	# sin_angle = tf.norm(tf.cross(dtxyzs[...,0,:], dtxyzs[...,1,:]), axis=-1) / dij_dik
-	
-	theta_ijk = tf.atan2(sin_angle, cos_angle)
-	return tf.reduce_max(sin_angle)
+	theta_ijk = tf.acos(cos_angle)
 
 	# theta_ijk = tf.acos(cos_angle)
 	# return theta_ijk
@@ -3550,11 +3548,20 @@ def sparse_coords(xyzs, Zs, pairs):
 	pair_Zs *= pair_mask
 	return dxyzs, pair_Zs
 
-def sparse_triples(xyzs, Zs, pairs):
+def sparse_triples(xyzs, Zs, triples):
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
-	pairs = tf.gather_nd(pairs, padding_mask)
-	idx_sorted_pairs, _ = tf.nn.top_k(pairs, tf.shape(pairs)[-1], True)
+	triples = tf.gather_nd(triples, padding_mask)
+	padded_triples = tf.equal(triples, -1)
+	tmp_triples = tf.where(padded_triples, tf.zeros_like(triples), triples)
+	gather_triples = tf.stack([tf.cast(tf.tile(tf.expand_dims(padding_mask[:,:1], axis=-1), [1, tf.shape(triples)[1], 2]), tf.int32), tmp_triples], axis=-1)
+	triples_coords = tf.gather_nd(xyzs, gather_triples)
+	dtxyzs = tf.expand_dims(tf.expand_dims(central_atom_coords, axis=-2), axis=-2) - triples_coords
+	triples_mask = tf.where(padded_triples, tf.zeros_like(triples), tf.ones_like(triples))
+	dtxyzs *= tf.cast(tf.expand_dims(triples_mask, axis=-1), eval(PARAMS["tf_prec"]))
+	return gather_triples
+	triples_Zs = tf.gather_nd(Zs, gather_triples)
+	triples_Zs *= triples_mask
 	tiled_sorted_pairs1 = tf.tile(tf.expand_dims(idx_sorted_pairs, axis=-1), [1, 1, tf.shape(idx_sorted_pairs)[-1]])
 	tiled_sorted_pairs2 = tf.tile(tf.expand_dims(idx_sorted_pairs, axis=-2), [1, tf.shape(idx_sorted_pairs)[-1], 1])
 	all_triples = tf.stack([tiled_sorted_pairs1, tiled_sorted_pairs2], axis=-1)

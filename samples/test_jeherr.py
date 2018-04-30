@@ -864,7 +864,7 @@ a.Load()
 # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
 # # # mt.WriteXYZfile()
 b=MSet()
-for i in range(100):
+for i in range(3):
 	b.mols.append(a.mols[i])
 	# print b.mols[i].NAtoms()
 maxnatoms = b.MaxNAtom()
@@ -880,7 +880,7 @@ nnlist = []
 for i, mol in enumerate(b.mols):
 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float64)
 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
-	paddedz = np.zeros((maxnatoms), dtype=np.int32)
+	paddedz = np.zeros((maxnatoms), dtype=np.int64)
 	paddedz[:mol.atoms.shape[0]] = mol.atoms
 	# paddedgrad = np.zeros((maxnatoms,3), dtype=np.float32)
 	# paddedgrad[:mol.atoms.shape[0]] = mol.properties["gradients"]
@@ -897,9 +897,9 @@ for i, mol in enumerate(b.mols):
 	# if i == 1:
 	# 	break
 xyzs_tf = tf.cast(tf.stack(xyzlist), tf.float32)
-zs_tf = tf.cast(tf.stack(zlist), tf.int32)
+zs_tf = tf.cast(tf.stack(zlist), tf.int64)
 xyzs_np = np.stack(xyzlist).astype(np.float64)
-zs_np = np.stack(zlist)
+zs_np = np.stack(zlist).astype(np.int64)
 # gradstack = tf.stack(gradlist)
 # nnstack = tf.stack(nnlist)
 # natomsstack = tf.stack(n_atoms_list)
@@ -929,49 +929,54 @@ eta = tf.Variable(AN1_eta, trainable=False, dtype = tf.float32)
 # rotation_params = tf.stack([np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
 # 	np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
 # 	tf.random_uniform([2, maxnatoms], minval=0.1, maxval=1.9, dtype=tf.float32)], axis=-1)
-nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 4.6, maxnatoms, True)
+nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 4.6, maxnatoms, True, True)
 nlt_tf = tf.constant(nlt, dtype=tf.int32)
-# # dxyzs, padding_mask = center_dxyzs(xyzs_tf, zs_tf)
+tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 4.0, maxnatoms, True)
+tlt_tf = tf.constant(tlt, dtype=tf.int32)
+print tlt
+print np.amax(tlt)
+print tlt.shape
+# dxyzs, padding_mask = center_dxyzs(xyzs_tf, zs_tf)
 # dxyzs, pair_Zs = sparse_coords(xyzs_tf, zs_tf, nlt_tf)
-# tmp = sparse_triples(xyzs_tf, zs_tf, nlt_tf)
-tmp = TFSymSet_Scattered_Linear_WithEle_Channel_Multitmp(xyzs_tf, zs_tf, nlt_tf, elements_tf, element_pairs_tf, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
-# # rotation_params = tf.gather_nd(rotation_params, padding_mask)
-# # rotated_xyzs = tf_random_rotate(dxyzs, rotation_params)
-# # dist_tensor = tf.norm(rotated_xyzs+1.e-16,axis=-1)
-# # harmonics = tf_spherical_harmonics(rotated_xyzs, dist_tensor, 4)
-# # eig, vec = spherical_harmonics_spectrum(harmonics)
-# # nearest_neighbors = tf.gather_nd(nnstack, padding_mask)
-# # tmp, tmp2 = gs_canonicalize(dxyzs, nearest_neighbors)
-# # embed = tf_gaush_embed_channel(tmp, zstack, elements, gauss_params, 5, element_codes)
-# # grad = tf.gradients(tmp, xyzstack)[0]
-# # grads = tf.scatter_add(tf.Variable(tf.zeros(grad.dense_shape)), grad.indices, grad.values)
-# # grad = tf.gradients(vec, rotation_params)[0]
-sess = tf.Session()
-sess.run(tf.global_variables_initializer())
-options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-run_metadata = tf.RunMetadata()
-# # for i in range(a.mols[0].atoms.shape[0]):
-# # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
-@TMTiming("test")
-def get_pairs():
-	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
-	return tmp3
-tmp5 = get_pairs()
-print tmp5
-# # print tmp6
-print tmp5.shape
-# print tmp6.shape
-# print np.concatenate([np.zeros((1,3)), tmp5[0]], axis=0)
-# m=Mol(zlist[0], np.concatenate([np.zeros((1,3)), tmp5[0]], axis=0))
-# m.WriteXYZfile(fname="tmp", mode="w")
-# print tmp6.shape
-# print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
-# print np.allclose(tmp5, tmp6, 1e-01)
-# print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
-fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-chrome_trace = fetched_timeline.generate_chrome_trace_format()
-with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
-	f.write(chrome_trace)
+# tmp = sparse_triples(xyzs_tf, zs_tf, tlt_tf)
+# # tmp = TFSymSet_Scattered_Linear_WithEle_Channel_Multitmp(xyzs_tf, zs_tf, nlt_tf, elements_tf, element_pairs_tf, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
+# # # rotation_params = tf.gather_nd(rotation_params, padding_mask)
+# # # rotated_xyzs = tf_random_rotate(dxyzs, rotation_params)
+# # # dist_tensor = tf.norm(rotated_xyzs+1.e-16,axis=-1)
+# # # harmonics = tf_spherical_harmonics(rotated_xyzs, dist_tensor, 4)
+# # # eig, vec = spherical_harmonics_spectrum(harmonics)
+# # # nearest_neighbors = tf.gather_nd(nnstack, padding_mask)
+# # # tmp, tmp2 = gs_canonicalize(dxyzs, nearest_neighbors)
+# # # embed = tf_gaush_embed_channel(tmp, zstack, elements, gauss_params, 5, element_codes)
+# # # grad = tf.gradients(tmp, xyzstack)[0]
+# # # grads = tf.scatter_add(tf.Variable(tf.zeros(grad.dense_shape)), grad.indices, grad.values)
+# # # grad = tf.gradients(vec, rotation_params)[0]
+# sess = tf.Session()
+# sess.run(tf.global_variables_initializer())
+# options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+# run_metadata = tf.RunMetadata()
+# # # for i in range(a.mols[0].atoms.shape[0]):
+# # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
+# @TMTiming("test")
+# def get_pairs():
+# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
+# 	return tmp3
+# tmp5 = get_pairs()
+# print np.max(tmp5[...,1])
+# # # print tmp6
+# print tmp5[...,1].shape
+# # print tmp6.shape
+# # print np.concatenate([np.zeros((1,3)), tmp5[0]], axis=0)
+# # m=Mol(zlist[0], np.concatenate([np.zeros((1,3)), tmp5[0]], axis=0))
+# # m.WriteXYZfile(fname="tmp", mode="w")
+# # print tmp6.shape
+# # print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
+# # print np.allclose(tmp5, tmp6, 1e-01)
+# # print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
+# fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+# chrome_trace = fetched_timeline.generate_chrome_trace_format()
+# with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
+# 	f.write(chrome_trace)
 
 # a = MSet("water_dimer_rotate")
 # a.ReadXYZ()
