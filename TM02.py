@@ -45,9 +45,13 @@ if (0):
 		MasterSet.Save("MasterSet")
 
 if 1:
-	#b = MSet("chemspider20_1_meta_withcharge_noerror_all")
-	b = MSet("HNCO_small")
+	b = MSet("MasterSet")
+#	b = MSet("HNCO_small")
 	b.Load()
+	b.cut_max_num_atoms(40)
+	b.cut_max_grad(2.0)
+	b.cut_energy_outliers()
+	b.Save("MasterSet40")
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -165,7 +169,7 @@ class SparseCodedChargedGauSHNetwork:
 	"""
 	def __init__(self,aset=None,load=False,load_averages=False,mode='train'):
 		self.prec = tf.float64
-		self.batch_size = 20
+		self.batch_size = 12
 		self.MaxNAtom = 32
 		self.MaxNeigh_NN = self.MaxNAtom
 		self.MaxNeigh_J = self.MaxNAtom
@@ -845,8 +849,8 @@ class SparseCodedChargedGauSHNetwork:
 	def Prepare(self):
 		tf.reset_default_graph()
 
-		self.DoRotGrad = True
-		self.DoForceLearning = False
+		self.DoRotGrad = False
+		self.DoForceLearning = True
 		self.Canonicalize = True
 		self.DoCodeLearning = True
 		self.DoDipoleLearning = False
