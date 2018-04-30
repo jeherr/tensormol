@@ -864,7 +864,7 @@ a.Load()
 # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
 # # # mt.WriteXYZfile()
 b=MSet()
-for i in range(3):
+for i in range(100):
 	b.mols.append(a.mols[i])
 	# print b.mols[i].NAtoms()
 maxnatoms = b.MaxNAtom()
@@ -933,9 +933,6 @@ nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 4.6, maxnatoms, True, True)
 nlt_tf = tf.constant(nlt, dtype=tf.int32)
 tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 4.0, maxnatoms, True)
 tlt_tf = tf.constant(tlt, dtype=tf.int32)
-print tlt
-print np.amax(tlt)
-print tlt.shape
 # dxyzs, padding_mask = center_dxyzs(xyzs_tf, zs_tf)
 # dxyzs, pair_Zs = sparse_coords(xyzs_tf, zs_tf, nlt_tf)
 # tmp = sparse_triples(xyzs_tf, zs_tf, tlt_tf)
