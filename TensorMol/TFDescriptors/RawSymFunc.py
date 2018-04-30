@@ -3436,7 +3436,7 @@ def NNInterface(R, Zs, eles_, GM):
 		IndexList.append(tf.reshape(tf.slice(GatherList[-1],[0,0],[NAtomOfEle,1]),[NAtomOfEle]))
 	return SymList, IndexList
 
-def TFSymSet_Scattered_Linear_WithEle_Channel_Multitmp(xyzs, Zs, neighbors, elements, element_pairs, element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta):
+def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta):
 	"""
 	A tensorflow implementation of the AN1 symmetry function for a set of molecule.
 	Args:
@@ -3452,13 +3452,12 @@ def TFSymSet_Scattered_Linear_WithEle_Channel_Multitmp(xyzs, Zs, neighbors, elem
 	Returns:
 		Digested Mol. In the shape nmol X maxnatom X (Dimension of radius part + Dimension of angular part)
 	"""
-	dxyzs, pair_Zs = sparse_coords(xyzs, Zs, neighbors)
+	dxyzs, pair_Zs = sparse_pairs(xyzs, Zs, pairs)
 	radial_embed = tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta)
-	dtxyzs, triples_Zs = sparse_triples(xyzs, Zs, neighbors)
-	return TFSymASet_Linear_WithEle_Channel3tmp(dtxyzs, triples_Zs, element_codes, angular_gauss, thetas, angular_cutoff, zeta, eta)
-	# GMA = tf.reshape(TFSymASet_Linear_WithEle_Channel3tmp(R, Zs, eleps_, SFPsA_, zeta,  eta, Ra_cut,  AngtEle, mil_jk, channel_eleps),[nmol, natom,-1], name="FinishGMA")
-	# GM = tf.concat([GMR, GMA], axis=2, name="ConcatRadAngHyb")
-	return tf.reshape(GM,[nmol, natom, -1, tf.shape(channel_eles)[1]])
+	dtxyzs, triples_Zs = sparse_triples(xyzs, Zs, triples)
+	angular_embed = tf_angular_sym_func(dtxyzs, triples_Zs, element_codes, angular_gauss, thetas, angular_cutoff, zeta, eta)
+	embed = tf.concat([radial_embed, angular_embed], axis=-1)
+	return embed
 
 def tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta):
 	"""
@@ -3488,7 +3487,7 @@ def tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutof
 	radial_embed = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(tf.expand_dims(cutoff, axis=-1) * pair_codes, axis=-1)
 	return tf.reduce_sum(radial_embed, axis=1)
 
-def TFSymASet_Linear_WithEle_Channel3tmp(dtxyzs, triples_Zs, element_codes, angular_gauss, thetas, angular_cutoff, zeta, eta):
+def tf_angular_sym_func(dtxyzs, triples_Zs, element_codes, angular_gauss, thetas, angular_cutoff, zeta, eta):
 	"""
 	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
 	Here j,k are all other atoms, but implicitly the output
@@ -3515,25 +3514,25 @@ def TFSymASet_Linear_WithEle_Channel3tmp(dtxyzs, triples_Zs, element_codes, angu
 	dij_dik = tf.reduce_prod(dist_jk_tensor, axis=-1)
 	ij_dot_ik = tf.reduce_sum(dtxyzs[...,0,:] * dtxyzs[...,1,:], axis=-1)
 	cos_angle = ij_dot_ik / dij_dik
-	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle, dtype=eval(PARAMS["tf_prec"])) - 1.e-16, cos_angle)
-	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle, dtype=eval(PARAMS["tf_prec"])) - 1.e-16, cos_angle)
-	# sin_angle = tf.norm(tf.cross(dtxyzs[...,0,:], dtxyzs[...,1,:]), axis=-1) / dij_dik
+	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0),
+				tf.ones_like(cos_angle, dtype=eval(PARAMS["tf_prec"])) - 1.e-16, cos_angle)
+	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0),
+				-1.0 * tf.ones_like(cos_angle, dtype=eval(PARAMS["tf_prec"])) - 1.e-16, cos_angle)
 	theta_ijk = tf.acos(cos_angle)
-
-	# theta_ijk = tf.acos(cos_angle)
-	# return theta_ijk
 	dtheta = tf.expand_dims(theta_ijk, axis=-1) - thetas
-	cos_factor = tf.cos(dtheta)
+	cos_factor = tf.cos(2.0 * dtheta)
 	exponent = tf.expand_dims(tf.reduce_sum(dist_jk_tensor, axis=-1) / 2.0, axis=-1) - angular_gauss
 	dist_factor = tf.exp(-eta * tf.square(exponent))
 	cutoff = tf.reduce_prod(0.5 * (tf.cos(np.pi * dist_jk_tensor / angular_cutoff) + 1.0), axis=-1)
 	angular_embed = tf.expand_dims(tf.pow(1.0 + cos_factor, zeta), axis=-1) * tf.expand_dims(dist_factor, axis=-2)
 	angular_embed *= tf.expand_dims(tf.expand_dims(cutoff, axis=-1), axis=-1)
-	angular_embed = tf.expand_dims(angular_embed, axis=-3) * tf.expand_dims(tf.expand_dims(tf.reduce_prod(tf.gather(element_codes, triples_Zs), axis=-2), axis=-1), axis=-1)
-	angular_embed = tf.pow(2.0, 1.0 - zeta) * tf.reduce_sum(angular_embed, axis=(1,2))
-	return angular_embed
+	angular_embed = (tf.expand_dims(angular_embed, axis=-3)
+					* tf.expand_dims(tf.expand_dims(tf.reduce_prod(tf.gather(element_codes,
+					triples_Zs), axis=-2), axis=-1), axis=-1))
+	angular_embed = tf.pow(tf.cast(2.0, eval(PARAMS["tf_prec"])), 1.0 - zeta) * tf.reduce_sum(angular_embed, axis=1)
+	return tf.reshape(angular_embed, [tf.shape(dtxyzs)[0], tf.shape(element_codes)[1], -1])
 
-def sparse_coords(xyzs, Zs, pairs):
+def sparse_pairs(xyzs, Zs, pairs):
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
 	pairs = tf.gather_nd(pairs, padding_mask)
@@ -3559,23 +3558,6 @@ def sparse_triples(xyzs, Zs, triples):
 	dtxyzs = tf.expand_dims(tf.expand_dims(central_atom_coords, axis=-2), axis=-2) - triples_coords
 	triples_mask = tf.where(padded_triples, tf.zeros_like(triples), tf.ones_like(triples))
 	dtxyzs *= tf.cast(tf.expand_dims(triples_mask, axis=-1), eval(PARAMS["tf_prec"]))
-	return gather_triples
 	triples_Zs = tf.gather_nd(Zs, gather_triples)
 	triples_Zs *= triples_mask
-	tiled_sorted_pairs1 = tf.tile(tf.expand_dims(idx_sorted_pairs, axis=-1), [1, 1, tf.shape(idx_sorted_pairs)[-1]])
-	tiled_sorted_pairs2 = tf.tile(tf.expand_dims(idx_sorted_pairs, axis=-2), [1, tf.shape(idx_sorted_pairs)[-1], 1])
-	all_triples = tf.stack([tiled_sorted_pairs1, tiled_sorted_pairs2], axis=-1)
-	triples_mask = tf.logical_and(tf.not_equal(all_triples[...,0], -1), tf.not_equal(all_triples[...,1], -1))
-	triples_mask = tf.logical_and(tf.greater(all_triples[...,0], all_triples[...,1]), triples_mask)
-	triples_mask = tf.tile(tf.expand_dims(triples_mask, axis=-1), [1, 1, 1, 2])
-	all_triples = tf.where(tf.logical_not(triples_mask), -1 * tf.ones_like(all_triples), all_triples)
-	tmp_triples = tf.where(tf.logical_not(triples_mask), tf.zeros_like(all_triples), all_triples)
-	mol_idx = tf.tile(tf.reshape(padding_mask[:,0], [-1, 1, 1, 1]), [1, tf.shape(idx_sorted_pairs)[-1], tf.shape(idx_sorted_pairs)[-1], 2])
-	gather_triples = tf.stack([tf.cast(mol_idx, tf.int32), tmp_triples], axis=-1)
-	triples_coords = tf.gather_nd(xyzs, gather_triples)
-	dxyzs = tf.reshape(central_atom_coords, [tf.shape(padding_mask)[0], 1, 1, 1, 3]) - triples_coords
-	triples_mask = tf.where(triples_mask, tf.ones_like(all_triples), tf.zeros_like(all_triples))
-	dxyzs *= tf.cast(tf.expand_dims(triples_mask, axis=-1), eval(PARAMS["tf_prec"]))
-	triples_Zs = tf.gather_nd(Zs, gather_triples)
-	triples_Zs *= triples_mask
-	return dxyzs, triples_Zs
+	return dtxyzs, triples_Zs
