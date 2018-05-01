@@ -315,16 +315,16 @@ def train_energy_GauSHv2(mset):
 	network.start_training()
 
 def train_energy_univ(mset):
-	PARAMS["train_gradients"] = False
-	PARAMS["train_charges"] = True
+	PARAMS["train_gradients"] = True
+	PARAMS["train_charges"] = False
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [256, 256, 256]
-	PARAMS["learning_rate"] = 0.0001
+	PARAMS["learning_rate"] = 0.00001
 	PARAMS["max_steps"] = 1000
-	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 100
+	PARAMS["test_freq"] = 1
+	PARAMS["batch_size"] = 80
 	PARAMS["NeuronType"] = "shifted_softplus"
-	PARAMS["tf_prec"] = "tf.float32"
+	PARAMS["tf_prec"] = "tf.float64"
 	network = UniversalNetwork(mset)
 	network.start_training()
 
@@ -845,7 +845,7 @@ train_energy_univ("chemspider12_wb97xd_6311gss_rand")
 # PARAMS["tf_prec"] = "tf.float32"
 # PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
 # PARAMS["SH_NRAD"] = 16
-# a = MSet("SmallMols_rand")
+# a = MSet("chemspider20_24578_opt")
 # a.Load()
 # # for mol in a.mols:
 # # 	mol.nearest_two_neighbors()
@@ -860,7 +860,7 @@ train_energy_univ("chemspider12_wb97xd_6311gss_rand")
 # # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
 # # # # mt.WriteXYZfile()
 # b=MSet()
-# for i in range(100):
+# for i in range(5000):
 # 	b.mols.append(a.mols[i])
 # 	# print b.mols[i].NAtoms()
 # maxnatoms = b.MaxNAtom()
@@ -925,14 +925,17 @@ train_energy_univ("chemspider12_wb97xd_6311gss_rand")
 # # rotation_params = tf.stack([np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
 # # 	np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
 # # 	tf.random_uniform([2, maxnatoms], minval=0.1, maxval=1.9, dtype=tf.float32)], axis=-1)
+# xyz_pl = tf.placeholder(tf.float32, shape=[100, maxnatoms, 3])
+# zs_pl = tf.placeholder(tf.int32, shape=[100, maxnatoms])
+# nn_pairs_pl = tf.placeholder(tf.int32, shape=[100, maxnatoms, None])
+# nn_triples_pl = tf.placeholder(tf.int32, shape=[100, maxnatoms, None, 2])
 # nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 4.6, maxnatoms, True, True)
-# nlt_tf = tf.constant(nlt, dtype=tf.int32)
-# print nlt.shape
 # tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 4.0, maxnatoms, True)
-# tlt_tf = tf.constant(tlt, dtype=tf.int32)
-# print tlt.shape
-# dxyzs, padding_mask = center_dxyzs(xyzs_tf, zs_tf)
-# tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
+# # nlt_tf = tf.constant(nlt, dtype=tf.int32)
+# # tlt_tf = tf.constant(tlt, dtype=tf.int32)
+# tmp = tf_sym_func_element_codes(xyz_pl, zs_pl, nn_pairs_pl, nn_triples_pl, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
+# grad = tf.gradients(tmp, xyz_pl)[0]
+# # grads = tf.scatter_add(tf.Variable(tf.zeros(grad.dense_shape)), grad.indices, grad.values)
 # # # # rotation_params = tf.gather_nd(rotation_params, padding_mask)
 # # # # rotated_xyzs = tf_random_rotate(dxyzs, rotation_params)
 # # # # dist_tensor = tf.norm(rotated_xyzs+1.e-16,axis=-1)
@@ -950,14 +953,18 @@ train_energy_univ("chemspider12_wb97xd_6311gss_rand")
 # run_metadata = tf.RunMetadata()
 # # # for i in range(a.mols[0].atoms.shape[0]):
 # # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
-# @TMTiming("test")
-# def get_pairs():
-# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
-# 	return tmp3
-# tmp5 = get_pairs()
-# print tmp5
-# # # print tmp6
-# print tmp5.shape
+# for i in range(50):
+# 	feed_dict = {xyz_pl: xyzs_np[i:i+100], zs_pl:zs_np[i:i+100], nn_pairs_pl: nlt[i:i+100], nn_triples_pl: tlt[i:i+100]}
+# 	g = sess.run(grad, feed_dict=feed_dict)
+# 	print np.any(np.isinf(g))
+# # @TMTiming("test")
+# # def get_pairs():
+# # 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
+# # 	return tmp3
+# # tmp5 = get_pairs()
+# # print tmp5
+# # # # print tmp6
+# # print tmp5.shape
 # # print tmp6.shape
 # # print np.concatenate([np.zeros((1,3)), tmp5[0]], axis=0)
 # # m=Mol(zlist[0], np.concatenate([np.zeros((1,3)), tmp5[0]], axis=0))
@@ -966,10 +973,10 @@ train_energy_univ("chemspider12_wb97xd_6311gss_rand")
 # # print np.allclose(tmp5[0][1], tmp6[0][1], 1e-07)
 # # print np.allclose(tmp5, tmp6, 1e-01)
 # # print np.isclose(tmp5[0], tmp6[0,1:], 1e-01)
-# fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-# chrome_trace = fetched_timeline.generate_chrome_trace_format()
-# with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
-# 	f.write(chrome_trace)
+# # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+# # chrome_trace = fetched_timeline.generate_chrome_trace_format()
+# # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
+# # 	f.write(chrome_trace)
 
 # a = MSet("water_dimer_rotate")
 # a.ReadXYZ()

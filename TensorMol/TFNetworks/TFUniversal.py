@@ -206,14 +206,12 @@ class UniversalNetwork(object):
 		self.num_atoms_data = np.zeros((self.num_molecules), dtype = np.int32)
 		self.energy_data = np.zeros((self.num_molecules), dtype = np.float64)
 		self.gradient_data = np.zeros((self.num_molecules, self.max_num_atoms, 3), dtype=np.float64)
-		self.nearest_neighbors_data = np.zeros((self.num_molecules, self.max_num_atoms, 2), dtype=np.int32)
 		for i, mol in enumerate(self.mol_set.mols):
 			self.xyz_data[i][:mol.NAtoms()] = mol.coords
 			self.Z_data[i][:mol.NAtoms()] = mol.atoms
 			self.charges_data[i][:mol.NAtoms()] = mol.properties["charges"]
 			self.energy_data[i] = mol.properties["atomization"]
 			self.gradient_data[i][:mol.NAtoms()] = mol.properties["gradients"]
-			self.nearest_neighbors_data[i][:mol.NAtoms()] = mol.nearest_ns
 			self.num_atoms_data[i] = mol.NAtoms()
 		return
 
@@ -347,8 +345,8 @@ class UniversalNetwork(object):
 		with tf.variable_scope("energy_network", reuse=tf.AUTO_REUSE):
 			code_kernel1 = tf.get_variable(name="CodeKernel", shape=(4, 4),dtype=self.tf_precision)
 			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(4, 4),dtype=self.tf_precision)
-			variables.append(code_kernel1)
-			variables.append(code_kernel2)
+			# variables.append(code_kernel1)
+			# variables.append(code_kernel2)
 			coded_weights = tf.matmul(atom_codes, code_kernel1)
 			coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
 			coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
@@ -532,12 +530,23 @@ class UniversalNetwork(object):
 			batch_data = self.get_train_batch(self.batch_size)
 			feed_dict = self.fill_feed_dict(batch_data)
 			if self.train_gradients and self.train_charges:
-				_, summaries, total_loss, energy_loss, gradient_loss, charge_loss = self.sess.run([self.energy_train_op,
+				_, summaries, total_loss, energy_loss, gradient_loss, charge_loss = self.sess.run([self.train_op,
 				self.summary_op, self.total_loss, self.energy_loss, self.gradient_loss, self.charge_loss], feed_dict=feed_dict)
 				train_gradient_loss += gradient_loss
 				train_charge_loss += charge_loss
+				print(total_loss, energy_loss, gradient_loss, charge_loss)
+			elif self.train_charges:
+				_, summaries, total_loss, energy_loss, charge_loss = self.sess.run([self.train_op,
+				self.summary_op, self.total_loss, self.energy_loss, self.charge_loss], feed_dict=feed_dict)
+				train_charge_loss += charge_loss
+				print(total_loss, energy_loss, charge_loss)
+			elif self.train_gradients:
+				_, summaries, total_loss, energy_loss, gradient_loss = self.sess.run([self.train_op,
+				self.summary_op, self.total_loss, self.energy_loss, self.gradient_loss], feed_dict=feed_dict)
+				train_gradient_loss += gradient_loss
+				print(total_loss, energy_loss, gradient_loss)
 			else:
-				_, summaries, total_loss, energy_loss = self.sess.run([self.energy_train_op,
+				_, summaries, total_loss, energy_loss = self.sess.run([self.train_op,
 				self.summary_op, self.total_loss, self.energy_loss], feed_dict=feed_dict)
 			train_loss += total_loss
 			train_energy_loss += energy_loss
@@ -562,50 +571,63 @@ class UniversalNetwork(object):
 		test_energy_loss = 0.0
 		test_gradient_loss = 0.0
 		test_charge_loss = 0.0
-		test_epoch_energy_labels, test_epoch_energy_outputs = [], []
-		test_epoch_force_labels, test_epoch_force_outputs = [], []
-		test_epoch_charge_labels, test_epoch_charge_outputs = [], []
+		test_energy_labels, test_energy_outputs = [], []
+		test_force_labels, test_force_outputs = [], []
+		test_charge_labels, test_charge_outputs = [], []
 		num_atoms_epoch = 0.0
 		for ministep in range (0, int(Ncase_test/self.batch_size)):
 			batch_data = self.get_test_batch(self.batch_size)
 			feed_dict = self.fill_feed_dict(batch_data)
-			total_energies, energy_labels, gradients, gradient_labels, charges, charge_labels, total_loss, energy_loss, gradient_loss, charge_loss, num_atoms = self.sess.run([self.total_energy,
-			self.energy_pl, self.gradients, self.gradient_labels, self.charges, self.charge_labels,
-			self.total_loss, self.energy_loss, self.gradient_loss, self.charge_loss, self.num_atoms_pl],  feed_dict=feed_dict)
+			if self.train_charges:
+				total_energies, energy_labels, gradients, gradient_labels, charges, charge_labels, total_loss, energy_loss, gradient_loss, charge_loss, num_atoms = self.sess.run([self.total_energy,
+				self.energy_pl, self.gradients, self.gradient_labels, self.charges, self.charge_labels,
+				self.total_loss, self.energy_loss, self.gradient_loss, self.charge_loss, self.num_atoms_pl],  feed_dict=feed_dict)
+				test_charge_loss += charge_loss
+				test_charge_labels.append(charge_labels)
+				test_charge_outputs.append(charges)
+			else:
+				total_energies, energy_labels, gradients, gradient_labels, total_loss, energy_loss, gradient_loss, num_atoms = self.sess.run([self.total_energy,
+				self.energy_pl, self.gradients, self.gradient_labels, self.total_loss, self.energy_loss,
+				self.gradient_loss, self.num_atoms_pl],  feed_dict=feed_dict)
 			test_loss += total_loss
 			num_mols += self.batch_size
 			test_energy_loss += energy_loss
 			test_gradient_loss += gradient_loss
-			test_charge_loss += charge_loss
-			test_epoch_energy_labels.append(energy_labels)
-			test_epoch_energy_outputs.append(total_energies)
-			test_epoch_force_labels.append(-1.0 * gradient_labels)
-			test_epoch_force_outputs.append(-1.0 * gradients)
-			test_epoch_charge_labels.append(charge_labels)
-			test_epoch_charge_outputs.append(charges)
+			test_energy_labels.append(energy_labels)
+			test_energy_outputs.append(total_energies)
+			test_force_labels.append(-1.0 * gradient_labels)
+			test_force_outputs.append(-1.0 * gradients)
 			num_atoms_epoch += np.sum(num_atoms)
-		test_epoch_energy_labels = np.concatenate(test_epoch_energy_labels)
-		test_epoch_energy_outputs = np.concatenate(test_epoch_energy_outputs)
-		test_epoch_energy_errors = test_epoch_energy_labels - test_epoch_energy_outputs
-		test_epoch_force_labels = np.concatenate(test_epoch_force_labels)
-		test_epoch_force_outputs = np.concatenate(test_epoch_force_outputs)
-		test_epoch_force_errors = test_epoch_force_labels - test_epoch_force_outputs
-		test_epoch_energy_labels = np.concatenate(test_epoch_charge_labels)
-		test_epoch_energy_outputs = np.concatenate(test_epoch_charge_outputs)
-		test_epoch_energy_errors = test_epoch_charge_labels - test_epoch_charge_outputs
+		test_energy_labels = np.concatenate(test_energy_labels)
+		test_energy_outputs = np.concatenate(test_energy_outputs)
+		test_energy_errors = test_energy_labels - test_energy_outputs
+		test_force_labels = np.concatenate(test_force_labels)
+		test_force_outputs = np.concatenate(test_force_outputs)
+		test_force_errors = test_force_labels - test_force_outputs
 		duration = time.time() - start_time
 		for i in [random.randint(0, self.batch_size - 1) for _ in xrange(10)]:
-			LOGGER.info("Energy label: %11.8f  Energy output: %11.8f", test_epoch_energy_labels[i], test_epoch_energy_outputs[i])
+			LOGGER.info("Energy label: %11.8f  Energy output: %11.8f", test_energy_labels[i], test_energy_outputs[i])
 		for i in [random.randint(0, num_atoms_epoch - 1) for _ in xrange(10)]:
-			LOGGER.info("Charge label: %11.8f  Charge output: %11.8f", test_epoch_charge_labels[i], test_epoch_charge_outputs[i])
-		for i in [random.randint(0, num_atoms_epoch - 1) for _ in xrange(10)]:
-			LOGGER.info("Forces label: %s  Forces output: %s", test_epoch_force_labels[i], test_epoch_force_outputs[i])
-		LOGGER.info("MAE  Energy: %11.8f  Forces: %11.8f  Charges %11.8f", np.mean(np.abs(test_epoch_energy_errors)),
-		np.mean(np.abs(test_epoch_force_errors)), np.mean(np.abs(test_epoch_charge_errors)))
-		LOGGER.info("MSE  Energy: %11.8f  Forces: %11.8f  Charges %11.8f", np.mean(test_epoch_energy_errors),
-		np.mean(test_epoch_force_errors), np.mean(test_epoch_charge_errors))
-		LOGGER.info("RMSE Energy: %11.8f  Forces: %11.8f  Charges %11.8f", np.sqrt(np.mean(np.square(test_epoch_energy_errors))),
-		np.sqrt(np.mean(np.square(test_epoch_force_errors))), np.sqrt(np.mean(np.square(test_epoch_charge_errors))))
+			LOGGER.info("Forces label: %s  Forces output: %s", test_force_labels[i], test_force_outputs[i])
+		if self.train_charges:
+			test_charge_labels = np.concatenate(test_charge_labels)
+			test_charge_outputs = np.concatenate(test_charge_outputs)
+			test_charge_errors = test_charge_labels - test_charge_outputs
+			for i in [random.randint(0, num_atoms_epoch - 1) for _ in xrange(10)]:
+				LOGGER.info("Charge label: %11.8f  Charge output: %11.8f", test_charge_labels[i], test_charge_outputs[i])
+			LOGGER.info("MAE  Energy: %11.8f  Forces: %11.8f  Charges %11.8f", np.mean(np.abs(test_energy_errors)),
+			np.mean(np.abs(test_force_errors)), np.mean(np.abs(test_charge_errors)))
+			LOGGER.info("MSE  Energy: %11.8f  Forces: %11.8f  Charges %11.8f", np.mean(test_energy_errors),
+			np.mean(test_force_errors), np.mean(test_charge_errors))
+			LOGGER.info("RMSE Energy: %11.8f  Forces: %11.8f  Charges %11.8f", np.sqrt(np.mean(np.square(test_energy_errors))),
+			np.sqrt(np.mean(np.square(test_force_errors))), np.sqrt(np.mean(np.square(test_charge_errors))))
+		else:
+			LOGGER.info("MAE  Energy: %11.8f  Forces: %11.8f", np.mean(np.abs(test_energy_errors)),
+			np.mean(np.abs(test_force_errors)))
+			LOGGER.info("MSE  Energy: %11.8f  Forces: %11.8f", np.mean(test_energy_errors),
+			np.mean(test_force_errors))
+			LOGGER.info("RMSE Energy: %11.8f  Forces: %11.8f", np.sqrt(np.mean(np.square(test_energy_errors))),
+			np.sqrt(np.mean(np.square(test_force_errors))))
 		self.print_epoch(step, duration, test_loss, test_energy_loss, test_gradient_loss, test_charge_loss, testing=True)
 		return test_loss
 
@@ -663,25 +685,25 @@ class UniversalNetwork(object):
 					self.charges = tf.gather_nd(atom_charges, padding_mask)
 					self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
 					self.charge_loss = self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
-					tf.summary.scalar("charge loss", self.charge_loss)
+					tf.summary.scalar("charge_loss", self.charge_loss)
 					tf.add_to_collection('total_loss', self.charge_loss)
 					self.mol_coulomb_energy = tf.reshape(tf.reduce_sum(atom_coulomb_energy, axis=1), [self.batch_size])
 					self.total_energy += self.mol_coulomb_energy
 			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
-			tf.summary.scalar("energy loss", self.energy_loss)
+			tf.summary.scalar("energy_loss", self.energy_loss)
 			tf.add_to_collection('total_loss', self.energy_loss)
 			with tf.name_scope('gradients'):
 				xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 				self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
-				self.gradient_loss = 0.001 * self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
+				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
 				if self.train_gradients:
 					tf.add_to_collection('total_loss', self.gradient_loss)
-					tf.summary.scalar("gradient loss", self.gradient_loss)
+					tf.summary.scalar("gradient_loss", self.gradient_loss)
 			self.total_loss = tf.add_n(tf.get_collection('total_loss'))
 			tf.summary.scalar('total_loss', self.total_loss)
 
-			self.energy_train_op = self.optimizer(self.total_loss, self.learning_rate, self.momentum)
+			self.train_op = self.optimizer(self.total_loss, self.learning_rate, self.momentum, energy_variables)
 			self.summary_op = tf.summary.merge_all()
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
