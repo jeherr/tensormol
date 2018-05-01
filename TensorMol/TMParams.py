@@ -93,6 +93,7 @@ class TMParams(dict):
 		self["RotAvOutputs"] = 1 # Rotational averaging of force outputs.
 		self["OctahedralAveraging"] = 0 # Octahedrally Average Outputs
 		self["train_gradients"] = True
+		self["train_charges"] = True
 		self["train_dipole"] = True
 		self["train_quadrupole"] = False
 		self["train_rotation"] = True

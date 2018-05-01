@@ -316,9 +316,10 @@ def train_energy_GauSHv2(mset):
 
 def train_energy_univ(mset):
 	PARAMS["train_gradients"] = False
+	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [512, 512, 512]
-	PARAMS["learning_rate"] = 0.001
+	PARAMS["HiddenLayers"] = [256, 256, 256]
+	PARAMS["learning_rate"] = 0.0001
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
 	PARAMS["batch_size"] = 100
