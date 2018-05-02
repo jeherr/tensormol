@@ -5,11 +5,11 @@ It's a little recurrent-y.
 import os
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 HAS_MATPLOTLIB=False
-#try:
-#	import matplotlib.pyplot as plt
-#	HAS_MATPLOTLIB=True
-#except Exception as Ex:
-#	HAS_MATPLOTLIB=False
+try:
+	import matplotlib.pyplot as plt
+	HAS_MATPLOTLIB=True
+except Exception as Ex:
+	HAS_MATPLOTLIB=False
 
 from TensorMol import *
 import numpy as np
@@ -45,13 +45,12 @@ if (0):
 		MasterSet.Save("MasterSet")
 
 if 1:
-	b = MSet("MasterSet")
-#	b = MSet("HNCO_small")
+#	b = MSet("MasterSet")
+	b = MSet("HNCO_small")
 	b.Load()
 	b.cut_max_num_atoms(40)
 	b.cut_max_grad(2.0)
 	b.cut_energy_outliers()
-	b.Save("MasterSet40")
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -101,18 +100,31 @@ def polykern(r):
 		f = 0.000225092
 		g = -3.97476e-6
 		h = 2.95926e-8
+	if 0:
+		SRInner = 6.0
+		SROuter = 8.0
+		LRInner = 13.
+		LROuter = 15.
+		a = -57.6862
+		b = 40.2721
+		c = -11.7317
+		d = 1.8806
+		e = -0.179183
+		f = 0.0101501
+		g = -0.000316629
+		h = 4.19773e-6
 	SRInner = 6.0
-	SROuter = 8.0
-	LRInner = 13.
-	LROuter = 15.
-	a = -57.6862
-	b = 40.2721
-	c = -11.7317
-	d = 1.8806
-	e = -0.179183
-	f = 0.0101501
-	g = -0.000316629
-	h = 4.19773e-6
+	SROuter = 9.0
+	LRInner = 16.
+	LROuter = 19.
+	a = -17.8953
+	b = 11.0312
+	c = -2.72193
+	d = 0.36794
+	e = -0.0294324
+	f = 0.00139391
+	g = -0.0000362146
+	h = 3.98488e-7
 	r2=r*r
 	r3=r2*r
 	r4=r3*r
@@ -126,43 +138,6 @@ def polykern(r):
 				(a+b*r+c*r2+d*r3+e*r4+f*r5+g*r6+h*r7)/r))
 	return kern
 
-def CanonicalizeGS(dxyzs,z2s):
-	"""
-	This version returns two sets of axes for nearest and next-nearest neighbor.
-	If the energy from both these representations is summed the result
-	should be permutationally invariant and rot. inv.
-
-	Args:
-		dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
-		zs: a nMol X maxNatom X maxNatom X 1 tensor of atomic number pairs.
-		ie: ... X i X i = (0.,0.,0.))
-	"""
-	# Append orthogonal axes to dxyzs
-	argshape = tf.shape(dxyzs)
-	realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
-
-	v1 = tf.reshape(dxyzs[:,:,:1,:],(argshape[0]*argshape[1],3))+tf.constant(np.array([1e-6,0.,0.]),dtype=self.prec)
-	v1 *= safe_inv_norm(v1)
-	v2 = tf.reshape(dxyzs[:,:,1:2,:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,0.1e-6,0.]),dtype=self.prec)
-	v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
-	v2 *= safe_inv_norm(v2)
-	v3 = tf.cross(v1,v2)
-	v3 *= safe_inv_norm(v3)
-
-	v1p = tf.reshape(dxyzs[:,:,1:2,:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,0.1e-6,0.]),dtype=self.prec)
-	v1p *= safe_inv_norm(v1p)
-	v2p = tf.reshape(dxyzs[:,:,:1,:],(argshape[0]*argshape[1],3))+tf.constant(np.array([1e-6,0.,0.]),dtype=self.prec)
-	v2p -= tf.einsum('ij,ij->i',v1p,v2p)[:,tf.newaxis]*v1p
-	v2p *= safe_inv_norm(v2p)
-	v3p = tf.cross(v1p,v2p)
-	v3p *= safe_inv_norm(v3p)
-
-	vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
-	vsp = tf.concat([v1p[:,tf.newaxis,:],v2p[:,tf.newaxis,:],v3p[:,tf.newaxis,:]],axis=1)
-	tore = tf.einsum('ijk,ilk->ijl',realdata,vs)
-	torep = tf.einsum('ijk,ilk->ijl',realdata,vsp)
-	return tf.reshape(tore,tf.shape(dxyzs)),tf.reshape(torep,tf.shape(dxyzs))
-
 class SparseCodedChargedGauSHNetwork:
 	"""
 	This is the basic TensorMol0.2 model chemistry.
@@ -174,12 +149,12 @@ class SparseCodedChargedGauSHNetwork:
 		self.MaxNeigh_NN = self.MaxNAtom
 		self.MaxNeigh_J = self.MaxNAtom
 		self.learning_rate = 0.0001
-		self.ncan = 12
+		self.ncan = 6
 		self.DoHess=False
 		self.mode = mode
 		if (mode == 'eval'):
-			self.ncan=12
-		self.RCut_Coulomb = 15.0
+			self.ncan=6
+		self.RCut_Coulomb = 19.0
 		self.RCut_NN = 7.0
 		self.AtomCodes = ELEMENTCODES
 		#self.AtomCodes = np.random.random(size=(MAX_ATOMIC_NUMBER,6))
@@ -610,6 +585,63 @@ class SparseCodedChargedGauSHNetwork:
 
 		return AtomEnergies, AtomCharges
 
+	def CanonicalizeGS_old(self,dxyzs):
+		"""
+		This version returns two sets of axes for nearest and next-nearest neighbor.
+		If the energy from both these representations is averaged the result
+		will be permutationally invariant (WRT nearest-next-nearest motion)
+		and rotationally invariant.
+
+		Args:
+			dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
+			zs: a nMol X maxNatom X maxNatom X 1 tensor of atomic number pairs.
+			ie: ... X i X i = (0.,0.,0.))
+
+			also an ncan X nmol X maxNAtom X 1 tensor
+		"""
+		# Append orthogonal axes to dxyzs
+		argshape = tf.shape(dxyzs)
+		realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
+		if (self.ncan == 1):
+			orders = [[0,1]]
+		elif (self.ncan == 2):
+			orders = [[0,1],[1,0]]
+		elif (self.ncan == 4):
+			orders = [[0,1],[1,0],[0,2],[2,0]]
+		elif (self.ncan == 6):
+			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
+		elif (self.ncan == 12):
+			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
+		tore = []
+		weightstore = []
+		for perm in orders:
+			v1 = tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))
+			d1 = (tf.reshape(tf.reduce_sum(tf.pow(dxyzs[:,:,perm[0],:],2.0),axis=-1),(argshape[0]*argshape[1],1)))
+			d2 = (tf.reshape(tf.reduce_sum(tf.pow(dxyzs[:,:,perm[1],:],2.0),axis=-1),(argshape[0]*argshape[1],1)))
+			v1 += tf.constant(np.array([1e-14,0.,0.]),dtype=self.prec)
+			v1 *= safe_inv_norm(v1)
+			v2 = tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,1e-14,0.]),dtype=self.prec)
+			v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
+			v2 *= safe_inv_norm(v2)
+			v3 = tf.cross(v1,v2)
+			v3 *= safe_inv_norm(v3)
+			vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
+			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
+
+			NullAxis = tf.logical_or(tf.less_equal(d1,1e-14),tf.less_equal(d2,1e-14))
+			d1p = tf.where(NullAxis,tf.zeros_like(d1),tf.sqrt(d1))
+			d2p = tf.where(NullAxis,tf.zeros_like(d2),tf.sqrt(d2))
+			axis_max = 3.0
+			weight = tf.where(tf.logical_or(tf.less_equal(d1p*d2p,0.),tf.greater_equal(d1p*d2p,axis_max)),tf.zeros_like(d1),tf.cos(d1p*d2p/axis_max*Pi/2.0))
+			weightstore.append(weight)
+
+		allweight = tf.stack(weightstore,axis=0)
+		todenom = tf.reduce_sum(allweight,axis=0,keepdims=True)
+		denom = tf.where(tf.greater(todenom,0.0),1.0/todenom,tf.zeros_like(todenom))
+		axis_weights = tf.reshape(allweight*denom,(self.ncan,argshape[0],argshape[1]))
+		#axis_weights = tf.Print(axis_weights,[(tf.reshape(tf.reduce_sum(tf.pow(dxyzs[:,:,perm[0],:],2.0),axis=-1),(argshape[0]*argshape[1],1))),tf.shape(axis_weights),axis_weights[:,0]],"AxisWeights",summarize=1000)
+		return tf.stack(tore,axis=0), axis_weights
+
 	def CanonicalizeGS(self,dxyzs):
 		"""
 		This version returns two sets of axes for nearest and next-nearest neighbor.
@@ -628,29 +660,52 @@ class SparseCodedChargedGauSHNetwork:
 		argshape = tf.shape(dxyzs)
 		realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
 		if (self.ncan == 2):
-			orders = [[0,1],[1,0]]
-		#elif (self.ncan == 6):
-		#	orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
+			axes = [0,1]
+		elif (self.ncan == 4):
+			axes = [0,1,2,3]
+		elif (self.ncan == 5):
+			axes = [0,1,2,3,4]
 		elif (self.ncan == 6):
-			orders = [[0,1],[1,0],[1,2],[2,1],[3,2],[2,3]]
+			axes = [0,1,2,3,4,5]
+		elif (self.ncan == 8):
+			axes = [0,1,2,3,4,5,6,7]
 		elif (self.ncan == 12):
-			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
+			axes = [0,1,2,3,4,5,6,7,8,9,10,11]
+		elif (self.ncan == 14):
+			axes = [0,1,2,3,4,5,6,7,8,9,10,11,12,13]
 		tore = []
 		weightstore = []
-		for perm in orders:
-			v1 = tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))
-			w1 = (tf.reshape(tf.reduce_sum(tf.pow(dxyzs[:,:,perm[0],:],2.0),axis=-1),(argshape[0]*argshape[1],1)))
-			v1 += tf.constant(np.array([1e-20,0.,0.]),dtype=self.prec)
+		for taxis in axes:
+			v1 = tf.reshape(dxyzs[:,:,taxis,:],(argshape[0]*argshape[1],3))
+			d1 = (tf.reshape(tf.reduce_sum(tf.pow(dxyzs[:,:,taxis,:],2.0),axis=-1),(argshape[0]*argshape[1],1)))
+			v1 += tf.constant(np.array([1e-14,0.,0.]),dtype=self.prec)
 			v1 *= safe_inv_norm(v1)
-			v2 = tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,1e-20,0.]),dtype=self.prec)
+			# Weight all other axes by their distances to the origin
+
+			wdxyzs = safe_inv_norm(dxyzs)*dxyzs
+			#v2 = tf.reshape(tf.reduce_mean(dxyzs*w2 - dxyzs[:,:,taxis,:][:,:,tf.newaxis,:],axis=2),(argshape[0]*argshape[1],3)) + tf.constant(np.array([0.,1e-14,0.]),dtype=self.prec)
+			v2 = tf.reshape(tf.reduce_mean(wdxyzs-wdxyzs[:,:,taxis,tf.newaxis,:],axis=2),(argshape[0]*argshape[1],3)) + tf.constant(np.array([0.,1e-14,0.]),dtype=self.prec)
 			v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 			v2 *= safe_inv_norm(v2)
 			v3 = tf.cross(v1,v2)
 			v3 *= safe_inv_norm(v3)
 			vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
-			weightstore.append(w1)
-		return tf.stack(tore,axis=0), tf.reshape(tf.nn.softmax(-1*tf.stack(weightstore,axis=0),axis=0),(self.ncan,argshape[0],argshape[1]))
+
+			NullAxis = tf.less_equal(d1,1e-14)
+			d1p = tf.where(NullAxis,tf.zeros_like(d1),d1)
+			axis_max = 2.8
+			weight = tf.where(tf.logical_or(tf.less_equal(d1p,0.),tf.greater_equal(d1p,axis_max*axis_max)),tf.zeros_like(d1),tf.cos(d1p/axis_max/axis_max*Pi/2.0))
+			#weight = tf.where(tf.less_equal(d1p,0.),tf.zeros_like(d1),tf.exp(-2.0*d1p))
+			weightstore.append(weight)
+
+		allweight = tf.stack(weightstore,axis=0)
+		todenom = tf.reduce_sum(allweight,axis=0,keepdims=True)
+		denom = tf.where(tf.greater(todenom,0.0),1.0/todenom,tf.zeros_like(todenom))
+		axis_weights = tf.reshape(allweight*denom,(self.ncan,argshape[0],argshape[1]))
+		axis_weights = tf.Print(axis_weights,[axis_weights[:,0]],"AxisWeights",summarize=1000)
+		return tf.stack(tore,axis=0), axis_weights
+
 
 	def ChargeEmbeddedModel(self, dxyzs, Zs, zjs, gather_inds, pair_mask, gauss_params, atom_codes, l_max):
 		"""
@@ -857,6 +912,12 @@ class SparseCodedChargedGauSHNetwork:
 		self.DoChargeLearning = True
 		self.DoChargeEmbedding = True
 
+		if (self.mode == 'eval'):
+			self.DoForceLearning = False
+			self.DoCodeLearning = False
+			self.DoDipoleLearning = False
+			self.DoChargeLearning = False
+
 		self.xyzs_pl = tf.placeholder(shape = (self.batch_size,self.MaxNAtom,3), dtype = self.prec, name="InputCoords")
 		self.zs_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, 1), dtype = tf.int32, name="InputZs")
 		self.nl_nn_pl = tf.placeholder(shape = (self.batch_size, self.MaxNAtom, self.MaxNeigh_NN), dtype = tf.int32,name="InputNL_NN")
@@ -935,7 +996,9 @@ class SparseCodedChargedGauSHNetwork:
 		else:
 			self.AtomNetEnergies,self.AtomCharges = self.ChargeEmbeddedModel(self.dxyzs, self.zs_pl, zjs,gather_inds, self.sparse_mask, self.gp_tf, self.atom_codes, self.l_max)
 
-		if (self.DoChargeEmbedding or self.DoChargeLearning or self.DoDipoleLearning):
+		self.AtomNetEnergies = tf.Print(self.AtomNetEnergies,[self.AtomNetEnergies],"AtomEnergies",summarize=1000000)
+
+		if (self.DoChargeLearning or self.DoDipoleLearning):
 			self.MolDipoles = self.ChargeToDipole(self.xyzs_pl,self.zs_pl,self.AtomCharges)
 			self.Qloss = tf.nn.l2_loss(self.AtomCharges - self.groundTruthQ_pl,name='Qloss')/tf.cast(self.batch_size*self.MaxNAtom,self.prec)
 			self.Dloss = tf.nn.l2_loss(self.MolDipoles - self.groundTruthD_pl,name='Dloss')/tf.cast(self.batch_size,self.prec)
@@ -943,22 +1006,19 @@ class SparseCodedChargedGauSHNetwork:
 			tf.summary.scalar('Dloss',self.Dloss)
 			tf.add_to_collection('losses', self.Qloss)
 			tf.add_to_collection('losses', self.Dloss)
-			if (self.DoChargeEmbedding):
-				coord2_j = tf.gather_nd(tmpxyzs,gather_inds_j)
-				diff0_j = (coord1-coord2_j)
-				dxyzs_j = tf.where(Atom12Real3_j, diff0_j, tf.zeros_like(diff0_j))
-				q2 = tf.gather_nd(self.AtomCharges, gather_inds_j)
-				q1q2unmsk = (self.AtomCharges[:,:,tf.newaxis]*q2)
-				q1q2s = tf.where(Atom12Real_j[:,:,:,0],q1q2unmsk,tf.zeros_like(q1q2unmsk))
-				self.AtomCoulEnergies = tf.where(tf.greater(self.zs_pl,0),self.CoulombAtomEnergies(tf.norm(dxyzs_j,axis=-1),q1q2s),tf.zeros_like(self.AtomNetEnergies))
-			else:
-				self.AtomCoulEnergies = tf.zeros_like(self.AtomNetEnergies)
+		if (self.DoChargeEmbedding):
+			coord2_j = tf.gather_nd(tmpxyzs,gather_inds_j)
+			diff0_j = (coord1-coord2_j)
+			dxyzs_j = tf.where(Atom12Real3_j, diff0_j, tf.zeros_like(diff0_j))
+			q2 = tf.gather_nd(self.AtomCharges, gather_inds_j)
+			q1q2unmsk = (self.AtomCharges[:,:,tf.newaxis]*q2)
+			q1q2s = tf.where(Atom12Real_j[:,:,:,0],q1q2unmsk,tf.zeros_like(q1q2unmsk))
+			self.AtomCoulEnergies = tf.where(tf.greater(self.zs_pl,0),self.CoulombAtomEnergies(tf.norm(dxyzs_j,axis=-1),q1q2s),tf.zeros_like(self.AtomNetEnergies))
 		else:
 			self.AtomCoulEnergies = tf.zeros_like(self.AtomNetEnergies)
 
 		self.MolCoulEnergies = tf.reduce_sum(self.AtomCoulEnergies,axis=1,keepdims=False)
 
-		#self.AtomEnergies = tf.Print(self.AtomEnergies,[tf.gradients(self.AtomEnergies,self.xyzs_pl)[0]],"self.AtomEnergies",summarize=1000000)
 		if (self.DoChargeEmbedding):
 			self.AtomEnergies = self.AtomNetEnergies + self.AtomCoulEnergies
 		else:
@@ -1016,9 +1076,9 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=b,load=False,load_averages=False,mode='train')
+net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=True,mode='eval')
 #net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
-net.Train()
+#net.Train()
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
@@ -1067,16 +1127,31 @@ if 0:
 if 1:
 	for i in range(5):
 		mi = np.random.randint(len(b.mols))
-		m = b.mols[mi]
+		m = copy.deepcopy(b.mols[mi])
 		print(m.atoms, m.coords)
 		EF = net.GetEnergyForceRoutine(m)
 		print(EF(m.coords))
 		Opt = GeomOptimizer(EF)
-		m=Opt.Opt(m,"TEST"+str(i))
-		m.Distort(0.2)
-		m=Opt.Opt(m,"FromDistorted"+str(i))
+		m1=Opt.Opt(m,"TEST"+str(i))
+		#m2 = Mol(m.atoms,m.coords)
+		#m2.Distort(0.3)
+		#m2=Opt.Opt(m2,"FromDistorted"+str(i))
+		# Do a detailed energy, force scan for geoms along the opt coordinate.
+		interp = m1.Interpolation(b.mols[mi],n=500)
+		ens = np.zeros(len(interp))
+		fs = np.zeros((len(interp),m.NAtoms(),3))
+		for j,mp in enumerate(interp):
+			ens[j],fs[j] = EF(mp.coords)
+		plt.plot(ens)
+		plt.show()
+		# Compare force projected on each step with evaluated force.
+		#for j in range(1,len(interp)):
+		#	fs[j-1]
 
-if 0:
+
+
+
+if 1:
 	from matplotlib import pyplot as plt
 	import matplotlib.cm as cm
 	m = Mol()

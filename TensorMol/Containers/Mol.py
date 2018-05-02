@@ -653,6 +653,12 @@ class Mol:
 			self.coords[self.ElementBounds[e][0]:self.ElementBounds[e][1],:] = blk[inds]
 		return
 
+	def Interpolation(self,b,n=10):
+		tore = []
+		for frac in np.linspace(0.0,1.0,n):
+			tore.append(Mol(self.atoms,self.coords*frac+b.coords*(1.0-frac)))
+		return tore
+
 	def WriteInterpolation(self,b,n=10):
 		for i in range(n): # Check the interpolation.
 			m=Mol(self.atoms,self.coords*((9.-i)/9.)+b.coords*((i)/9.))

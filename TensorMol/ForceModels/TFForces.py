@@ -201,13 +201,10 @@ class BumpHolder(ForceHolder):
 		return self.sess.run([self.BowlE,self.BowlF], feed_dict = {self.x_pl:x_})
 
 class BondConstraint(ForceHolder):
+	"""
+	Constrains a distance between two atoms.
+	"""
 	def __init__(self,m_,at1,at2):
-		"""
-		Constraint and Basin-Filling for bond distances, angles, and torsions
-		The idea is to hold bonds together, while perturbing angles and torsions.
-		So actually a constraint potential is added to bond lengths,
-		while the others get perturbations.
-		"""
 		natom_ = m_.NAtoms()
 		self.natom = natom_
 		ForceHolder.__init__(self, natom_)
@@ -252,6 +249,39 @@ class BondConstraint(ForceHolder):
 		feed_dict={self.x_pl:x_,self.db_pl:r_}
 		CE,CF = self.sess.run([self.CE,self.CF],feed_dict=feed_dict)
 		return CE,CF
+
+class SelectionConstraint(ForceHolder):
+	"""
+	Allows user to enforce center-of-atom constraints between two groups
+	of Atoms. (group two lies between at1 and at2)
+	"""
+	def __init__(self,m_,at1,at2=-1):
+		natom_ = m_.NAtoms()
+		self.natom = natom_
+		ForceHolder.__init__(self, natom_)
+		self.at1 = at1 # in this case this is a range of atoms.
+		self.at2 = at2
+		self.Prepare()
+		return
+	def Prepare(self):
+		with tf.Graph().as_default():
+			self.x_pl=tf.placeholder(tf.float64, shape=tuple([self.natom,3]))
+			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+			#self.summary_writer = tf.summary.FileWriter(self.train_dir, self.sess.graph)
+			init = tf.global_variables_initializer()
+			self.sess.run(init)
+		return
+
+	def Constraint(self,x_,r_):
+		"""
+		Tries to keep things together while harmonically forcing a torsion
+		To adopt a certain value. Assumes that self.dbumps etc.
+		are filled with the desired quantities by PreConstraint
+		"""
+		feed_dict={self.x_pl:x_,self.db_pl:r_}
+		CE,CF = self.sess.run([self.CE,self.CF],feed_dict=feed_dict)
+		return CE,CF
+
 
 class TopologyBumper(ForceHolder):
 	def __init__(self,m_,maxbump_=500):
