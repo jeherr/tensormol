@@ -47,16 +47,12 @@ class UniversalNetwork(object):
 		self.max_checkpoints = PARAMS["max_checkpoints"]
 		self.path = PARAMS["networks_directory"]
 		self.train_gradients = PARAMS["train_gradients"]
-		self.train_dipole = PARAMS["train_dipole"]
-		self.train_quadrupole = PARAMS["train_quadrupole"]
-		self.train_sparse = PARAMS["train_sparse"]
-		self.sparse_cutoff = PARAMS["sparse_cutoff"]
+		self.train_charges = PARAMS["train_charges"]
 		self.profiling = PARAMS["Profiling"]
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.test_ratio = PARAMS["TestRatio"]
 		self.element_codes = ELEMENTCODES
 		self.assign_activation()
-
 
 		#Reloads a previous network if name variable is not None
 		if name != None:
@@ -72,16 +68,12 @@ class UniversalNetwork(object):
 		self.elements = self.mol_set.AtomTypes()
 		self.max_num_atoms = self.mol_set.MaxNAtom()
 		self.num_molecules = len(self.mol_set.mols)
-		if self.train_sparse:
-			self.max_num_pairs = self.mol_set.max_neighbors()
 		self.step = 0
 		self.test_freq = PARAMS["test_freq"]
-		self.network_type = "GauSH_Univ"
+		self.network_type = "SF_Universal"
 		self.name = self.network_type+"_"+self.mol_set_name+"_"+time.strftime("%a_%b_%d_%H.%M.%S_%Y")
 		self.network_directory = PARAMS["networks_directory"]+self.name
-		self.l_max = PARAMS["SH_LMAX"]
-		self.gaussian_params = PARAMS["RBFS"]
-
+		self.set_symmetry_function_params()
 		LOGGER.info("learning rate: %f", self.learning_rate)
 		LOGGER.info("batch size:    %d", self.batch_size)
 		LOGGER.info("max steps:     %d", self.max_steps)
@@ -90,7 +82,7 @@ class UniversalNetwork(object):
 	def __getstate__(self):
 		state = self.__dict__.copy()
 		remove_vars = ["mol_set", "activation_function", "xyz_data", "Z_data", "energy_data", "dipole_data",
-						"num_atoms_data", "gradient_data", "pairs_data"]
+						"num_atoms_data", "gradient_data"]
 		for var in remove_vars:
 			try:
 				del state[var]
@@ -112,7 +104,7 @@ class UniversalNetwork(object):
 		num_angular_rs = PARAMS["AN1_num_a_Rs"]
 		num_angular_theta_s = PARAMS["AN1_num_a_As"]
 		self.angular_cutoff = PARAMS["AN1_a_Rc"]
-		self.theta_s = 2.0 * np.pi * np.linspace(0, (num_angular_theta_s - 1.0) / num_angular_theta_s, num_angular_theta_s)
+		self.theta_s = np.pi * np.linspace(0, (num_angular_theta_s - 1.0) / num_angular_theta_s, num_angular_theta_s)
 		self.angular_rs = self.angular_cutoff * np.linspace(0, (num_angular_rs - 1.0) / num_angular_rs, num_angular_rs)
 		return
 
@@ -163,9 +155,9 @@ class UniversalNetwork(object):
 	def train(self):
 		for i in range(self.max_steps):
 			self.step += 1
-			self.energy_train_step(self.step)
+			self.train_step(self.step)
 			if self.step%self.test_freq==0:
-				test_loss = self.energy_test_step(self.step)
+				test_loss = self.test_step(self.step)
 				if self.step == self.test_freq:
 					self.best_loss = test_loss
 					self.save_checkpoint(self.step)
@@ -210,30 +202,16 @@ class UniversalNetwork(object):
 				print("TensorData object has no molecule set.", Ex)
 		self.xyz_data = np.zeros((self.num_molecules, self.max_num_atoms, 3), dtype = np.float64)
 		self.Z_data = np.zeros((self.num_molecules, self.max_num_atoms), dtype = np.int32)
-		# self.mulliken_charges_data = np.zeros((self.num_molecules, self.max_num_atoms), dtype = np.float64)
+		self.charges_data = np.zeros((self.num_molecules, self.max_num_atoms), dtype = np.float64)
 		self.num_atoms_data = np.zeros((self.num_molecules), dtype = np.int32)
 		self.energy_data = np.zeros((self.num_molecules), dtype = np.float64)
 		self.gradient_data = np.zeros((self.num_molecules, self.max_num_atoms, 3), dtype=np.float64)
-		self.nearest_neighbors_data = np.zeros((self.num_molecules, self.max_num_atoms, 2), dtype=np.int32)
-		if self.train_dipole:
-			self.dipole_data = np.zeros((self.num_molecules, 3), dtype = np.float64)
-		if self.train_sparse:
-			self.pairs_data = np.zeros((self.num_molecules, self.max_num_atoms, self.max_num_pairs, 2), dtype=np.uint16)
 		for i, mol in enumerate(self.mol_set.mols):
 			self.xyz_data[i][:mol.NAtoms()] = mol.coords
 			self.Z_data[i][:mol.NAtoms()] = mol.atoms
-			# self.mulliken_charges_data[i][:mol.NAtoms()] = mol.properties["mulliken_charges"]
+			self.charges_data[i][:mol.NAtoms()] = mol.properties["charges"]
 			self.energy_data[i] = mol.properties["atomization"]
 			self.gradient_data[i][:mol.NAtoms()] = mol.properties["gradients"]
-			self.nearest_neighbors_data[i][:mol.NAtoms()] = mol.nearest_ns
-			if self.train_dipole:
-				self.dipole_data[i] = mol.properties["dipole"]
-			if self.train_quadrupole:
-				self.quadrupole_data[i] = mol.properties["quadrupole"]
-			if self.train_sparse:
-				for j, atom_pairs in enumerate(mol.neighbor_list):
-					self.pairs_data[i,j,:len(atom_pairs)] = np.stack([np.array(mol.neighbor_list[j]), mol.atoms[atom_pairs]], axis=-1)
-				self.batch_mol_idxs = np.tile(np.arange(self.batch_size), (1, self.max_num_pairs, self.max_num_atoms, 1)).T
 			self.num_atoms_data[i] = mol.NAtoms()
 		return
 
@@ -269,49 +247,47 @@ class UniversalNetwork(object):
 		LOGGER.debug("Number of test cases: %i", self.num_test_cases)
 		return
 
-	def get_energy_train_batch(self, batch_size):
+	def get_train_batch(self, batch_size):
 		if self.train_pointer + batch_size >= self.num_train_cases:
 			np.random.shuffle(self.train_idxs)
 			self.train_pointer = 0
 		self.train_pointer += batch_size
+		batch_xyzs = self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		batch_Zs = self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
+		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, True)
+		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 15.0, self.max_num_atoms, False, False)
 		batch_data = []
-		batch_data.append(self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
-		batch_data.append(self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(batch_xyzs)
+		batch_data.append(batch_Zs)
+		batch_data.append(nn_pairs)
+		batch_data.append(nn_triples)
+		batch_data.append(coulomb_pairs)
 		batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
-		# batch_data.append(self.nearest_neighbors_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
-		NL = NeighborListSet(self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]], self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]], True, True, self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]], sort_=True)
-		rad_p_ele, ang_t_elep, mil_j, mil_jk = NL.buildPairsAndTriplesWithEleIndexLinear(self.radial_cutoff, self.angular_cutoff, self.elements, self.element_pairs)
-		batch_data.append(rad_p_ele)
-		batch_data.append(ang_t_elep)
-		batch_data.append(mil_j)
-		batch_data.append(mil_jk)
-		if self.train_sparse:
-			pair_batch_data = np.concatenate((self.batch_mol_idxs, self.pairs_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]), axis=-1)
-			batch_data.append(pair_batch_data)
+		batch_data.append(self.charges_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
 		return batch_data
 
-	def get_energy_test_batch(self, batch_size):
+	def get_test_batch(self, batch_size):
 		if self.test_pointer + batch_size >= self.num_test_cases:
 			self.test_pointer = 0
 		self.test_pointer += batch_size
+		batch_xyzs = self.xyz_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
+		batch_Zs = self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
+		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
+		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, True)
+		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 15.0, self.max_num_atoms, False, False)
 		batch_data = []
-		batch_data.append(self.xyz_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
-		batch_data.append(self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		batch_data.append(batch_xyzs)
+		batch_data.append(batch_Zs)
+		batch_data.append(nn_pairs)
+		batch_data.append(nn_triples)
+		batch_data.append(coulomb_pairs)
 		batch_data.append(self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.energy_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		batch_data.append(self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
-		# batch_data.append(self.nearest_neighbors_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
-		NL = NeighborListSet(self.xyz_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]], self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]], True, True, self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]], sort_=True)
-		rad_p_ele, ang_t_elep, mil_j, mil_jk = NL.buildPairsAndTriplesWithEleIndexLinear(self.radial_cutoff, self.angular_cutoff, self.elements, self.element_pairs)
-		batch_data.append(rad_p_ele)
-		batch_data.append(ang_t_elep)
-		batch_data.append(mil_j)
-		batch_data.append(mil_jk)
-		if self.train_sparse:
-			pair_batch_data = np.concatenate((self.batch_mol_idxs, self.pairs_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]), axis=-1)
-			batch_data.append(pair_batch_data)
+		batch_data.append(self.charges_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
 		return batch_data
 
 	def variable_with_weight_decay(self, shape, stddev, weight_decay, name = None):
@@ -338,7 +314,7 @@ class UniversalNetwork(object):
 			tf.add_to_collection('energy_losses', weightdecay)
 		return variable
 
-	def fill_energy_feed_dict(self, batch_data):
+	def fill_feed_dict(self, batch_data):
 		"""
 		Fill the tensorflow feed dictionary.
 
@@ -349,13 +325,8 @@ class UniversalNetwork(object):
 		Returns:
 			Filled feed dictionary.
 		"""
-		pl_list = [self.xyzs_pl, self.Zs_pl, self.num_atoms_pl, self.energy_pl, self.gradients_pl]#, self.nearest_neighbors_pl]
-		pl_list.append(self.Radp_Ele_pl)
-		pl_list.append(self.Angt_Elep_pl)
-		pl_list.append(self.mil_j_pl)
-		pl_list.append(self.mil_jk_pl)
-		if self.train_sparse:
-			pl_list.append(self.pairs_pl)
+		pl_list = [self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.coulomb_pairs_pl,
+					self.num_atoms_pl, self.energy_pl, self.gradients_pl, self.charges_pl]
 		feed_dict={i: d for i, d in zip(pl_list, batch_data)}
 		return feed_dict
 
@@ -374,9 +345,11 @@ class UniversalNetwork(object):
 		with tf.variable_scope("energy_network", reuse=tf.AUTO_REUSE):
 			code_kernel1 = tf.get_variable(name="CodeKernel", shape=(4, 4),dtype=self.tf_precision)
 			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(4, 4),dtype=self.tf_precision)
+			# variables.append(code_kernel1)
+			# variables.append(code_kernel2)
 			coded_weights = tf.matmul(atom_codes, code_kernel1)
-			coded_embed = tf.einsum('ikj,ij->ikj', embed, coded_weights)
-			coded_embed = tf.reshape(tf.einsum('ikj,jl->ikl', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
+			coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
+			coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
 			for i in range(len(self.hidden_layers)):
 				if i == 0:
 					with tf.name_scope('hidden1'):
@@ -405,6 +378,113 @@ class UniversalNetwork(object):
 				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
+	def charge_inference(self, embed, atom_codes, Zs, n_atoms):
+		"""
+		Builds a Behler-Parinello graph
+
+		Args:
+			inp: a list of (num_of atom type X flattened input shape) matrix of input cases.
+			index: a list of (num_of atom type X batchsize) array which linearly combines the elements
+		Returns:
+			The BP graph output
+		"""
+		indices = tf.where(tf.not_equal(Zs, 0))
+		variables=[]
+		output = tf.zeros([self.batch_size, self.max_num_atoms], dtype=self.tf_precision)
+		with tf.variable_scope("charge_network", reuse=tf.AUTO_REUSE):
+			code_kernel1 = tf.get_variable(name="CodeKernel", shape=(4, 4),dtype=self.tf_precision)
+			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(4, 4),dtype=self.tf_precision)
+			variables.append(code_kernel1)
+			variables.append(code_kernel2)
+			coded_weights = tf.matmul(atom_codes, code_kernel1)
+			coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
+			coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
+			for i in range(len(self.hidden_layers)):
+				if i == 0:
+					with tf.name_scope('hidden1'):
+						weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
+								stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+						activations = self.activation_function(tf.matmul(coded_embed, weights) + biases)
+						variables.append(weights)
+						variables.append(biases)
+				else:
+					with tf.name_scope('hidden'+str(i+1)):
+						weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
+								stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
+						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+						activations = self.activation_function(tf.matmul(activations, weights) + biases)
+						variables.append(weights)
+						variables.append(biases)
+			with tf.name_scope('regression_linear'):
+				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 1],
+						stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
+				biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
+				outputs = tf.squeeze(tf.matmul(activations, weights) + biases, axis=1)
+				variables.append(weights)
+				variables.append(biases)
+				output += tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
+				excess_charge = tf.reduce_sum(output, axis=1)
+				output -= tf.expand_dims(excess_charge / tf.cast(n_atoms, eval(PARAMS["tf_prec"])), axis=-1)
+				mask = tf.where(tf.equal(Zs, 0), tf.zeros_like(Zs, dtype=eval(PARAMS["tf_prec"])),
+						tf.ones_like(Zs, dtype=eval(PARAMS["tf_prec"])))
+				output *= mask
+				tf.verify_tensor_all_finite(output,"Nan in output!!!")
+		return output, variables
+
+	def gather_coulomb(self, xyzs, Zs, atom_charges, pairs):
+		padding_mask = tf.where(tf.not_equal(Zs, 0))
+		central_atom_coords = tf.gather_nd(xyzs, padding_mask)
+		central_atom_charge = tf.gather_nd(atom_charges, padding_mask)
+		pairs = tf.gather_nd(pairs, padding_mask)
+		padded_pairs = tf.equal(pairs, -1)
+		tmp_pairs = tf.where(padded_pairs, tf.zeros_like(pairs), pairs)
+		gather_pairs = tf.stack([tf.cast(tf.tile(padding_mask[:,:1], [1, tf.shape(pairs)[1]]), tf.int32), tmp_pairs], axis=-1)
+		pair_coords = tf.gather_nd(xyzs, gather_pairs)
+		dxyzs = tf.expand_dims(central_atom_coords, axis=1) - pair_coords
+		pair_mask = tf.where(padded_pairs, tf.zeros_like(pairs), tf.ones_like(pairs))
+		dxyzs *= tf.cast(tf.expand_dims(pair_mask, axis=-1), eval(PARAMS["tf_prec"]))
+		pair_charges = tf.gather_nd(atom_charges, gather_pairs)
+		pair_charges *= tf.cast(pair_mask, eval(PARAMS["tf_prec"]))
+		q1q2 = tf.expand_dims(central_atom_charge, axis=-1) * pair_charges
+		return dxyzs, q1q2
+
+	def calculate_coulomb_energy(self, dxyzs, q1q2):
+		"""
+		Polynomial cutoff 1/r (in BOHR) obeying:
+		kern = 1/r at SROuter and LRInner
+		d(kern) = d(1/r) (true force) at SROuter,LRInner
+		d**2(kern) = d**2(1/r) at SROuter and LRInner.
+		d(kern) = 0 (no force) at/beyond SRInner and LROuter
+
+		The hard cutoff is LROuter
+		"""
+		dist_tensor = tf.norm(dxyzs+1.e-16)
+		dist_tensor *= 1.889725989
+		srange_inner = 6.0
+		srange_outer = 8.0
+		lrange_inner = 13.
+		lrange_outer = 15.
+		a, b, c, d, e, f, g, h = -57.6862, 40.2721, -11.7317, 1.8806, -0.179183, 0.0101501, -0.000316629, 4.19773e-6
+		mrange_kern = a + b * dist_tensor
+		dist_tensor_sq = tf.square(dist_tensor)
+		mrange_kern += c * dist_tensor_sq
+		dist_tensor_cu = dist_tensor_sq * dist_tensor
+		mrange_kern += d * dist_tensor_cu
+		dist_tensor_4 = dist_tensor_cu * dist_tensor
+		mrange_kern += d * dist_tensor_4
+		dist_tensor_5 = dist_tensor_4 * dist_tensor
+		mrange_kern += f * dist_tensor_5
+		dist_tensor_6 = dist_tensor_5 * dist_tensor
+		mrange_kern += g * dist_tensor_6
+		dist_tensor_7 = dist_tensor_6 * dist_tensor
+		mrange_kern += h * dist_tensor_7
+		kern = tf.where(tf.less(dist_tensor, srange_inner), tf.ones_like(dist_tensor) / srange_inner, mrange_kern / dist_tensor)
+		kern = tf.where(tf.greater(dist_tensor, lrange_outer), tf.ones_like(dist_tensor) / lrange_outer, kern)
+		mrange_energy = tf.reduce_sum(kern * q1q2, axis=1)
+		lrange_energy = tf.reduce_sum(q1q2, axis=1) / lrange_outer
+		return mrange_energy - lrange_energy
+
 	def optimizer(self, loss, learning_rate, momentum, variables=None):
 		"""
 		Sets up the training Ops.
@@ -432,7 +512,7 @@ class UniversalNetwork(object):
 		loss = tf.nn.l2_loss(error)
 		return loss
 
-	def energy_train_step(self, step):
+	def train_step(self, step):
 		"""
 		Perform a single training step (complete processing of all input), using minibatches of size self.batch_size
 
@@ -444,35 +524,39 @@ class UniversalNetwork(object):
 		train_loss =  0.0
 		train_energy_loss = 0.0
 		train_gradient_loss = 0.0
+		train_charge_loss = 0.0
 		num_mols = 0
 		for ministep in range (0, int(Ncase_train/self.batch_size)):
-			batch_data = self.get_energy_train_batch(self.batch_size)
-			feed_dict = self.fill_energy_feed_dict(batch_data)
-			if self.train_gradients:
-				_, summaries, total_loss, energy_loss, gradient_loss = self.sess.run([self.energy_train_op,
-				self.summary_op, self.energy_losses, self.energy_loss, self.gradient_loss], feed_dict=feed_dict)
+			batch_data = self.get_train_batch(self.batch_size)
+			feed_dict = self.fill_feed_dict(batch_data)
+			if self.train_gradients and self.train_charges:
+				_, summaries, total_loss, energy_loss, gradient_loss, charge_loss = self.sess.run([self.train_op,
+				self.summary_op, self.total_loss, self.energy_loss, self.gradient_loss, self.charge_loss], feed_dict=feed_dict)
 				train_gradient_loss += gradient_loss
+				train_charge_loss += charge_loss
+				print(total_loss, energy_loss, gradient_loss, charge_loss)
+			elif self.train_charges:
+				_, summaries, total_loss, energy_loss, charge_loss = self.sess.run([self.train_op,
+				self.summary_op, self.total_loss, self.energy_loss, self.charge_loss], feed_dict=feed_dict)
+				train_charge_loss += charge_loss
+				print(total_loss, energy_loss, charge_loss)
+			elif self.train_gradients:
+				_, summaries, total_loss, energy_loss, gradient_loss = self.sess.run([self.train_op,
+				self.summary_op, self.total_loss, self.energy_loss, self.gradient_loss], feed_dict=feed_dict)
+				train_gradient_loss += gradient_loss
+				print(total_loss, energy_loss, gradient_loss)
 			else:
-				if self.profiling:
-					_, summaries, total_loss, energy_loss = self.sess.run([self.energy_train_op,
-					self.summary_op, self.energy_losses, self.energy_loss], feed_dict=feed_dict,
-					options=self.options, run_metadata=self.run_metadata)
-					fetched_timeline = timeline.Timeline(self.run_metadata.step_stats)
-					chrome_trace = fetched_timeline.generate_chrome_trace_format()
-					with open('timeline_step_%d.json' % ministep, 'w') as f:
-						f.write(chrome_trace)
-				else:
-					_, summaries, total_loss, energy_loss = self.sess.run([self.energy_train_op,
-					self.summary_op, self.energy_losses, self.energy_loss], feed_dict=feed_dict)
+				_, summaries, total_loss, energy_loss = self.sess.run([self.train_op,
+				self.summary_op, self.total_loss, self.energy_loss], feed_dict=feed_dict)
 			train_loss += total_loss
 			train_energy_loss += energy_loss
 			num_mols += self.batch_size
 			self.summary_writer.add_summary(summaries, step * int(Ncase_train/self.batch_size) + ministep)
 		duration = time.time() - start_time
-		self.print_epoch(step, duration, train_loss, train_energy_loss, train_gradient_loss)
+		self.print_epoch(step, duration, train_loss, train_energy_loss, train_gradient_loss, train_charge_loss)
 		return
 
-	def energy_test_step(self, step):
+	def test_step(self, step):
 		"""
 		Perform a single test step (complete processing of all input), using minibatches of size self.batch_size
 
@@ -487,50 +571,70 @@ class UniversalNetwork(object):
 		test_energy_loss = 0.0
 		test_gradient_loss = 0.0
 		test_charge_loss = 0.0
-		test_epoch_energy_labels, test_epoch_energy_outputs = [], []
-		test_epoch_force_labels, test_epoch_force_outputs = [], []
-		num_atoms_epoch = []
+		test_energy_labels, test_energy_outputs = [], []
+		test_force_labels, test_force_outputs = [], []
+		test_charge_labels, test_charge_outputs = [], []
+		num_atoms_epoch = 0.0
 		for ministep in range (0, int(Ncase_test/self.batch_size)):
-			batch_data = self.get_energy_test_batch(self.batch_size)
-			feed_dict = self.fill_energy_feed_dict(batch_data)
-			total_energies, energy_labels, gradients, gradient_labels, total_loss, energy_loss, gradient_loss, num_atoms, gaussian_params = self.sess.run([self.total_energy,
-			self.energy_pl, self.gradients, self.gradient_labels, self.energy_losses, self.energy_loss,
-			self.gradient_loss, self.num_atoms_pl, self.gaussian_params],  feed_dict=feed_dict)
+			batch_data = self.get_test_batch(self.batch_size)
+			feed_dict = self.fill_feed_dict(batch_data)
+			if self.train_charges:
+				total_energies, energy_labels, gradients, gradient_labels, charges, charge_labels, total_loss, energy_loss, gradient_loss, charge_loss, num_atoms = self.sess.run([self.total_energy,
+				self.energy_pl, self.gradients, self.gradient_labels, self.charges, self.charge_labels,
+				self.total_loss, self.energy_loss, self.gradient_loss, self.charge_loss, self.num_atoms_pl],  feed_dict=feed_dict)
+				test_charge_loss += charge_loss
+				test_charge_labels.append(charge_labels)
+				test_charge_outputs.append(charges)
+			else:
+				total_energies, energy_labels, gradients, gradient_labels, total_loss, energy_loss, gradient_loss, num_atoms = self.sess.run([self.total_energy,
+				self.energy_pl, self.gradients, self.gradient_labels, self.total_loss, self.energy_loss,
+				self.gradient_loss, self.num_atoms_pl],  feed_dict=feed_dict)
 			test_loss += total_loss
 			num_mols += self.batch_size
 			test_energy_loss += energy_loss
 			test_gradient_loss += gradient_loss
-			test_epoch_energy_labels.append(energy_labels)
-			test_epoch_energy_outputs.append(total_energies)
-			test_epoch_force_labels.append(-1.0 * gradient_labels)
-			test_epoch_force_outputs.append(-1.0 * gradients)
-			num_atoms_epoch.append(num_atoms)
-		test_epoch_energy_labels = np.concatenate(test_epoch_energy_labels)
-		test_epoch_energy_outputs = np.concatenate(test_epoch_energy_outputs)
-		test_epoch_energy_errors = test_epoch_energy_labels - test_epoch_energy_outputs
-		test_epoch_force_labels = np.concatenate(test_epoch_force_labels)
-		test_epoch_force_outputs = np.concatenate(test_epoch_force_outputs)
-		test_epoch_force_errors = test_epoch_force_labels - test_epoch_force_outputs
-		num_atoms_epoch = np.sum(np.concatenate(num_atoms_epoch))
+			test_energy_labels.append(energy_labels)
+			test_energy_outputs.append(total_energies)
+			test_force_labels.append(-1.0 * gradient_labels)
+			test_force_outputs.append(-1.0 * gradients)
+			num_atoms_epoch += np.sum(num_atoms)
+		test_energy_labels = np.concatenate(test_energy_labels)
+		test_energy_outputs = np.concatenate(test_energy_outputs)
+		test_energy_errors = test_energy_labels - test_energy_outputs
+		test_force_labels = np.concatenate(test_force_labels)
+		test_force_outputs = np.concatenate(test_force_outputs)
+		test_force_errors = test_force_labels - test_force_outputs
 		duration = time.time() - start_time
-		for i in [random.randint(0, self.batch_size - 1) for _ in xrange(20)]:
-			LOGGER.info("Energy label: %11.8f  Energy output: %11.8f", test_epoch_energy_labels[i], test_epoch_energy_outputs[i])
-		for i in [random.randint(0, num_atoms_epoch - 1) for _ in xrange(20)]:
-			LOGGER.info("Forces label: %s  Forces output: %s", test_epoch_force_labels[i], test_epoch_force_outputs[i])
-		LOGGER.info("MAE  Energy: %11.8f  Forces: %11.8f", np.mean(np.abs(test_epoch_energy_errors)),
-		np.mean(np.abs(test_epoch_force_errors)))
-		LOGGER.info("MSE  Energy: %11.8f  Forces: %11.8f", np.mean(test_epoch_energy_errors),
-		np.mean(test_epoch_force_errors))
-		LOGGER.info("RMSE Energy: %11.8f  Forces: %11.8f", np.sqrt(np.mean(np.square(test_epoch_energy_errors))),
-		np.sqrt(np.mean(np.square(test_epoch_force_errors))))
-		LOGGER.info("Gaussian paramaters: %s", gaussian_params)
-		self.print_epoch(step, duration, test_loss, test_energy_loss, test_gradient_loss, testing=True)
+		for i in [random.randint(0, self.batch_size - 1) for _ in xrange(10)]:
+			LOGGER.info("Energy label: %11.8f  Energy output: %11.8f", test_energy_labels[i], test_energy_outputs[i])
+		for i in [random.randint(0, num_atoms_epoch - 1) for _ in xrange(10)]:
+			LOGGER.info("Forces label: %s  Forces output: %s", test_force_labels[i], test_force_outputs[i])
+		if self.train_charges:
+			test_charge_labels = np.concatenate(test_charge_labels)
+			test_charge_outputs = np.concatenate(test_charge_outputs)
+			test_charge_errors = test_charge_labels - test_charge_outputs
+			for i in [random.randint(0, num_atoms_epoch - 1) for _ in xrange(10)]:
+				LOGGER.info("Charge label: %11.8f  Charge output: %11.8f", test_charge_labels[i], test_charge_outputs[i])
+			LOGGER.info("MAE  Energy: %11.8f  Forces: %11.8f  Charges %11.8f", np.mean(np.abs(test_energy_errors)),
+			np.mean(np.abs(test_force_errors)), np.mean(np.abs(test_charge_errors)))
+			LOGGER.info("MSE  Energy: %11.8f  Forces: %11.8f  Charges %11.8f", np.mean(test_energy_errors),
+			np.mean(test_force_errors), np.mean(test_charge_errors))
+			LOGGER.info("RMSE Energy: %11.8f  Forces: %11.8f  Charges %11.8f", np.sqrt(np.mean(np.square(test_energy_errors))),
+			np.sqrt(np.mean(np.square(test_force_errors))), np.sqrt(np.mean(np.square(test_charge_errors))))
+		else:
+			LOGGER.info("MAE  Energy: %11.8f  Forces: %11.8f", np.mean(np.abs(test_energy_errors)),
+			np.mean(np.abs(test_force_errors)))
+			LOGGER.info("MSE  Energy: %11.8f  Forces: %11.8f", np.mean(test_energy_errors),
+			np.mean(test_force_errors))
+			LOGGER.info("RMSE Energy: %11.8f  Forces: %11.8f", np.sqrt(np.mean(np.square(test_energy_errors))),
+			np.sqrt(np.mean(np.square(test_force_errors))))
+		self.print_epoch(step, duration, test_loss, test_energy_loss, test_gradient_loss, test_charge_loss, testing=True)
 		return test_loss
 
 	def compute_normalization(self):
 		self.energy_mean = np.mean(self.energy_data)
 		self.energy_stddev = np.std(self.energy_data)
-		self.embed_shape = 4 * self.gaussian_params.shape[0] * (self.l_max + 1) ** 2
+		self.embed_shape = 4 * (self.radial_rs.shape[0] + self.angular_rs.shape[0] * self.theta_s.shape[0])
 		self.label_shape = self.energy_mean.shape
 		return
 
@@ -545,23 +649,17 @@ class UniversalNetwork(object):
 		with tf.Graph().as_default():
 			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
 			self.Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
+			self.nn_pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, None])
+			self.nn_triples_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, None, 2])
+			self.coulomb_pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, None])
+			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
 			self.energy_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size])
 			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
-			self.dipole_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, 3])
-			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
-			# self.nearest_neighbors_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, 2])
-			self.Radp_Ele_pl=tf.placeholder(tf.int32, shape=tuple([None,4]))
-			self.Angt_Elep_pl=tf.placeholder(tf.int32, shape=tuple([None,5]))
-			self.mil_jk_pl = tf.placeholder(tf.int32, shape=tuple([None,4]))
-			self.mil_j_pl = tf.placeholder(tf.int32, shape=tuple([None,4]))
-			if self.train_sparse:
-				self.pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, self.max_num_pairs, 3])
+			self.charges_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms])
 
-			elements = tf.constant(self.elements, dtype = tf.int32)
-			element_pairs = tf.constant(self.element_pairs, dtype = tf.int32)
-			radial_rs = tf.Variable(self.radial_rs, trainable=False, dtype = self.tf_precision)
-			angular_rs = tf.Variable(self.angular_rs, trainable=False, dtype = self.tf_precision)
-			theta_s = tf.Variable(self.theta_s, trainable=False, dtype = self.tf_precision)
+			radial_gauss = tf.Variable(self.radial_rs, trainable=False, dtype = self.tf_precision)
+			angular_gauss = tf.Variable(self.angular_rs, trainable=False, dtype = self.tf_precision)
+			thetas = tf.Variable(self.theta_s, trainable=False, dtype = self.tf_precision)
 			radial_cutoff = tf.Variable(self.radial_cutoff, trainable=False, dtype = self.tf_precision)
 			angular_cutoff = tf.Variable(self.angular_cutoff, trainable=False, dtype = self.tf_precision)
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_precision)
@@ -569,44 +667,43 @@ class UniversalNetwork(object):
 			self.element_codes = tf.Variable(self.element_codes, trainable=False, dtype=self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
-			with tf.name_scope('embedding'):
-				self.Scatter_Sym = TFSymSet_Scattered_Linear_WithEle_Channel_Multi(self.xyzs_pl, self.Zs_pl, elements, radial_rs, radial_cutoff, element_pairs, angular_rs, zeta, eta, angular_cutoff, self.Radp_Ele_pl, self.Angt_Elep_pl, self.mil_j_pl, self.mil_jk_pl, self.element_codes)
-				# if self.train_sparse:
-				# 	dxyzs, pair_Zs = sparsify_coords(self.xyzs_pl, self.Zs_pl, self.pairs_pl)
-				# 	canon_xyzs = gs_canonicalizev2(dxyzs, self.Zs_pl)
-				# 	embed, mol_idx = tf_sparse_gaush_element_channel(canon_xyzs, self.Zs_pl, pair_Zs,
-				# 					elements, self.gaussian_params, self.l_max)
-				# else:
-				# 	dxyzs, padding_mask = center_dxyzs(self.xyzs_pl, self.Zs_pl)
-				# 	nearest_neighbors = tf.gather_nd(self.nearest_neighbors_pl, padding_mask)
-				# 	canon_xyzs, perm_canon_xyzs = gs_canonicalize(dxyzs, nearest_neighbors)
-				# 	embed = tf_gaush_embed_channel(canon_xyzs, self.Zs_pl,
-				# 					elements, self.gaussian_params, self.l_max, self.element_codes)
-				# 	perm_embed = tf_gaush_embed_channel(perm_canon_xyzs, self.Zs_pl,
-				# 							elements, self.gaussian_params, self.l_max, self.element_codes)
-				# 	atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
+
+			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
+			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
+			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			with tf.name_scope('energy_inference'):
-				atom_energies, energy_variables = self.energy_inference(embed, atom_codes, padding_mask)
-				perm_atom_energies, _ = self.energy_inference(perm_embed, atom_codes, padding_mask)
-				norm_bp_energy = ((tf.reshape(tf.reduce_sum(atom_energies, axis=1), [self.batch_size])
-								+ tf.reshape(tf.reduce_sum(perm_atom_energies, axis=1), [self.batch_size])) / 2.0)
-				self.bp_energy = (norm_bp_energy * energy_stddev) + energy_mean
-				self.total_energy = self.bp_energy
-				self.energy_loss = self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
-				tf.summary.scalar("energy loss", self.energy_loss)
-				tf.add_to_collection('energy_losses', self.energy_loss)
+				atom_nn_energies, energy_variables = self.energy_inference(embed, atom_codes, padding_mask)
+				mol_nn_energy = tf.reshape(tf.reduce_sum(atom_nn_energies, axis=1), [self.batch_size])
+				self.mol_nn_energy = (mol_nn_energy * energy_stddev) + energy_mean
+				self.total_energy = self.mol_nn_energy
+			if self.train_charges:
+				with tf.name_scope('charge_inference'):
+					atom_charges, charge_variables = self.charge_inference(embed, atom_codes, self.Zs_pl, self.num_atoms_pl)
+					dxyzs, q1q2 = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, atom_charges, self.coulomb_pairs_pl)
+					atom_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2)
+					atom_coulomb_energy = tf.scatter_nd(padding_mask, atom_coulomb_energy, [self.batch_size, self.max_num_atoms])
+					self.charges = tf.gather_nd(atom_charges, padding_mask)
+					self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
+					self.charge_loss = self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+					tf.summary.scalar("charge_loss", self.charge_loss)
+					tf.add_to_collection('total_loss', self.charge_loss)
+					self.mol_coulomb_energy = tf.reshape(tf.reduce_sum(atom_coulomb_energy, axis=1), [self.batch_size])
+					self.total_energy += self.mol_coulomb_energy
+			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+			tf.summary.scalar("energy_loss", self.energy_loss)
+			tf.add_to_collection('total_loss', self.energy_loss)
 			with tf.name_scope('gradients'):
 				xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 				self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
-				self.gradient_loss = 0.001 * self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
+				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
 				if self.train_gradients:
-					tf.add_to_collection('energy_losses', self.gradient_loss)
-					tf.summary.scalar("gradient loss", self.gradient_loss)
-			self.energy_losses = tf.add_n(tf.get_collection('energy_losses'))
-			tf.summary.scalar("energy losses", self.energy_losses)
+					tf.add_to_collection('total_loss', self.gradient_loss)
+					tf.summary.scalar("gradient_loss", self.gradient_loss)
+			self.total_loss = tf.add_n(tf.get_collection('total_loss'))
+			tf.summary.scalar('total_loss', self.total_loss)
 
-			self.energy_train_op = self.optimizer(self.energy_losses, self.learning_rate, self.momentum)
+			self.train_op = self.optimizer(self.total_loss, self.learning_rate, self.momentum, energy_variables)
 			self.summary_op = tf.summary.merge_all()
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
@@ -621,11 +718,11 @@ class UniversalNetwork(object):
 				self.run_metadata = tf.RunMetadata()
 		return
 
-	def print_epoch(self, step, duration, loss, energy_loss, gradient_loss, testing=False):
+	def print_epoch(self, step, duration, loss, energy_loss, gradient_loss, charge_loss, testing=False):
 		if testing:
-			LOGGER.info("step: %5d  duration: %.3f  test loss: %.10f  energy loss: %.10f  gradient loss: %.10f",
-			step, duration, loss, energy_loss, gradient_loss)
+			LOGGER.info("step: %5d  duration: %.3f  test loss: %.10f  energy loss: %.10f  gradient loss: %.10f  charge loss: %.10f",
+			step, duration, loss, energy_loss, gradient_loss, charge_loss)
 		else:
-			LOGGER.info("step: %5d  duration: %.3f  train loss: %.10f  energy loss: %.10f  gradient loss: %.10f",
-			step, duration, loss, energy_loss, gradient_loss)
+			LOGGER.info("step: %5d  duration: %.3f  train loss: %.10f  energy loss: %.10f  gradient loss: %.10f  charge loss: %.10f",
+			step, duration, loss, energy_loss, gradient_loss, charge_loss)
 		return

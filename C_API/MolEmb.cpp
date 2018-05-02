@@ -850,21 +850,24 @@ static PyObject* Make_TLTensor(PyObject *self, PyObject  *args)
 			int counter = 0;
 			for (int k=0; k<MaxNeigh; ++k)
 			{
-				for (int l=0; l<MaxNeigh; ++l)
+				if (k < NLS[i][j].size())
 				{
-					if (k < NLS[i][j].size())
+					for (int l=0; l<MaxNeigh; ++l)
 					{
-						if (DoPerms && k!=l)
+						if (l < NLS[i][j].size())
 						{
-							NL_data[i*(nat*Dim2*2)+j*(Dim2*2)+counter*2] = (int32_t)(NLS[i][j][k].ind);
-							NL_data[i*(nat*Dim2*2)+j*(Dim2*2)+counter*2+1] = (int32_t)(NLS[i][j][l].ind);
-							counter++;
-						}
-						else if (k<l)
-						{
-							NL_data[i*(nat*Dim2*2)+j*(Dim2*2)+counter*2] = (int32_t)(NLS[i][j][k].ind);
-							NL_data[i*(nat*Dim2*2)+j*(Dim2*2)+counter*2+1] = (int32_t)(NLS[i][j][l].ind);
-							counter++;
+							if (DoPerms && k!=l)
+							{
+								NL_data[i*(nat*Dim2*2)+j*(Dim2*2)+counter*2] = (int32_t)(NLS[i][j][k].ind);
+								NL_data[i*(nat*Dim2*2)+j*(Dim2*2)+counter*2+1] = (int32_t)(NLS[i][j][l].ind);
+								counter++;
+							}
+							else if (k<l)
+							{
+								NL_data[i*(nat*Dim2*2)+j*(Dim2*2)+counter*2] = (int32_t)(NLS[i][j][k].ind);
+								NL_data[i*(nat*Dim2*2)+j*(Dim2*2)+counter*2+1] = (int32_t)(NLS[i][j][l].ind);
+								counter++;
+							}
 						}
 					}
 				}
