@@ -5,11 +5,12 @@ It's a little recurrent-y.
 import os
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 HAS_MATPLOTLIB=False
-try:
-	import matplotlib.pyplot as plt
-	HAS_MATPLOTLIB=True
-except Exception as Ex:
-	HAS_MATPLOTLIB=False
+if (0):
+	try:
+		import matplotlib.pyplot as plt
+		HAS_MATPLOTLIB=True
+	except Exception as Ex:
+		HAS_MATPLOTLIB=False
 
 from TensorMol import *
 import numpy as np
@@ -45,7 +46,10 @@ if (0):
 		MasterSet.Save("MasterSet")
 
 if 1:
-#	b = MSet("MasterSet")
+	b = MSet("MasterSet40")
+	b.Load()
+
+if 0:
 	b = MSet("HNCO_small")
 	b.Load()
 	b.cut_max_num_atoms(40)
@@ -1076,9 +1080,9 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=True,mode='eval')
+net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=True,mode='train')
 #net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
-#net.Train()
+net.Train()
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
