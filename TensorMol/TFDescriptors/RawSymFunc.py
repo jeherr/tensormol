@@ -3515,6 +3515,7 @@ def tf_angular_sym_func(dtxyzs, triples_Zs, element_codes, angular_gauss, thetas
 	dij_dik = tf.reduce_prod(dist_jk_tensor, axis=-1)
 	dij_dik = tf.where(tf.less(dij_dik, 1.e-16), tf.ones_like(dij_dik), dij_dik)
 	ij_dot_ik = tf.reduce_sum(dtxyzs[...,0,:] * dtxyzs[...,1,:], axis=-1)
+	dij_dik = tf.where(tf.less(dij_dik, 1.e-16), tf.ones_like(dij_dik), dij_dik)
 	cos_angle = ij_dot_ik / dij_dik
 	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle) - 1.e-16, cos_angle)
 	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle) - 1.e-16, cos_angle)

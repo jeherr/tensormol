@@ -809,6 +809,7 @@ def minimize_ob():
 		except:
 			pass
 
+
 # minimize_ob()
 # InterpoleGeometries()
 # read_unpacked_set()
@@ -825,7 +826,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("chemspider20_4_opt")
+train_energy_univ("chemspider20_345_tmp")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -847,9 +848,6 @@ train_energy_univ("chemspider20_4_opt")
 # PARAMS["SH_NRAD"] = 16
 # a = MSet("SmallMols_rand")
 # a.Load()
-# # for mol in a.mols:
-# # 	mol.nearest_two_neighbors()
-# # a.ReadXYZ()
 # # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
 # # # # Tesselate that water to create a box
 # # ntess = 16
@@ -947,15 +945,12 @@ train_energy_univ("chemspider20_4_opt")
 # sess.run(tf.global_variables_initializer())
 # options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 # run_metadata = tf.RunMetadata()
-# # # for i in range(a.mols[0].atoms.shape[0]):
-# # # 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
 # @TMTiming("test")
 # def get_pairs():
 # 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
 # 	return tmp3
 # tmp5 = get_pairs()
-# print tlt[0,1]
-# print tmp5[1]
+# print tmp5
 # print tmp5.shape
 # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 # chrome_trace = fetched_timeline.generate_chrome_trace_format()

@@ -552,6 +552,7 @@ class UniversalNetwork(object):
 			else:
 				_, summaries, total_loss, energy_loss = self.sess.run([self.train_op,
 				self.summary_op, self.total_loss, self.energy_loss], feed_dict=feed_dict)
+				print(total_loss, energy_loss)
 			train_loss += total_loss
 			train_energy_loss += energy_loss
 			num_mols += self.batch_size
