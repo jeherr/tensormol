@@ -45,13 +45,13 @@ if (0):
 		MasterSet.Save("MasterSet")
 
 if 1:
-	b = MSet("MasterSet")
+	b = MSet("MasterSet40")
 #	b = MSet("HNCO_small")
 	b.Load()
-	b.cut_max_num_atoms(40)
-	b.cut_max_grad(2.0)
-	b.cut_energy_outliers()
-	b.Save("MasterSet40")
+#	b.cut_max_num_atoms(40)
+#	b.cut_max_grad(2.0)
+#	b.cut_energy_outliers()
+#	b.Save("MasterSet40")
 
 MAX_ATOMIC_NUMBER = 55
 
