@@ -3456,6 +3456,7 @@ def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, radial_ga
 	radial_embed = tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta)
 	dtxyzs, triples_Zs = sparse_triples(xyzs, Zs, triples)
 	angular_embed = tf_angular_sym_func(dtxyzs, triples_Zs, element_codes, angular_gauss, thetas, angular_cutoff, zeta, eta)
+	# return angular_embed
 	embed = tf.concat([radial_embed, angular_embed], axis=-1)
 	return embed
 
@@ -3512,18 +3513,19 @@ def tf_angular_sym_func(dtxyzs, triples_Zs, element_codes, angular_gauss, thetas
 	"""
 	dist_jk_tensor = tf.norm(dtxyzs+1.e-16, axis=-1)
 	dij_dik = tf.reduce_prod(dist_jk_tensor, axis=-1)
+	dij_dik = tf.where(tf.less(dij_dik, 1.e-16), tf.ones_like(dij_dik), dij_dik)
 	ij_dot_ik = tf.reduce_sum(dtxyzs[...,0,:] * dtxyzs[...,1,:], axis=-1)
 	cos_angle = ij_dot_ik / dij_dik
-	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0),
-				tf.ones_like(cos_angle, dtype=eval(PARAMS["tf_prec"])) - 1.e-16, cos_angle)
-	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0),
-				-1.0 * tf.ones_like(cos_angle, dtype=eval(PARAMS["tf_prec"])) - 1.e-16, cos_angle)
+	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle) - 1.e-16, cos_angle)
+	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle) - 1.e-16, cos_angle)
 	theta_ijk = tf.acos(cos_angle)
 	dtheta = tf.expand_dims(theta_ijk, axis=-1) - thetas
-	cos_factor = tf.cos(2.0 * dtheta)
+	cos_factor = tf.cos(dtheta)
+	cos_factor = tf.where(tf.equal(cos_factor, 1.0), tf.zeros_like(cos_factor), cos_factor)
 	exponent = tf.expand_dims(tf.reduce_sum(dist_jk_tensor, axis=-1) / 2.0, axis=-1) - angular_gauss
 	dist_factor = tf.exp(-eta * tf.square(exponent))
 	cutoff = tf.reduce_prod(0.5 * (tf.cos(np.pi * dist_jk_tensor / angular_cutoff) + 1.0), axis=-1)
+	cutoff = tf.where(tf.equal(cutoff, 1.0), tf.zeros_like(cutoff), cutoff)
 	angular_embed = tf.expand_dims(tf.pow(1.0 + cos_factor, zeta), axis=-1) * tf.expand_dims(dist_factor, axis=-2)
 	angular_embed *= tf.expand_dims(tf.expand_dims(cutoff, axis=-1), axis=-1)
 	angular_embed = (tf.expand_dims(angular_embed, axis=-3)
@@ -3531,6 +3533,13 @@ def tf_angular_sym_func(dtxyzs, triples_Zs, element_codes, angular_gauss, thetas
 					triples_Zs), axis=-2), axis=-1), axis=-1))
 	angular_embed = tf.pow(tf.cast(2.0, eval(PARAMS["tf_prec"])), 1.0 - zeta) * tf.reduce_sum(angular_embed, axis=1)
 	return tf.reshape(angular_embed, [tf.shape(dtxyzs)[0], tf.shape(element_codes)[1], -1])
+	# angular_embed = dist_factor
+	# angular_embed *= tf.expand_dims(cutoff, axis=-1)
+	# angular_embed = (tf.expand_dims(angular_embed, axis=-2)
+	# 				* tf.expand_dims(tf.reduce_prod(tf.gather(element_codes,
+	# 				triples_Zs), axis=-2), axis=-1))
+	# angular_embed = tf.pow(tf.cast(2.0, eval(PARAMS["tf_prec"])), 1.0 - zeta) * tf.reduce_sum(angular_embed, axis=1)
+	# return angular_embed
 
 def sparse_pairs(xyzs, Zs, pairs):
 	padding_mask = tf.where(tf.not_equal(Zs, 0))

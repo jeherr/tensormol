@@ -104,7 +104,7 @@ class UniversalNetwork(object):
 		num_angular_rs = PARAMS["AN1_num_a_Rs"]
 		num_angular_theta_s = PARAMS["AN1_num_a_As"]
 		self.angular_cutoff = PARAMS["AN1_a_Rc"]
-		self.theta_s = np.pi * np.linspace(0, (num_angular_theta_s - 1.0) / num_angular_theta_s, num_angular_theta_s)
+		self.theta_s = 2.0 * np.pi * np.linspace(0, (num_angular_theta_s - 1.0) / num_angular_theta_s, num_angular_theta_s)
 		self.angular_rs = self.angular_cutoff * np.linspace(0, (num_angular_rs - 1.0) / num_angular_rs, num_angular_rs)
 		return
 
@@ -255,7 +255,7 @@ class UniversalNetwork(object):
 		batch_xyzs = self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
 		batch_Zs = self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
 		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
-		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, True)
+		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
 		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 15.0, self.max_num_atoms, False, False)
 		batch_data = []
 		batch_data.append(batch_xyzs)
@@ -541,10 +541,14 @@ class UniversalNetwork(object):
 				train_charge_loss += charge_loss
 				print(total_loss, energy_loss, charge_loss)
 			elif self.train_gradients:
-				_, summaries, total_loss, energy_loss, gradient_loss = self.sess.run([self.train_op,
-				self.summary_op, self.total_loss, self.energy_loss, self.gradient_loss], feed_dict=feed_dict)
+				_, summaries, total_loss, energy_loss, gradient_loss, isgradnan, ishessnan, gradients, hess = self.sess.run([self.train_op,
+				self.summary_op, self.total_loss, self.energy_loss, self.gradient_loss, self.isgradnan, self.ishessnan, self.gradients, self.hess], feed_dict=feed_dict)
 				train_gradient_loss += gradient_loss
 				print(total_loss, energy_loss, gradient_loss)
+				print(isgradnan)
+				print(ishessnan)
+				if ishessnan:
+					print(hess)
 			else:
 				_, summaries, total_loss, energy_loss = self.sess.run([self.train_op,
 				self.summary_op, self.total_loss, self.energy_loss], feed_dict=feed_dict)
@@ -695,6 +699,9 @@ class UniversalNetwork(object):
 			with tf.name_scope('gradients'):
 				xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 				self.gradients = tf.gather_nd(xyz_grad, padding_mask)
+				self.hess = tf.gradients(self.gradients, self.xyzs_pl)
+				self.isgradnan = tf.is_nan(self.gradients)
+				self.ishessnan = tf.is_nan(self.hess)
 				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
 				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
 				if self.train_gradients:
