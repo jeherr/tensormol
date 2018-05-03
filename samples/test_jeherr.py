@@ -316,13 +316,13 @@ def train_energy_GauSHv2(mset):
 
 def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
-	PARAMS["train_charges"] = False
+	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [256, 256, 256]
+	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.0001
 	PARAMS["max_steps"] = 1000
-	PARAMS["test_freq"] = 1
-	PARAMS["batch_size"] = 50
+	PARAMS["test_freq"] = 5
+	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float64"
 	network = UniversalNetwork(mset)
@@ -826,7 +826,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("chemspider20_345_tmp")
+train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -846,7 +846,7 @@ train_energy_univ("chemspider20_345_tmp")
 # PARAMS["tf_prec"] = "tf.float32"
 # PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
 # PARAMS["SH_NRAD"] = 16
-# a = MSet("badhess2")
+# a = MSet("SmallMols_rand")
 # a.Load()
 # # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
 # # # # Tesselate that water to create a box
@@ -858,7 +858,7 @@ train_energy_univ("chemspider20_345_tmp")
 # # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
 # # # # mt.WriteXYZfile()
 # b=MSet()
-# for i in range(1):
+# for i in range(2):
 # 	b.mols.append(a.mols[i])
 # 	# print b.mols[i].NAtoms()
 # maxnatoms = b.MaxNAtom()
@@ -928,8 +928,8 @@ train_energy_univ("chemspider20_345_tmp")
 # # tmp = sparse_pairs(xyzs_tf, zs_tf, nlt_tf)
 # # tmp = sparse_triples(xyzs_tf, zs_tf, tlt_tf)
 # tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
-# # grads = tf.gradients(tmp, xyzs_tf)[0]
-# # hess = tf.gradients(grads, xyzs_tf)[0]
+# # # grads = tf.gradients(tmp, xyzs_tf)[0]
+# # # hess = tf.gradients(grads, xyzs_tf)[0]
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
 # options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
