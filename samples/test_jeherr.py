@@ -319,12 +319,12 @@ def train_energy_univ(mset):
 	PARAMS["train_charges"] = False
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [256, 256, 256]
-	PARAMS["learning_rate"] = 0.00001
+	PARAMS["learning_rate"] = 0.0001
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 1
-	PARAMS["batch_size"] = 100
+	PARAMS["batch_size"] = 50
 	PARAMS["NeuronType"] = "shifted_softplus"
-	PARAMS["tf_prec"] = "tf.float32"
+	PARAMS["tf_prec"] = "tf.float64"
 	network = UniversalNetwork(mset)
 	network.start_training()
 
@@ -846,7 +846,7 @@ train_energy_univ("chemspider20_345_tmp")
 # PARAMS["tf_prec"] = "tf.float32"
 # PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
 # PARAMS["SH_NRAD"] = 16
-# a = MSet("SmallMols_rand")
+# a = MSet("badhess2")
 # a.Load()
 # # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
 # # # # Tesselate that water to create a box
@@ -858,7 +858,7 @@ train_energy_univ("chemspider20_345_tmp")
 # # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
 # # # # mt.WriteXYZfile()
 # b=MSet()
-# for i in range(2):
+# for i in range(1):
 # 	b.mols.append(a.mols[i])
 # 	# print b.mols[i].NAtoms()
 # maxnatoms = b.MaxNAtom()
@@ -920,27 +920,16 @@ train_energy_univ("chemspider20_345_tmp")
 # angular_cut = tf.Variable(AN1_a_Rc, trainable=False, dtype = tf.float32)
 # zeta = tf.Variable(AN1_zeta, trainable=False, dtype = tf.float32)
 # eta = tf.Variable(AN1_eta, trainable=False, dtype = tf.float32)
-# # rotation_params = tf.stack([np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
-# # 	np.pi * tf.random_uniform([2, maxnatoms], maxval=2.0, dtype=tf.float32),
-# # 	tf.random_uniform([2, maxnatoms], minval=0.1, maxval=1.9, dtype=tf.float32)], axis=-1)
+#
 # nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 4.6, maxnatoms, True, True)
 # tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 4.0, maxnatoms, False)
 # nlt_tf = tf.constant(nlt, dtype=tf.int32)
 # tlt_tf = tf.constant(tlt, dtype=tf.int32)
+# # tmp = sparse_pairs(xyzs_tf, zs_tf, nlt_tf)
+# # tmp = sparse_triples(xyzs_tf, zs_tf, tlt_tf)
 # tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
-# grad = tf.gradients(tmp, xyzs_tf)[0]
-# # grads = tf.scatter_add(tf.Variable(tf.zeros(grad.dense_shape)), grad.indices, grad.values)
-# # # # rotation_params = tf.gather_nd(rotation_params, padding_mask)
-# # # # rotated_xyzs = tf_random_rotate(dxyzs, rotation_params)
-# # # # dist_tensor = tf.norm(rotated_xyzs+1.e-16,axis=-1)
-# # # # harmonics = tf_spherical_harmonics(rotated_xyzs, dist_tensor, 4)
-# # # # eig, vec = spherical_harmonics_spectrum(harmonics)
-# # # # nearest_neighbors = tf.gather_nd(nnstack, padding_mask)
-# # # # tmp, tmp2 = gs_canonicalize(dxyzs, nearest_neighbors)
-# # # # embed = tf_gaush_embed_channel(tmp, zstack, elements, gauss_params, 5, element_codes)
-# # # # grad = tf.gradients(tmp, xyzstack)[0]
-# # # # grads = tf.scatter_add(tf.Variable(tf.zeros(grad.dense_shape)), grad.indices, grad.values)
-# # # # grad = tf.gradients(vec, rotation_params)[0]
+# # grads = tf.gradients(tmp, xyzs_tf)[0]
+# # hess = tf.gradients(grads, xyzs_tf)[0]
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
 # options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -951,91 +940,9 @@ train_energy_univ("chemspider20_345_tmp")
 # 	return tmp3
 # tmp5 = get_pairs()
 # print tmp5
+# # print np.unique(nlt, return_counts=True)
 # print tmp5.shape
 # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 # chrome_trace = fetched_timeline.generate_chrome_trace_format()
 # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
 # 	f.write(chrome_trace)
-
-# a = MSet("water_dimer_rotate")
-# a.ReadXYZ()
-# m=a.mols[0]
-# # axis=m.coords[1]-m.coords[2]
-# # naxis=axis/np.linalg.norm(axis)
-# # for i in range(361):
-# # 	angle=(2./360.)*i*np.pi
-# # 	rmat=np.array([[np.cos(angle)+np.square(naxis[0])*(1-np.cos(angle)), naxis[0]*naxis[1]*(1-np.cos(angle))-naxis[2]*np.sin(angle), naxis[0]*naxis[2]*(1-np.cos(angle))+naxis[1]*np.sin(angle)],
-# # 					[naxis[0]*naxis[1]*(1-np.cos(angle))+naxis[2]*np.sin(angle), np.cos(angle)+np.square(naxis[1])*(1-np.cos(angle)), naxis[1]*naxis[2]*(1-np.cos(angle))-naxis[0]*np.sin(angle)],
-# # 					[naxis[0]*naxis[2]*(1-np.cos(angle))-naxis[1]*np.sin(angle), naxis[1]*naxis[2]*(1-np.cos(angle))-naxis[0]*np.sin(angle), np.cos(angle)+np.square(naxis[2])*(1-np.cos(angle))]])
-# # 	new_coords = m.coords.copy()-m.coords[1]
-# # 	new_h = np.matmul(rmat, new_coords[0])
-# # 	new_coords[0] = new_h
-# # 	new_m = Mol(m.atoms, new_coords)
-# # 	new_m.WriteXYZfile(fname="tmp", mode="a")
-#
-# r = m.coords[0] - m.coords[1]
-# r = r/np.sum(np.square(r))**0.5
-# v = m.coords[2] - m.coords[1]
-# for i in range(0, 361):
-# 	angle = i*math.pi/180.0
-# 	new_coords = m.coords.copy()
-# 	v_rot = (1-math.cos(angle))*np.dot(v, r)*r + math.cos(angle)*v + math.sin(angle)*np.cross(r, v)
-# 	new_coords[2] = m.coords[1] + v_rot
-# 	new_m = Mol(m.atoms, new_coords)
-# 	new_m.WriteXYZfile(fname="tmp")
-
-# md=np.loadtxt("./results/MDLog.txt")
-# p=md[:,5]*2625.499638*1000/4183.9953
-# k=md[:,4]*30/1000.0*1000/4183.9953
-# f=open("energy_conserv4.dat", "w")
-# for i in range(len(p)):
-# 	f.write(str(i*0.5/1000)+" "+str(p[i])+" "+str(k[i])+"\n")
-# f.close
-
-# PARAMS["tf_prec"] = "tf.float32"
-# a = MSet("water10")
-# a.ReadXYZ()
-# mol = a.mols[1]
-# network = BehlerParinelloGauSHv2(name="BPGauSH_water_wb97xd_6311gss_Thu_Mar_15_16.29.21_2018")
-# network.evaluate_mol(mol, eval_forces=False, avg_rots=True)
-
-# a=MSet("chemspider20_7_opt")
-# a.read_xyz_set_with_properties("/media/sdb2/jeherr/tensormol_dev/datasets/chemspider20/finished/7/data/", properties=["name", "energy", "gradients", "dipole", "charges"])
-# a.Save()
-
-xyzs = np.array([[-3.91006444,  2.35115913,  1.41645398],
-[-2.58003367,  1.93318154,  1.02440105],
-[-1.49373409,  2.69265066,  1.31821058],
-[-1.56817517,  3.73356547,  1.94355300],
-[-0.16882622,  2.17333147,  0.82311246],
-[ 0.87523852,  3.08511565,  0.71422827],
-[ 2.11418789,  2.66197627,  0.26466883],
-[ 2.30740621,  1.33187048, -0.06924996],
-[ 1.27578862,  0.39296816,  0.04527237],
-[ 0.03571704,  0.83517946,  0.50670970],
-[ 1.53257604, -0.94470178, -0.28447159],
-[ 0.63115080, -1.96453070, -0.42361493],
-[-0.56202605, -1.86892445, -0.24133753],
-[ 1.28435412, -3.25754964, -0.84296809],
-[ 0.39022868, -4.46094627, -1.04328269],
-[ 1.02302581, -3.81595776, -2.21934391],
-[ 0.03886603, -2.91433081, -3.36621518],
-[ 2.37130368, -4.65304097, -3.00155305],
-[ 3.88748082,  0.82496817, -0.63284521],
-[-4.56531103,  1.47999808,  1.44012075],
-[-4.32338300,  3.09671336,  0.72950235],
-[-3.86377091,  2.79594382,  2.40987874],
-[-2.49024570,  1.19016465,  0.35352424],
-[ 0.70037503,  4.11775465,  0.98714484],
-[ 2.93727497,  3.35748540,  0.16557703],
-[-0.74340654,  0.09846965,  0.62725329],
-[ 2.48778431, -1.14617273, -0.53872079],
-[ 2.28822676, -3.42766280, -0.46935357],
-[-0.66558684, -4.26505837, -0.89654795],
-[ 0.75357831, -5.43361976, -0.74010700]])
-
-zs = np.array([6,  7,  6,  8,  6,  6,  6,  6,  6,  6,  7,  6,  8,  6,  6,  6, 17,
-17, 17,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,
- 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
- 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
- 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0])
