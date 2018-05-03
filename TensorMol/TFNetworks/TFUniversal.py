@@ -104,7 +104,7 @@ class UniversalNetwork(object):
 		num_angular_rs = PARAMS["AN1_num_a_Rs"]
 		num_angular_theta_s = PARAMS["AN1_num_a_As"]
 		self.angular_cutoff = PARAMS["AN1_a_Rc"]
-		self.theta_s = 2.0 * np.pi * np.linspace(0, (num_angular_theta_s - 1.0) / num_angular_theta_s, num_angular_theta_s)
+		self.theta_s = np.pi * np.linspace(0, (num_angular_theta_s - 1.0) / num_angular_theta_s, num_angular_theta_s)
 		self.angular_rs = self.angular_cutoff * np.linspace(0, (num_angular_rs - 1.0) / num_angular_rs, num_angular_rs)
 		return
 
@@ -345,8 +345,8 @@ class UniversalNetwork(object):
 		with tf.variable_scope("energy_network", reuse=tf.AUTO_REUSE):
 			code_kernel1 = tf.get_variable(name="CodeKernel", shape=(4, 4),dtype=self.tf_precision)
 			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(4, 4),dtype=self.tf_precision)
-			# variables.append(code_kernel1)
-			# variables.append(code_kernel2)
+			variables.append(code_kernel1)
+			variables.append(code_kernel2)
 			coded_weights = tf.matmul(atom_codes, code_kernel1)
 			coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
 			coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
@@ -375,7 +375,6 @@ class UniversalNetwork(object):
 				variables.append(weights)
 				variables.append(biases)
 				output += tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
-				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
 	def charge_inference(self, embed, atom_codes, Zs, n_atoms):
@@ -429,7 +428,6 @@ class UniversalNetwork(object):
 				mask = tf.where(tf.equal(Zs, 0), tf.zeros_like(Zs, dtype=eval(PARAMS["tf_prec"])),
 						tf.ones_like(Zs, dtype=eval(PARAMS["tf_prec"])))
 				output *= mask
-				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
 	def gather_coulomb(self, xyzs, Zs, atom_charges, pairs):
@@ -534,23 +532,17 @@ class UniversalNetwork(object):
 				self.summary_op, self.total_loss, self.energy_loss, self.gradient_loss, self.charge_loss], feed_dict=feed_dict)
 				train_gradient_loss += gradient_loss
 				train_charge_loss += charge_loss
-				print(total_loss, energy_loss, gradient_loss, charge_loss)
 			elif self.train_charges:
 				_, summaries, total_loss, energy_loss, charge_loss = self.sess.run([self.train_op,
 				self.summary_op, self.total_loss, self.energy_loss, self.charge_loss], feed_dict=feed_dict)
 				train_charge_loss += charge_loss
-				print(total_loss, energy_loss, charge_loss)
 			elif self.train_gradients:
 				_, summaries, total_loss, energy_loss, gradient_loss = self.sess.run([self.train_op,
 				self.summary_op, self.total_loss, self.energy_loss, self.gradient_loss], feed_dict=feed_dict)
 				train_gradient_loss += gradient_loss
-				print(total_loss, energy_loss, gradient_loss)
-				# print(np.any(isgradnan))
-				# print(np.any(ishessnan))
 			else:
 				_, summaries, total_loss, energy_loss = self.sess.run([self.train_op,
 				self.summary_op, self.total_loss, self.energy_loss], feed_dict=feed_dict)
-				print(total_loss, energy_loss)
 			train_loss += total_loss
 			train_energy_loss += energy_loss
 			num_mols += self.batch_size
@@ -638,7 +630,6 @@ class UniversalNetwork(object):
 		self.energy_mean = np.mean(self.energy_data)
 		self.energy_stddev = np.std(self.energy_data)
 		self.embed_shape = 4 * (self.radial_rs.shape[0] + self.angular_rs.shape[0] * self.theta_s.shape[0])
-		# self.embed_shape = 4 * (self.radial_rs.shape[0])
 		self.label_shape = self.energy_mean.shape
 		return
 
@@ -668,7 +659,7 @@ class UniversalNetwork(object):
 			angular_cutoff = tf.Variable(self.angular_cutoff, trainable=False, dtype = self.tf_precision)
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_precision)
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_precision)
-			self.element_codes = tf.Variable(self.element_codes, trainable=False, dtype=self.tf_precision)
+			self.element_codes = tf.Variable(self.element_codes, trainable=True, dtype=self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 
@@ -688,26 +679,26 @@ class UniversalNetwork(object):
 					atom_coulomb_energy = tf.scatter_nd(padding_mask, atom_coulomb_energy, [self.batch_size, self.max_num_atoms])
 					self.charges = tf.gather_nd(atom_charges, padding_mask)
 					self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
-					self.charge_loss = self.loss_op(self.charges - self.charge_labels)# / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+					self.charge_loss = self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
 					tf.summary.scalar("charge_loss", self.charge_loss)
 					tf.add_to_collection('total_loss', self.charge_loss)
 					self.mol_coulomb_energy = tf.reshape(tf.reduce_sum(atom_coulomb_energy, axis=1), [self.batch_size])
 					self.total_energy += self.mol_coulomb_energy
-			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl)# / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
 			tf.summary.scalar("energy_loss", self.energy_loss)
 			tf.add_to_collection('total_loss', self.energy_loss)
 			with tf.name_scope('gradients'):
 				xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 				self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
-				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels)# / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
+				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
 				if self.train_gradients:
 					tf.add_to_collection('total_loss', self.gradient_loss)
 					tf.summary.scalar("gradient_loss", self.gradient_loss)
 			self.total_loss = tf.add_n(tf.get_collection('total_loss'))
 			tf.summary.scalar('total_loss', self.total_loss)
 
-			self.train_op = self.optimizer(self.total_loss, self.learning_rate, self.momentum, energy_variables)
+			self.train_op = self.optimizer(self.total_loss, self.learning_rate, self.momentum)
 			self.summary_op = tf.summary.merge_all()
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
