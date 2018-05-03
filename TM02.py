@@ -5,7 +5,7 @@ It's a little recurrent-y.
 import os
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 HAS_MATPLOTLIB=False
-if (0):
+if (1):
 	try:
 		import matplotlib.pyplot as plt
 		HAS_MATPLOTLIB=True
@@ -46,7 +46,7 @@ if (0):
 		MasterSet.Save("MasterSet")
 
 if 1:
-	b = MSet("MasterSet40")
+	b = MSet("HNCO_small")
 	b.Load()
 
 if 0:
@@ -66,6 +66,12 @@ def safe_inv_norm(x_):
 	nrm_ok = tf.logical_and(tf.not_equal(nrm,0.),tf.logical_not(tf.is_nan(nrm)))
 	safe_nrm = tf.where(nrm_ok,nrm,tf.ones_like(nrm))
 	return tf.where(nrm_ok,1.0/safe_nrm,tf.zeros_like(nrm))
+
+def safe_norm(x_):
+	nrm = tf.clip_by_value(tf.norm(x_,axis=-1,keepdims=True),1e-36,1e36)
+	nrm_ok = tf.logical_and(tf.not_equal(nrm,0.),tf.logical_not(tf.is_nan(nrm)))
+	safe_nrm = tf.where(nrm_ok,nrm,tf.zeros_like(nrm))
+	return safe_nrm
 
 def polykern(r):
 	"""
@@ -153,11 +159,11 @@ class SparseCodedChargedGauSHNetwork:
 		self.MaxNeigh_NN = self.MaxNAtom
 		self.MaxNeigh_J = self.MaxNAtom
 		self.learning_rate = 0.0001
-		self.ncan = 6
+		self.ncan = 9
 		self.DoHess=False
 		self.mode = mode
 		if (mode == 'eval'):
-			self.ncan=6
+			self.ncan = 9
 		self.RCut_Coulomb = 19.0
 		self.RCut_NN = 7.0
 		self.AtomCodes = ELEMENTCODES
@@ -245,7 +251,7 @@ class SparseCodedChargedGauSHNetwork:
 			raise Ex
 		return
 
-	def GetEnergyForceRoutine(self,m):
+	def GetEnergyForceRoutine(self,m,Debug=False):
 		MustPrepare = False
 		if (self.batch_size>10):
 			self.batch_size=1
@@ -265,7 +271,7 @@ class SparseCodedChargedGauSHNetwork:
 		if (MustPrepare):
 			self.Prepare()
 			self.Load()
-		def EF(xyz_,DoForce=True):
+		def EF(xyz_,DoForce=True,Debug = False):
 			xyzs = np.zeros((self.batch_size,self.MaxNAtom,3))
 			Zs = np.zeros((self.batch_size,self.MaxNAtom,1),dtype=np.int32)
 			nls_nn = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_NN),dtype=np.int32)
@@ -281,6 +287,8 @@ class SparseCodedChargedGauSHNetwork:
 			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs,self.nl_nn_pl:nls_nn,self.nl_j_pl:nls_j}
 			if (self.DoRotGrad):
 				print("RotGrad:",self.sess.run([self.RotGrad], feed_dict=feed_dict))
+			if (Debug):
+				print(nls_nn,nls_j)
 			if (DoForce):
 				ens,fs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
 				return ens[0],fs[0][:m.NAtoms()]*(-JOULEPERHARTREE)
@@ -317,6 +325,35 @@ class SparseCodedChargedGauSHNetwork:
 			ens,fs,hs = self.sess.run([self.MolEnergies,self.MolGrads,self.MolHess], feed_dict=feed_dict)
 			return ens[0], fs[0][:m.NAtoms()]*(-JOULEPERHARTREE), hs[0][:m.NAtoms()][:m.NAtoms()]*JOULEPERHARTREE*JOULEPERHARTREE
 		return EFH
+
+	@TMTiming("MakeFeed")
+	def MakeFeed(self,m):
+		"""
+ 		Randomly accumulate a batch.
+
+		Args:
+			aset: A molecule set.
+
+		Returns:
+ 			feed dictionary and the molecule tested for debug purposes.
+		"""
+		xyzs = np.zeros((self.batch_size,self.MaxNAtom,3),dtype=np.float)
+		true_force = np.zeros((self.batch_size,self.MaxNAtom,3),dtype=np.float)
+		zs = np.zeros((self.batch_size,self.MaxNAtom,1),dtype=np.int32)
+		true_ae = np.zeros((self.batch_size,1),dtype=np.float)
+		qs = np.zeros((self.batch_size,self.MaxNAtom),dtype=np.float64) # Charges.
+		ds = np.zeros((self.batch_size,3),dtype=np.float64) # Dipoles.
+		xyzs[0,:m.NAtoms()] = m.coords
+		zs[0,:m.NAtoms(),0] = m.atoms
+		nlt_nn, nlt_j = self.NLTensors(xyzs,zs)
+		nls_nn = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_NN),dtype=np.int32)
+		nls_j = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_J),dtype=np.int32)
+		if ((self.MaxNeigh_J > self.MaxNeigh_J_prep) or (self.MaxNeigh_NN > self.MaxNeigh_NN_prep)):
+			print("Too Many Neighbors.")
+			raise Exception('NeighborOverflow')
+		nls_nn[:nlt_nn.shape[0],:nlt_nn.shape[1],:nlt_nn.shape[2]] = nlt_nn
+		nls_j[:nlt_j.shape[0],:nlt_j.shape[1],:nlt_j.shape[2]] = nlt_j
+		return {self.xyzs_pl:xyzs, self.zs_pl:zs,self.nl_nn_pl:nls_nn,self.nl_j_pl:nls_j,self.groundTruthE_pl:true_ae, self.groundTruthG_pl:true_force, self.groundTruthQ_pl:qs, self.groundTruthD_pl:ds}
 
 	@TMTiming("NextBatch")
 	def NextBatch(self,aset):
@@ -606,6 +643,7 @@ class SparseCodedChargedGauSHNetwork:
 		# Append orthogonal axes to dxyzs
 		argshape = tf.shape(dxyzs)
 		realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
+
 		if (self.ncan == 1):
 			orders = [[0,1]]
 		elif (self.ncan == 2):
@@ -663,52 +701,48 @@ class SparseCodedChargedGauSHNetwork:
 		# Append orthogonal axes to dxyzs
 		argshape = tf.shape(dxyzs)
 		realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
-		if (self.ncan == 2):
-			axes = [0,1]
-		elif (self.ncan == 4):
-			axes = [0,1,2,3]
-		elif (self.ncan == 5):
-			axes = [0,1,2,3,4]
-		elif (self.ncan == 6):
-			axes = [0,1,2,3,4,5]
-		elif (self.ncan == 8):
-			axes = [0,1,2,3,4,5,6,7]
-		elif (self.ncan == 12):
-			axes = [0,1,2,3,4,5,6,7,8,9,10,11]
-		elif (self.ncan == 14):
-			axes = [0,1,2,3,4,5,6,7,8,9,10,11,12,13]
+		axes = range(self.ncan)
 		tore = []
 		weightstore = []
+		axes_tore = []
+		axis_max = 5.0
+
+		ndxyzs = safe_norm(dxyzs)
+		wdxyzs = tf.where(tf.less_equal(ndxyzs,axis_max),tf.cos(ndxyzs/axis_max*Pi/2.0),tf.zeros_like(ndxyzs))
+		denom = tf.reduce_sum((wdxyzs+1e-14),axis=2,keepdims=True)
+		iweights = tf.where(tf.less_equal(ndxyzs,axis_max),wdxyzs/denom,tf.zeros_like(wdxyzs))
+		iwdxyzs = dxyzs*iweights
+
 		for taxis in axes:
 			v1 = tf.reshape(dxyzs[:,:,taxis,:],(argshape[0]*argshape[1],3))
-			d1 = (tf.reshape(tf.reduce_sum(tf.pow(dxyzs[:,:,taxis,:],2.0),axis=-1),(argshape[0]*argshape[1],1)))
+			#d1 = (tf.reshape(tf.reduce_sum(tf.pow(dxyzs[:,:,taxis,:],2.0),axis=-1),(argshape[0]*argshape[1],1)))
 			v1 += tf.constant(np.array([1e-14,0.,0.]),dtype=self.prec)
 			v1 *= safe_inv_norm(v1)
-			# Weight all other axes by their distances to the origin
-
-			wdxyzs = safe_inv_norm(dxyzs)*dxyzs
-			#v2 = tf.reshape(tf.reduce_mean(dxyzs*w2 - dxyzs[:,:,taxis,:][:,:,tf.newaxis,:],axis=2),(argshape[0]*argshape[1],3)) + tf.constant(np.array([0.,1e-14,0.]),dtype=self.prec)
-			v2 = tf.reshape(tf.reduce_mean(wdxyzs-wdxyzs[:,:,taxis,tf.newaxis,:],axis=2),(argshape[0]*argshape[1],3)) + tf.constant(np.array([0.,1e-14,0.]),dtype=self.prec)
+			# Weight all other axes by their distances to the origin (atom i)
+			v2 = tf.reshape(tf.reduce_sum(iwdxyzs-iwdxyzs[:,:,taxis,tf.newaxis,:],axis=2),(argshape[0]*argshape[1],3)) + tf.constant(np.array([0.,1e-14,0.]),dtype=self.prec)
 			v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 			v2 *= safe_inv_norm(v2)
+
 			v3 = tf.cross(v1,v2)
 			v3 *= safe_inv_norm(v3)
 			vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
+			axes_tore.append(vs)
+			weightstore.append(tf.reshape(iweights[:,:,taxis,:],(argshape[0]*argshape[1],1)))
 
-			NullAxis = tf.less_equal(d1,1e-14)
-			d1p = tf.where(NullAxis,tf.zeros_like(d1),d1)
-			axis_max = 2.8
-			weight = tf.where(tf.logical_or(tf.less_equal(d1p,0.),tf.greater_equal(d1p,axis_max*axis_max)),tf.zeros_like(d1),tf.cos(d1p/axis_max/axis_max*Pi/2.0))
-			#weight = tf.where(tf.less_equal(d1p,0.),tf.zeros_like(d1),tf.exp(-2.0*d1p))
-			weightstore.append(weight)
+			if 0:
+				d1 = tf.reshape(ndxyzs[:,:,taxis,:],(argshape[0]*argshape[1],1))
+				NullAxis = tf.less_equal(d1,1e-14)
+				d1p = tf.where(NullAxis,tf.zeros_like(d1),d1)
+				weight = tf.where(tf.logical_or(tf.less_equal(d1p,0.),tf.greater_equal(d1p,axis_max*axis_max)),tf.zeros_like(d1),tf.cos(d1p/axis_max*Pi/2.0))
+
 
 		allweight = tf.stack(weightstore,axis=0)
 		todenom = tf.reduce_sum(allweight,axis=0,keepdims=True)
 		denom = tf.where(tf.greater(todenom,0.0),1.0/todenom,tf.zeros_like(todenom))
 		axis_weights = tf.reshape(allweight*denom,(self.ncan,argshape[0],argshape[1]))
-		axis_weights = tf.Print(axis_weights,[axis_weights[:,0]],"AxisWeights",summarize=1000)
-		return tf.stack(tore,axis=0), axis_weights
+		#axis_weights = tf.Print(axis_weights,[axis_weights[:,0]],"AxisWeights",summarize=1000)
+		return tf.stack(tore,axis=0), axis_weights, tf.stack(axes_tore)
 
 
 	def ChargeEmbeddedModel(self, dxyzs, Zs, zjs, gather_inds, pair_mask, gauss_params, atom_codes, l_max):
@@ -990,17 +1024,20 @@ class SparseCodedChargedGauSHNetwork:
 		self.AtomCharges = tf.zeros((self.batch_size,self.MaxNAtom),dtype=self.prec,name='AtomCharges')
 
 		if (self.Canonicalize):
-			axes,weights = self.CanonicalizeGS(self.dxyzs)
+			cdxyzs,weights,self.can_axes  = self.CanonicalizeGS(self.dxyzs)
+			CanAtomEs = []
+			CanAtomQs = []
 			for i in range(self.ncan):
-				self.AtomNetEnergies_p, self.AtomCharges_p = self.ChargeEmbeddedModel(axes[i], self.zs_pl, zjs,gather_inds, self.sparse_mask, self.gp_tf, self.atom_codes, self.l_max)
-				self.AtomNetEnergies += self.AtomNetEnergies_p*tf.reshape(weights[i],(self.batch_size,self.MaxNAtom,1))
-				self.AtomCharges += self.AtomCharges_p*tf.reshape(weights[i],(self.batch_size,self.MaxNAtom))
-			#self.AtomNetEnergies /= self.ncan
-			#self.AtomCharges /= self.ncan
+				AtomNetEnergies_p, AtomCharges_p = self.ChargeEmbeddedModel(cdxyzs[i], self.zs_pl, zjs,gather_inds, self.sparse_mask, self.gp_tf, self.atom_codes, self.l_max)
+				CanAtomEs.append(AtomNetEnergies_p)
+				CanAtomQs.append(AtomCharges_p)
+			self.CAEs = tf.stack(CanAtomEs,axis=0)
+			self.CAQs = tf.stack(CanAtomQs,axis=0)
+			self.AtomNetEnergies = tf.reduce_sum(tf.reshape(weights,(self.ncan,self.batch_size,self.MaxNAtom,1))*self.CAEs,axis=0)
+			self.AtomCharges = tf.reduce_sum(tf.reshape(weights,(self.ncan,self.batch_size,self.MaxNAtom))*self.CAQs,axis=0)
 		else:
 			self.AtomNetEnergies,self.AtomCharges = self.ChargeEmbeddedModel(self.dxyzs, self.zs_pl, zjs,gather_inds, self.sparse_mask, self.gp_tf, self.atom_codes, self.l_max)
-
-		self.AtomNetEnergies = tf.Print(self.AtomNetEnergies,[self.AtomNetEnergies],"AtomEnergies",summarize=1000000)
+		#self.AtomNetEnergies = tf.Print(self.AtomNetEnergies,[self.AtomNetEnergies],"AtomEnergies",summarize=1000000)
 
 		if (self.DoChargeLearning or self.DoDipoleLearning):
 			self.MolDipoles = self.ChargeToDipole(self.xyzs_pl,self.zs_pl,self.AtomCharges)
@@ -1082,7 +1119,7 @@ class SparseCodedChargedGauSHNetwork:
 
 net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=True,mode='train')
 #net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
-net.Train()
+#net.Train()
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
@@ -1141,11 +1178,43 @@ if 1:
 		#m2.Distort(0.3)
 		#m2=Opt.Opt(m2,"FromDistorted"+str(i))
 		# Do a detailed energy, force scan for geoms along the opt coordinate.
-		interp = m1.Interpolation(b.mols[mi],n=500)
+		interp = m1.Interpolation(b.mols[mi],n=250)
 		ens = np.zeros(len(interp))
-		fs = np.zeros((len(interp),m.NAtoms(),3))
+		fs = np.zeros((len(interp),m1.NAtoms(),3))
+		axes = []
+		ws = np.zeros((len(interp),m1.NAtoms(),net.ncan))
+		ews = np.zeros((len(interp),m1.NAtoms(),net.ncan))
+		xws = np.zeros((len(interp),m1.NAtoms(),net.ncan))
+		yws = np.zeros((len(interp),m1.NAtoms(),net.ncan))
+		zws = np.zeros((len(interp),m1.NAtoms(),net.ncan))
+		Xc = []
+		Yc = []
+		Zc = []
+		Xa = []
+		Ya = []
+		Za = []
 		for j,mp in enumerate(interp):
 			ens[j],fs[j] = EF(mp.coords)
+			ate = net.sess.run([net.CAEs[:,:,:,0]],feed_dict=net.MakeFeed(mp))[0]
+			a,bp,axs = net.sess.run([net.CanonicalizeGS(net.dxyzs)],feed_dict=net.MakeFeed(mp))[0]
+			#print(a,"b",b)
+			ws[j]=np.transpose(bp[:,0,:m1.NAtoms()])
+			ews[j]=np.transpose(ate[:,0,:m1.NAtoms()])
+			axs2 = np.reshape(axs,(net.ncan,net.batch_size,net.MaxNAtom,3,3))
+			xws[j]=np.transpose(axs2[:,0,:m1.NAtoms(),0,0])
+			yws[j]=np.transpose(axs2[:,0,:m1.NAtoms(),1,0])
+			zws[j]=np.transpose(axs2[:,0,:m1.NAtoms(),2,0])
+		#for k in range(m1.NAtoms()):
+		plt.plot(np.reshape(ws,(len(interp),m1.NAtoms()*net.ncan)))
+		plt.show()
+		plt.plot(np.reshape(ews,(len(interp),m1.NAtoms()*net.ncan)))
+		plt.show()
+		plt.plot(np.reshape(xws,(len(interp),m1.NAtoms()*net.ncan)))
+		plt.show()
+		plt.plot(np.reshape(yws,(len(interp),m1.NAtoms()*net.ncan)))
+		plt.show()
+		plt.plot(np.reshape(zws,(len(interp),m1.NAtoms()*net.ncan)))
+		plt.show()
 		plt.plot(ens)
 		plt.show()
 		# Compare force projected on each step with evaluated force.
