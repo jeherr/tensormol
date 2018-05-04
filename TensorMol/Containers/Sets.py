@@ -106,6 +106,13 @@ class MSet:
 		self.AvQ = AvQ
 		return AvE,AvQ
 
+	def cut_max_atomic_number(self,max_an):
+		cut_down_mols = []
+		for mol in self.mols:
+			if (np.max(mol.atoms) < max_an):
+				cut_down_mols.append(mol)
+		self.mols = cut_down_mols
+
 	def cut_unique_bond_hash(self):
 		cut_down_mols = []
 		known_hashes = []
@@ -236,7 +243,10 @@ class MSet:
 		return nat
 
 	def MaxNAtom(self):
-		return np.max([m.NAtoms() for m in self.mols])
+		if (len(self.mols)>0):
+			return np.max([m.NAtoms() for m in self.mols])
+		else:
+			return 0
 
 	def max_neighbors(self):
 		return max([mol.max_neighbors() for mol in self.mols])

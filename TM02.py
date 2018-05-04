@@ -15,6 +15,24 @@ if (0):
 from TensorMol import *
 import numpy as np
 
+if (1):
+	a = MSet("Heavy")
+	b = MSet("CrCuSiBe")
+	c = MSet("CrCu")
+	d = MSet("MHMO_withcharge")
+	e = MSet("kevin_heteroatom.dat")
+	f = MSet("HNCO_small")
+	g = MSet("chemspider20_1_meta_withcharge_noerror_all")
+	sets = [a,b,c,d,e,f,g]
+	S = MSet()
+	for s in sets:
+		s.Load()
+		S.mols = S.mols + s.mols
+	S.cut_max_grad(2.)
+	S.cut_max_atomic_number(37)
+	S.cut_energy_outliers(2.)
+	S.Save("PeriodicTable")
+
 if (0):
 	a = MSet("chemspider20_345_opt")
 	b = MSet("chemspider20_1_opt_withcharge_noerror_part2_max50")
@@ -45,16 +63,16 @@ if (0):
 		UniqueSet.Save("UniqueBonds")
 		MasterSet.Save("MasterSet")
 
-if 1:
-	b = MSet("HNCO_small")
-	b.Load()
-
 if 0:
 	b = MSet("HNCO_small")
 	b.Load()
 	b.cut_max_num_atoms(40)
 	b.cut_max_grad(2.0)
 	b.cut_energy_outliers()
+
+if 0:
+	S = MSet("PeriodicTable")
+	S.Load()
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -166,7 +184,7 @@ class SparseCodedChargedGauSHNetwork:
 			self.ncan = 12
 		self.RCut_Coulomb = 19.0
 		self.RCut_NN = 7.0
-		self.AtomCodes = ELEMENTCODES
+		self.AtomCodes = ELEMENTCODES3
 		#self.AtomCodes = np.random.random(size=(MAX_ATOMIC_NUMBER,6))
 		self.AtomTypes = [1,6,7,8]
 		self.l_max = 4
@@ -189,8 +207,8 @@ class SparseCodedChargedGauSHNetwork:
 		self.AverageElementEnergy = np.zeros((MAX_ATOMIC_NUMBER))
 		self.AverageElementCharge = np.zeros((MAX_ATOMIC_NUMBER))
 		if (aset != None):
-			self.MaxNAtom = b.MaxNAtom()+1
-			self.AtomTypes = b.AtomTypes()
+			self.MaxNAtom = aset.MaxNAtom()+1
+			self.AtomTypes = aset.AtomTypes()
 			AvE,AvQ = aset.RemoveElementAverages()
 			for ele in AvE.keys():
 				self.AverageElementEnergy[ele] = AvE[ele]
@@ -506,7 +524,7 @@ class SparseCodedChargedGauSHNetwork:
 			v3 *= safe_inv_norm(v3)
 			vs =  tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 
-			axis_max = 3.0
+			axis_max = self.RCut_NN
 			d1w = tf.where(tf.logical_or(tf.greater(d1,axis_max),tf.less(d1,1e-3)),tf.zeros_like(d1),tf.cos(d1/axis_max*Pi/2.0)*tf.exp(-d1))
 			d2w = tf.where(tf.logical_or(tf.greater(d2,axis_max),tf.less(d2,1e-3)),tf.zeros_like(d2),tf.cos(d2/axis_max*Pi/2.0)*tf.exp(-d2))
 			weight = tf.where(tf.less_equal(d1w*d2w,0.),tf.zeros_like(d2w),d1w*d2w)
@@ -833,8 +851,10 @@ class SparseCodedChargedGauSHNetwork:
 		_ , train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
 		if (np.isnan(train_loss)):
 			print("Problem Batch discovered.")
-			for mol in mols:
-				print(mol)
+			GD = self.sess.run([self.GradDiff], feed_dict=feed_dict)[0]
+			print("Grad Diff:", np.reduce_sum(GD,axis=(-1,-2)))
+			for k,mol in enumerate(mols):
+				print(k,mol)
 			raise Exception("Nan in Training.")
 		self.print_training(step, train_loss)
 		return
@@ -1093,7 +1113,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=b,load=False,load_averages=False,mode='train')
+net = SparseCodedChargedGauSHNetwork(aset=S,load=False,load_averages=False,mode='train')
 #net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
 net.Train()
 
