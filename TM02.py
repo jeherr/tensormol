@@ -496,17 +496,16 @@ class SparseCodedChargedGauSHNetwork:
 			v1 =  tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))
 			d1 = (tf.reshape(safe_norm(dxyzs[:,:,perm[0],:]),(argshape[0]*argshape[1],1)))
 			d2 = (tf.reshape(safe_norm(dxyzs[:,:,perm[1],:]),(argshape[0]*argshape[1],1)))
-			v1 += tf.constant(np.array([1e-14,0.,0.]),dtype=self.prec)
+			v1 += tf.constant(np.array([1e-13,0.,0.]),dtype=self.prec)
 			v1 *= safe_inv_norm(v1)
 			v2 =  tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))
-			v2 += tf.constant(np.array([0.,1e-14,0.]),dtype=self.prec)
+			v2 += tf.constant(np.array([0.,1e-13,0.]),dtype=self.prec)
 			v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 			v2 *= safe_inv_norm(v2)
 			v3 =  tf.cross(v1,v2)
 			v3 *= safe_inv_norm(v3)
 			vs =  tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 
-			NullAxis = tf.logical_or(tf.less_equal(d1,1e-14),tf.less_equal(d2,1e-14))
 			axis_max = 3.0
 			d1w = tf.where(tf.greater(d1,axis_max),tf.zeros_like(d1),tf.cos(d1/axis_max*Pi/2.0)*tf.exp(-d1))
 			d2w = tf.where(tf.greater(d2,axis_max),tf.zeros_like(d2),tf.cos(d2/axis_max*Pi/2.0)*tf.exp(-d2))
@@ -517,8 +516,9 @@ class SparseCodedChargedGauSHNetwork:
 
 		allweight = tf.stack(weightstore,axis=0)
 		todenom = tf.reduce_sum(allweight,axis=0,keepdims=True)
-		denom = tf.where(tf.greater(todenom,0.0),1.0/todenom,tf.zeros_like(todenom))
+		denom = tf.where(tf.greater(todenom,0.0),1.0/(todenom+1e-14),tf.zeros_like(todenom))
 		axis_weights = tf.reshape(allweight*denom,(self.ncan,argshape[0],argshape[1]))
+
 		return tf.stack(tore,axis=0), axis_weights
 
 	def CanonicalizeGS_new(self, dxyzs, sparse_mask):
@@ -805,16 +805,24 @@ class SparseCodedChargedGauSHNetwork:
 			AtomEnergies = tf.reshape(l3e,(eff_batch_size,self.MaxNAtom,1))*AtomEStds+AvEs
 
 		# Now recombine the predictions with the weights.
-		self.CAEs = tf.reshape(AtomEnergies,(self.ncan,self.batch_size,self.MaxNAtom,1))
-		self.CAQs = tf.reshape(AtomCharges,(self.ncan,self.batch_size,self.MaxNAtom))
-		#weights = tf.Print(weights,[weights],"Weights",summarize=100000)
-		self.AtomNetEnergies = tf.reduce_sum(tf.reshape(weights,(self.ncan,self.batch_size,self.MaxNAtom,1))*self.CAEs,axis=0)
-		self.AtomCharges = tf.reduce_sum(tf.reshape(weights,(self.ncan,self.batch_size,self.MaxNAtom))*self.CAQs,axis=0)
+		energy_shape = (self.ncan,self.batch_size,self.MaxNAtom,1)
+		charge_shape = (self.ncan,self.batch_size,self.MaxNAtom)
+		eweights = tf.reshape(weights,energy_shape)
+		qweights = tf.reshape(weights,charge_shape)
+
+		self.CAEs = tf.reshape(AtomEnergies,energy_shape)
+		self.CAQs = tf.reshape(AtomCharges,charge_shape)
+
+		wCAEs = tf.where(tf.greater(eweights,1e-13),self.CAEs,tf.zeros_like(self.CAEs))
+		wCAQs = tf.where(tf.greater(qweights,1e-13),self.CAQs,tf.zeros_like(self.CAQs))
+
+		self.AtomNetEnergies = tf.reduce_sum(eweights*wCAEs,axis=0)
+		self.AtomCharges = tf.reduce_sum(qweights*wCAQs,axis=0)
 
 		# Variances of the above.
 		# Perhaps to add to a loss function.
-		self.AtomNetEnergies_var = tf.reduce_sum(tf.reshape(weights,(self.ncan,self.batch_size,self.MaxNAtom,1))*self.CAEs*self.CAEs,axis=0)
-		self.AtomCharges_var = tf.reduce_sum(tf.reshape(weights,(self.ncan,self.batch_size,self.MaxNAtom))*self.CAQs*self.CAQs,axis=0)
+		self.AtomNetEnergies_var = tf.reduce_sum(wCAEs*wCAEs*eweights,axis=0)
+		self.AtomCharges_var = tf.reduce_sum(wCAQs*wCAQs*qweights,axis=0)
 		self.AtomNetEnergies_var -= self.AtomNetEnergies*self.AtomNetEnergies
 		self.AtomCharges_var -= self.AtomCharges*self.AtomCharges
 
@@ -823,6 +831,11 @@ class SparseCodedChargedGauSHNetwork:
 	def train_step(self,step):
 		feed_dict, mols = self.NextBatch(self.mset)
 		_ , train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
+		if (np.isnan(train_loss)):
+			print("Problem Batch discovered.")
+			for mol in mols:
+				print(mol)
+			raise Exception("Nan in Training.")
 		self.print_training(step, train_loss)
 		return
 
@@ -889,7 +902,11 @@ class SparseCodedChargedGauSHNetwork:
 	def training(self, loss):
 		optimizer = tf.train.AdamOptimizer(learning_rate=(self.learning_rate))
 		grads = tf.gradients(loss, tf.trainable_variables())
-		grads, _ = tf.clip_by_global_norm(grads, 50)
+		# Avoid any nans
+		nonan_grads = []
+		for grad in grads:
+			nonan_grads.append(tf.where(tf.is_nan(grad),tf.zeros_like(grad),grad))
+		grads, _ = tf.clip_by_global_norm(nonan_grads, 50)
 		grads_and_vars = list(zip(grads, tf.trainable_variables()))
 		global_step = tf.Variable(0, name='global_step', trainable=False)
 		train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
@@ -1038,11 +1055,14 @@ class SparseCodedChargedGauSHNetwork:
 			t1 = tf.reshape(self.MolGrads,(self.batch_size,-1))
 			t2 = tf.reshape(self.groundTruthG_pl,(self.batch_size,-1))
 			diff = t1 - t2
-			self.Gloss = tf.reduce_sum(tf.clip_by_value(diff*diff,1e-36,1.0))/tf.cast(self.batch_size*self.MaxNAtom*3,self.prec)
+			self.GradDiff = tf.clip_by_value(diff*diff,1e-36,1.0)
+			self.Gloss = tf.reduce_sum(self.GradDiff)/tf.cast(self.batch_size*self.MaxNAtom*3,self.prec)
 			tf.losses.add_loss(self.Gloss,loss_collection=tf.GraphKeys.LOSSES)
 			tf.summary.scalar('Gloss',self.Gloss)
 			tf.add_to_collection('losses', self.Gloss)
 			self.Tloss = (1.0+40.0*self.Eloss)
+			if (self.Canonicalize):
+				self.Tloss += self.EVarianceLoss
 			if (self.DoForceLearning):
 				self.Tloss += (1.0+self.Gloss)
 			if (self.DoDipoleLearning):
