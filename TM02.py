@@ -5,7 +5,7 @@ It's a little recurrent-y.
 import os
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 HAS_MATPLOTLIB=False
-if (1):
+if (0):
 	try:
 		import matplotlib.pyplot as plt
 		HAS_MATPLOTLIB=True
@@ -159,7 +159,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.MaxNeigh_NN = self.MaxNAtom
 		self.MaxNeigh_J = self.MaxNAtom
 		self.learning_rate = 0.0001
-		self.ncan = 12
+		self.ncan = 2
 		self.DoHess=False
 		self.mode = mode
 		if (mode == 'eval'):
@@ -471,12 +471,10 @@ class SparseCodedChargedGauSHNetwork:
 		If the energy from both these representations is averaged the result
 		will be permutationally invariant (WRT nearest-next-nearest motion)
 		and rotationally invariant.
-
 		Args:
 			dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
 			zs: a nMol X maxNatom X maxNatom X 1 tensor of atomic number pairs.
 			ie: ... X i X i = (0.,0.,0.))
-
 			also an ncan X nmol X maxNAtom X 1 tensor
 		"""
 		# Append orthogonal axes to dxyzs
@@ -492,37 +490,35 @@ class SparseCodedChargedGauSHNetwork:
 			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
 		elif (self.ncan == 12):
 			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
-
 		tore = []
 		weightstore = []
 		for perm in orders:
-			v1 = tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))
-			d1 = (tf.reshape(tf.reduce_sum(tf.pow(dxyzs[:,:,perm[0],:],2.0),axis=-1),(argshape[0]*argshape[1],1)))
-			d2 = (tf.reshape(tf.reduce_sum(tf.pow(dxyzs[:,:,perm[1],:],2.0),axis=-1),(argshape[0]*argshape[1],1)))
+			v1 =  tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))
+			d1 = (tf.reshape(safe_norm(dxyzs[:,:,perm[0],:]),(argshape[0]*argshape[1],1)))
+			d2 = (tf.reshape(safe_norm(dxyzs[:,:,perm[1],:]),(argshape[0]*argshape[1],1)))
 			v1 += tf.constant(np.array([1e-14,0.,0.]),dtype=self.prec)
 			v1 *= safe_inv_norm(v1)
-			v2 = tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,1e-14,0.]),dtype=self.prec)
+			v2 =  tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))
+			v2 += tf.constant(np.array([0.,1e-14,0.]),dtype=self.prec)
 			v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
 			v2 *= safe_inv_norm(v2)
-			v3 = tf.cross(v1,v2)
+			v3 =  tf.cross(v1,v2)
 			v3 *= safe_inv_norm(v3)
-			vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
-			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
+			vs =  tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 
 			NullAxis = tf.logical_or(tf.less_equal(d1,1e-14),tf.less_equal(d2,1e-14))
-			axis_max = 2.5
-			d1p = tf.where(NullAxis,tf.zeros_like(d1),tf.sqrt(d1))
-			d2p = tf.where(NullAxis,tf.zeros_like(d2),tf.sqrt(d2))
-			d1w = tf.where(tf.greater(d1p,axis_max),tf.zeros_like(d1p),tf.cos(d1p/axis_max*Pi/2.0)*tf.exp(-d1p))
-			d2w = tf.where(tf.greater(d2p,axis_max),tf.zeros_like(d2p),tf.cos(d2p/axis_max*Pi/2.0)*tf.exp(-d2p))
-			weight = tf.where(NullAxis,tf.zeros_like(d1p),d1w*d2w)
+			axis_max = 3.0
+			d1w = tf.where(tf.greater(d1,axis_max),tf.zeros_like(d1),tf.cos(d1/axis_max*Pi/2.0)*tf.exp(-d1))
+			d2w = tf.where(tf.greater(d2,axis_max),tf.zeros_like(d2),tf.cos(d2/axis_max*Pi/2.0)*tf.exp(-d2))
+			weight = tf.where(tf.less_equal(d1w*d2w,0.),tf.zeros_like(d2w),d1w*d2w)
+
+			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
 			weightstore.append(weight)
 
 		allweight = tf.stack(weightstore,axis=0)
 		todenom = tf.reduce_sum(allweight,axis=0,keepdims=True)
 		denom = tf.where(tf.greater(todenom,0.0),1.0/todenom,tf.zeros_like(todenom))
 		axis_weights = tf.reshape(allweight*denom,(self.ncan,argshape[0],argshape[1]))
-		#axis_weights = tf.Print(axis_weights,[(tf.reshape(tf.reduce_sum(tf.pow(dxyzs[:,:,perm[0],:],2.0),axis=-1),(argshape[0]*argshape[1],1))),tf.shape(axis_weights),axis_weights[:,0]],"AxisWeights",summarize=1000)
 		return tf.stack(tore,axis=0), axis_weights
 
 	def CanonicalizeGS_new(self, dxyzs, sparse_mask):
@@ -831,7 +827,7 @@ class SparseCodedChargedGauSHNetwork:
 		return
 
 	def print_training(self, step, loss_):
-		if (step%int(1000/self.batch_size)==0):
+		if (step%int(500/self.batch_size)==0):
 			self.saver.save(self.sess, './networks/SparseCodedGauSH', global_step=step)
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
 			if (self.DoCodeLearning):
@@ -909,7 +905,7 @@ class SparseCodedChargedGauSHNetwork:
 	def Prepare(self):
 		tf.reset_default_graph()
 
-		self.DoRotGrad = True
+		self.DoRotGrad = False
 		self.DoForceLearning = True
 		self.Canonicalize = True
 		self.DoCodeLearning = True
@@ -991,10 +987,8 @@ class SparseCodedChargedGauSHNetwork:
 		self.AtomCharges = tf.zeros((self.batch_size,self.MaxNAtom),dtype=self.prec,name='AtomCharges')
 
 		if (self.Canonicalize):
-			#cdxyzs,weights,self.can_axes  = self.CanonicalizeGS(self.dxyzs)
 			cdxyzs,weights  = self.CanonicalizeGS(self.dxyzs,self.sparse_mask)
 			self.AtomNetEnergies,self.AtomCharges = self.CanChargeEmbeddedModel(cdxyzs, weights, self.zs_pl, zjs, gather_inds, self.sparse_mask, self.gp_tf, self.atom_codes, self.l_max)
-			#  Add atom energy variance to the loss.
 			self.EVarianceLoss = tf.nn.l2_loss(self.AtomNetEnergies_var)
 			tf.summary.scalar('EVarLoss',self.EVarianceLoss)
 			tf.add_to_collection('EVarLoss', self.EVarianceLoss)
@@ -1079,7 +1073,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=True,mode='train')
+net = SparseCodedChargedGauSHNetwork(aset=b,load=False,load_averages=False,mode='train')
 #net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
 net.Train()
 
