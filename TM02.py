@@ -507,8 +507,8 @@ class SparseCodedChargedGauSHNetwork:
 			vs =  tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 
 			axis_max = 3.0
-			d1w = tf.where(tf.greater(d1,axis_max),tf.zeros_like(d1),tf.cos(d1/axis_max*Pi/2.0)*tf.exp(-d1))
-			d2w = tf.where(tf.greater(d2,axis_max),tf.zeros_like(d2),tf.cos(d2/axis_max*Pi/2.0)*tf.exp(-d2))
+			d1w = tf.where(tf.logical_or(tf.greater(d1,axis_max),tf.less(d1,1e-3)),tf.zeros_like(d1),tf.cos(d1/axis_max*Pi/2.0)*tf.exp(-d1))
+			d2w = tf.where(tf.logical_or(tf.greater(d2,axis_max),tf.less(d2,1e-3)),tf.zeros_like(d2),tf.cos(d2/axis_max*Pi/2.0)*tf.exp(-d2))
 			weight = tf.where(tf.less_equal(d1w*d2w,0.),tf.zeros_like(d2w),d1w*d2w)
 
 			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
