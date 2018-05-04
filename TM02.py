@@ -15,7 +15,7 @@ if (0):
 from TensorMol import *
 import numpy as np
 
-if (1):
+if (0):
 	a = MSet("Heavy")
 	b = MSet("CrCuSiBe")
 	c = MSet("CrCu")
@@ -30,6 +30,7 @@ if (1):
 		S.mols = S.mols + s.mols
 	S.cut_max_grad(2.)
 	S.cut_max_atomic_number(37)
+	S.cut_max_num_atoms(30)
 	S.cut_energy_outliers(2.)
 	S.Save("PeriodicTable")
 
@@ -70,9 +71,9 @@ if 0:
 	b.cut_max_grad(2.0)
 	b.cut_energy_outliers()
 
-if 0:
-	S = MSet("PeriodicTable")
-	S.Load()
+if 1:
+	b = MSet("HNCO_small")
+	b.Load()
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -181,10 +182,10 @@ class SparseCodedChargedGauSHNetwork:
 		self.DoHess=False
 		self.mode = mode
 		if (mode == 'eval'):
-			self.ncan = 12
+			self.ncan = 2
 		self.RCut_Coulomb = 19.0
 		self.RCut_NN = 7.0
-		self.AtomCodes = ELEMENTCODES3
+		self.AtomCodes = ELEMENTCODES
 		#self.AtomCodes = np.random.random(size=(MAX_ATOMIC_NUMBER,6))
 		self.AtomTypes = [1,6,7,8]
 		self.l_max = 4
@@ -498,6 +499,7 @@ class SparseCodedChargedGauSHNetwork:
 		# Append orthogonal axes to dxyzs
 		argshape = tf.shape(dxyzs)
 		realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
+
 		if (self.ncan == 1):
 			orders = [[0,1]]
 		elif (self.ncan == 2):
@@ -508,6 +510,9 @@ class SparseCodedChargedGauSHNetwork:
 			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
 		elif (self.ncan == 12):
 			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
+		elif (self.ncan == 13):
+			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
+
 		tore = []
 		weightstore = []
 		for perm in orders:
@@ -525,8 +530,8 @@ class SparseCodedChargedGauSHNetwork:
 			vs =  tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 
 			axis_max = self.RCut_NN
-			d1w = tf.where(tf.logical_or(tf.greater(d1,axis_max),tf.less(d1,1e-3)),tf.zeros_like(d1),tf.cos(d1/axis_max*Pi/2.0)*tf.exp(-d1))
-			d2w = tf.where(tf.logical_or(tf.greater(d2,axis_max),tf.less(d2,1e-3)),tf.zeros_like(d2),tf.cos(d2/axis_max*Pi/2.0)*tf.exp(-d2))
+			d1w = tf.where(tf.logical_or(tf.greater(d1,axis_max),tf.less(d1,1e-3)),tf.zeros_like(d1),tf.cos((d1-1e-13)/axis_max*Pi/2.0)*tf.exp(-d1))
+			d2w = tf.where(tf.logical_or(tf.greater(d2,axis_max),tf.less(d2,1e-3)),tf.zeros_like(d2)+1e-13,tf.cos((d2-1e-13)/axis_max*Pi/2.0)*tf.exp(-d2)+1e-13)
 			weight = tf.where(tf.less_equal(d1w*d2w,0.),tf.zeros_like(d2w),d1w*d2w)
 
 			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
@@ -942,7 +947,7 @@ class SparseCodedChargedGauSHNetwork:
 	def Prepare(self):
 		tf.reset_default_graph()
 
-		self.DoRotGrad = False
+		self.DoRotGrad = True
 		self.DoForceLearning = True
 		self.Canonicalize = True
 		self.DoCodeLearning = True
@@ -1113,9 +1118,9 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=S,load=False,load_averages=False,mode='train')
-#net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
+net = SparseCodedChargedGauSHNetwork(aset=b,load=False,load_averages=False,mode='train')
 net.Train()
+#net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
@@ -1202,6 +1207,7 @@ if 1:
 				xws[j]=np.transpose(axs2[:,0,:m1.NAtoms(),0,0])
 				yws[j]=np.transpose(axs2[:,0,:m1.NAtoms(),1,0])
 				zws[j]=np.transpose(axs2[:,0,:m1.NAtoms(),2,0])
+		import matplotlib.pyplot as plt
 		#for k in range(m1.NAtoms()):
 		plt.plot(np.reshape(ws,(len(interp),m1.NAtoms()*net.ncan)))
 		plt.show()
