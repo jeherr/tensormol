@@ -15,6 +15,14 @@ if (0):
 from TensorMol import *
 import numpy as np
 
+if 0:
+	b = MSet("debug")
+	b.ReadXYZ("debug")
+	for dbcase in b.mols:
+		dbcase.properties["energy"] = 1.0
+		dbcase.properties["charges"] = np.zeros(dbcase.NAtoms())
+		dbcase.properties["gradients"] = np.zeros((dbcase.NAtoms(),3))
+
 if (0):
 	a = MSet("Heavy")
 	b = MSet("CrCuSiBe")
@@ -178,11 +186,11 @@ class SparseCodedChargedGauSHNetwork:
 		self.MaxNeigh_NN = self.MaxNAtom
 		self.MaxNeigh_J = self.MaxNAtom
 		self.learning_rate = 0.0001
-		self.ncan = 2
+		self.ncan = 12
 		self.DoHess=False
 		self.mode = mode
 		if (mode == 'eval'):
-			self.ncan = 2
+			self.ncan = 12
 		self.RCut_Coulomb = 19.0
 		self.RCut_NN = 7.0
 		self.AtomCodes = ELEMENTCODES
@@ -392,10 +400,17 @@ class SparseCodedChargedGauSHNetwork:
 		qs = np.zeros((self.batch_size,self.MaxNAtom),dtype=np.float64) # Charges.
 		ds = np.zeros((self.batch_size,3),dtype=np.float64) # Dipoles.
 		mols = []
-		for i in range(self.batch_size):
+		i=0
+		while i < self.batch_size:
 			mi = np.random.randint(len(aset.mols))
 			m = aset.mols[mi]
-			mols.append(m)
+			nancoords = np.any(np.isnan(m.coords))
+			nanatoms = np.any(np.isnan(m.atoms))
+			nanenergy = np.isnan(m.properties["energy"])
+			nangradients = np.any(np.isnan(m.properties["gradients"]))
+			nancharges = np.any(np.isnan(m.properties["charges"]))
+			if (nancoords or nanatoms or nanenergy or nangradients or nancharges):
+				continue
 			xyzs[i,:m.NAtoms()] = m.coords
 			zs[i,:m.NAtoms(),0] = m.atoms
 			true_ae[i]=m.properties["energy"]
@@ -405,7 +420,13 @@ class SparseCodedChargedGauSHNetwork:
 				ds[i]=m.properties["dipole"]
 			except:
 				pass
+			i += 1
+			mols.append(m)
 		nlt_nn, nlt_j = self.NLTensors(xyzs,zs)
+		# all atoms need at least two neighbors.
+		if (np.any(np.logical_and(np.less(nlt_nn[:,:,1],0),np.greater_equal(nlt_nn[:,:,0],0)))):
+			print("... Not enough neighbors in your data ...")
+			return self.NextBatch(aset)
 		nls_nn = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_NN),dtype=np.int32)
 		nls_j = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_J),dtype=np.int32)
 		if ((self.MaxNeigh_J > self.MaxNeigh_J_prep) or (self.MaxNeigh_NN > self.MaxNeigh_NN_prep)):
@@ -499,19 +520,15 @@ class SparseCodedChargedGauSHNetwork:
 		# Append orthogonal axes to dxyzs
 		argshape = tf.shape(dxyzs)
 		realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
-
+		msk =  tf.reshape(sparse_mask,(argshape[0]*argshape[1],argshape[2],1))
 		if (self.ncan == 1):
 			orders = [[0,1]]
 		elif (self.ncan == 2):
 			orders = [[0,1],[1,0]]
 		elif (self.ncan == 4):
 			orders = [[0,1],[1,0],[0,2],[2,0]]
-		elif (self.ncan == 6):
-			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
 		elif (self.ncan == 12):
-			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
-		elif (self.ncan == 13):
-			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
+			orders = [[0,1],[1,0],[0,2],[2,0],[0,3],[3,0],[0,4],[4,0],[0,5],[5,0],[0,6],[6,0]]
 
 		tore = []
 		weightstore = []
@@ -529,19 +546,19 @@ class SparseCodedChargedGauSHNetwork:
 			v3 *= safe_inv_norm(v3)
 			vs =  tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 
-			axis_max = self.RCut_NN
-			d1w = tf.where(tf.logical_or(tf.greater(d1,axis_max),tf.less(d1,1e-3)),tf.zeros_like(d1),tf.cos((d1-1e-13)/axis_max*Pi/2.0)*tf.exp(-d1))
-			d2w = tf.where(tf.logical_or(tf.greater(d2,axis_max),tf.less(d2,1e-3)),tf.zeros_like(d2)+1e-13,tf.cos((d2-1e-13)/axis_max*Pi/2.0)*tf.exp(-d2)+1e-13)
-			weight = tf.where(tf.less_equal(d1w*d2w,0.),tf.zeros_like(d2w),d1w*d2w)
+			axis_max = self.RCut_NN+0.0000001
+			d1w = tf.where(tf.greater(d1,axis_max),tf.zeros_like(d1),tf.cos((d1-1e-13)/axis_max*Pi/2.0)*tf.exp(-2.0*d1)+1e-13)
+			d2w = tf.where(tf.greater(d2,axis_max),tf.zeros_like(d2),tf.cos((d2-1e-13)/axis_max*Pi/2.0)*tf.exp(-2.0*d2)+1e-13)
+			weight = tf.where(tf.greater(msk[:,perm[0]]*msk[:,perm[1]],0.),d1w*d2w,tf.zeros_like(d1w))
 
 			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
 			weightstore.append(weight)
 
 		allweight = tf.stack(weightstore,axis=0)
 		todenom = tf.reduce_sum(allweight,axis=0,keepdims=True)
-		denom = tf.where(tf.greater(todenom,0.0),1.0/(todenom+1e-14),tf.zeros_like(todenom))
+		denom = tf.where(tf.greater(todenom,0.0),1.0/todenom,tf.zeros_like(todenom))
 		axis_weights = tf.reshape(allweight*denom,(self.ncan,argshape[0],argshape[1]))
-
+		#axis_weights = tf.Print(axis_weights,[axis_weights[:,0,0]],"AxisWeights", summarize=10000)
 		return tf.stack(tore,axis=0), axis_weights
 
 	def CanonicalizeGS_new(self, dxyzs, sparse_mask):
@@ -860,13 +877,17 @@ class SparseCodedChargedGauSHNetwork:
 			print("Grad Diff:", np.reduce_sum(GD,axis=(-1,-2)))
 			for k,mol in enumerate(mols):
 				print(k,mol)
-			raise Exception("Nan in Training.")
 		self.print_training(step, train_loss)
 		return
 
 	def print_training(self, step, loss_):
-		if (step%int(500/self.batch_size)==0):
-			self.saver.save(self.sess, './networks/SparseCodedGauSH', global_step=step)
+		if (step%int(50/self.batch_size)==0):
+			if (not np.isnan(loss_)):
+				self.saver.save(self.sess, './networks/SparseCodedGauSH', global_step=step)
+			else:
+				print("Reload Induced by Nan....")
+				self.Load(load_averages = True)
+				return
 			print("step: ", "%7d"%step, "  train loss: ", "%.10f"%(float(loss_)))
 			if (self.DoCodeLearning):
 				print("Gauss Params: ",self.sess.run([self.gp_tf])[0])
@@ -877,10 +898,6 @@ class SparseCodedChargedGauSHNetwork:
 			else:
 				ens,frcs,summary = self.sess.run([self.MolEnergies,self.MolGrads,self.summary_op], feed_dict=feed_dict, options=self.options, run_metadata=self.run_metadata)
 			for i in range(6):
-				#print("Zs:",feed_dict[self.zs_pl][i])
-				#print("xyz:",feed_dict[self.xyzs_pl][i])
-				#print("NL:",feed_dict[self.nl_pl][i])
-				#print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i], frcs[i], feed_dict[self.groundTruthG_pl][i] )
 				print("Pred, true: ", ens[i], feed_dict[self.groundTruthE_pl][i])
 				if (self.DoChargeEmbedding):
 					print("MolCoulEnergy: ", qens[i])
@@ -928,13 +945,14 @@ class SparseCodedChargedGauSHNetwork:
 		optimizer = tf.train.AdamOptimizer(learning_rate=(self.learning_rate))
 		grads = tf.gradients(loss, tf.trainable_variables())
 		# Avoid any nans
-		nonan_grads = []
 		for grad in grads:
-			nonan_grads.append(tf.where(tf.is_nan(grad),tf.zeros_like(grad),grad))
-		grads, _ = tf.clip_by_global_norm(nonan_grads, 50)
-		grads_and_vars = list(zip(grads, tf.trainable_variables()))
-		global_step = tf.Variable(0, name='global_step', trainable=False)
-		train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
+			grad = tf.where(tf.is_nan(grad),tf.zeros_like(grad),grad)
+		vars = tf.trainable_variables()
+		for var in vars:
+			var = tf.where(tf.is_nan(var),tf.zeros_like(var),var)
+		grads, _ = tf.clip_by_global_norm(grads, 50)
+		grads_and_vars = list(zip(grads, vars))
+		train_op = optimizer.apply_gradients(grads_and_vars, global_step=self.global_step)
 		return train_op
 
 	def Train(self,mxsteps=500000):
@@ -946,8 +964,9 @@ class SparseCodedChargedGauSHNetwork:
 	@TMTiming("Prepare")
 	def Prepare(self):
 		tf.reset_default_graph()
+		self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
-		self.DoRotGrad = True
+		self.DoRotGrad = False
 		self.DoForceLearning = True
 		self.Canonicalize = True
 		self.DoCodeLearning = True

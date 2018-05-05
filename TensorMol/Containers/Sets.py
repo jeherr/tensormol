@@ -323,6 +323,7 @@ class MSet:
 		"""
 		Reads XYZs concatenated into a single file separated by \n\n as a molset
 		"""
+		from .Mol import Mol
 		if filename == None:
 			filename = self.name
 		f = open(self.path+filename+".xyz","r")
