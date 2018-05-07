@@ -176,7 +176,10 @@ class UniversalNetwork(object):
 	def save_network(self):
 		print("Saving TFInstance")
 		f = open(PARAMS["networks_directory"]+self.name+".tfn","wb")
-		pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+		if sys.version_info[0] < 3:
+			pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+		else:
+			pickle.dump(self, f)
 		f.close()
 		return
 
