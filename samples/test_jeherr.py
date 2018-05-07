@@ -25,7 +25,7 @@ def read_unpacked_set(set_name="chemspider12", paths="/media/sdb2/jeherr/TensorM
 	a=MSet(set_name)
 	for path in glob.iglob(paths):
 		a.read_xyz_set_with_properties(paths, properties)
-	print len(a.mols), " Molecules"
+	print(len(a.mols), " Molecules")
 	a.Save()
 
 def TrainKRR(set_ = "SmallMols", dig_ = "GauSH", OType_ ="Force"):
@@ -40,7 +40,7 @@ def TrainKRR(set_ = "SmallMols", dig_ = "GauSH", OType_ ="Force"):
 
 def RandomSmallSet(set_, size_):
 	""" Returns an MSet of random molecules chosen from a larger set """
-	print "Selecting a subset of "+str(set_)+" of size "+str(size_)
+	print("Selecting a subset of "+str(set_)+" of size "+str(size_))
 	a=MSet(set_)
 	a.Load()
 	b=MSet(set_+"_rand")
@@ -60,7 +60,7 @@ def TestMetadynamics():
 		energy, forces = manager.evaluate_mol(Mol(m.atoms, coords), True)
 		return energy, forces * JOULEPERHARTREE
 	masses = np.array(list(map(lambda x: ATOMICMASSESAMU[x-1],m.atoms)))
-	print "Masses:", masses
+	print("Masses:", masses)
 	PARAMS["MDdt"] = 0.5
 	PARAMS["RemoveInvariant"]=True
 	PARAMS["MDMaxStep"] = 50000
@@ -87,7 +87,7 @@ def test_md():
 			energy = network.evaluate_mol(m, forces)
 			return energy
 	masses = np.array(map(lambda x: ATOMICMASSESAMU[x-1], mol.atoms))
-	print "Masses:", masses
+	print("Masses:", masses)
 	PARAMS["MDdt"] = 0.5
 	PARAMS["RemoveInvariant"]=True
 	PARAMS["MDMaxStep"] = 20000
@@ -140,24 +140,24 @@ def TestTFGauSH():
 	options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 	run_metadata = tf.RunMetadata()
 	# for i in range(a.mols[0].atoms.shape[0]):
-	# 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
+	# 	print(a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2])
 	tmp2 = sess.run(tmp, options=options, run_metadata=run_metadata)
-	print tmp2
-	# print tmp2[1]
-	# print tmp2.shape
-	# print tmp3
+	print(tmp2)
+	# print(tmp2[1])
+	# print(tmp2.shape)
+	# print(tmp3)
 	fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 	chrome_trace = fetched_timeline.generate_chrome_trace_format()
 	with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
 		f.write(chrome_trace)
-	# print tmp2[3].shape
-	# print a.mols[0].atoms.shape
+	# print(tmp2[3].shape)
+	# print(a.mols[0].atoms.shape)
 	# TreatedAtoms = a.AtomTypes()
 	# d = Digester(TreatedAtoms, name_="GauSH", OType_="Force")
 	# # tset = TensorData(a,d)
 	# mol_ = a.mols[0]
-	# print d.Emb(mol_, -1, mol_.coords[0], MakeOutputs=False)[0]
-	# print mol_.atoms[0]
+	# print(d.Emb(mol_, -1, mol_.coords[0], MakeOutputs=False)[0])
+	# print(mol_.atoms[0])
 
 def test_gaussian_overlap():
 	gaussian_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
@@ -167,7 +167,7 @@ def test_gaussian_overlap():
 	sess = tf.Session()
 	sess.run(tf.global_variables_initializer())
 	tmp2 = sess.run(tmp)
-	print tmp2
+	print(tmp2)
 
 def train_forces_GauSH_direct(set_ = "SmallMols"):
 	PARAMS["RBFS"] = np.array([[0.35, 0.35], [0.70, 0.35], [1.05, 0.35], [1.40, 0.35], [1.75, 0.35], [2.10, 0.35], [2.45, 0.35],[2.80, 0.35], [3.15, 0.35], [3.50, 0.35], [3.85, 0.35], [4.20, 0.35], [4.55, 0.35], [4.90, 0.35]])
@@ -183,7 +183,7 @@ def train_forces_GauSH_direct(set_ = "SmallMols"):
 	a=MSet(set_)
 	a.Load()
 	TreatedAtoms = a.AtomTypes()
-	print "Number of Mols: ", len(a.mols)
+	print("Number of Mols: ", len(a.mols))
 	d = Digester(TreatedAtoms, name_="GauSH", OType_="Force")
 	tset = TensorDataDirect(a,d)
 	manager=TFManage("",tset,True,"fc_sqdiff_GauSH_direct")
@@ -223,22 +223,22 @@ def test_tf_neighbor():
 	options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 	run_metadata = tf.RunMetadata()
 	# for i in range(a.mols[0].atoms.shape[0]):
-	# 	print a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2]
+	# 	print(a.mols[0].atoms[i], "   ", a.mols[0].coords[i,0], "   ", a.mols[0].coords[i,1], "   ", a.mols[0].coords[i,2])
 	tmp3 = sess.run([tmp], options=options, run_metadata=run_metadata)
-	# print tmp3
+	# print(tmp3)
 	fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 	chrome_trace = fetched_timeline.generate_chrome_trace_format()
 	with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
 		f.write(chrome_trace)
-	print tmp3
-	# print tmp4[1]
-	# print tmp4
+	print(tmp3)
+	# print(tmp4[1])
+	# print(tmp4)
 	# TreatedAtoms = a.AtomTypes()
 	# d = Digester(TreatedAtoms, name_="GauSH", OType_="Force")
 	# # tset = TensorData(a,d)
 	# mol_ = a.mols[0]
-	# print d.Emb(mol_, -1, mol_.coords[0], MakeOutputs=False)[0]
-	# print mol_.atoms[0]
+	# print(d.Emb(mol_, -1, mol_.coords[0], MakeOutputs=False)[0])
+	# print(mol_.atoms[0])
 
 def train_energy_pairs_triples():
 	PARAMS["HiddenLayers"] = [512, 512, 512]
@@ -252,7 +252,7 @@ def train_energy_pairs_triples():
 	a=MSet("SmallMols")
 	a.Load()
 	TreatedAtoms = a.AtomTypes()
-	print "Number of Mols: ", len(a.mols)
+	print("Number of Mols: ", len(a.mols))
 	d = Digester(TreatedAtoms, name_="GauSH", OType_="AtomizationEnergy")
 	tset = TensorMolData_BP_Direct(a,d)
 	manager=TFMolManage("",tset,True,"pairs_triples", Trainable_=True)
@@ -269,7 +269,7 @@ def train_energy_symm_func(mset):
 	PARAMS["tf_prec"] = "tf.float64"
 	a=MSet(mset)
 	a.Load()
-	print "Number of Mols: ", len(a.mols)
+	print("Number of Mols: ", len(a.mols))
 	manager = TFMolManageDirect(a, network_type = "BPSymFunc")
 
 def train_energy_GauSH(mset):
@@ -374,8 +374,8 @@ def evaluate_BPSymFunc(mset):
 		batch = []
 	output = np.concatenate(output)
 	labels = np.array(labels)
-	print "MAE:", np.mean(np.abs(output-labels))*627.509
-	print "RMSE:",np.sqrt(np.mean(np.square(output-labels)))*627.509
+	print("MAE:", np.mean(np.abs(output-labels))*627.509)
+	print("RMSE:",np.sqrt(np.mean(np.square(output-labels)))*627.509)
 
 def water_dimer_plot():
 	a = MSet("water_trimer_stretch")
@@ -448,15 +448,15 @@ def water_dimer_plot():
 	# # # 	# cpc = h2o1cp - h2o1 + h2o2cp - h2o2
 	# # # 	# cp_correction.append(cpc)
 	# 	bond_e = dimer# - h2o1 - h2o2
-	# 	print "{%.10f, %.10f}," % (i, bond_e * 627.509)
-	# print "TensorMol evaluation"
+	# 	print("{%.10f, %.10f}," % (i, bond_e * 627.509))
+	# print("TensorMol evaluation")
 	for i in range(len(a.mols)):
 		dimer = network.evaluate_mol(a.mols[i], False)
 		h2o1 = network.evaluate_mol(Mol(a.mols[i].atoms[:3], a.mols[i].coords[:3]), False)
 		h2o2 = network.evaluate_mol(Mol(a.mols[i].atoms[3:], a.mols[i].coords[3:]), False)
 		bond_e = dimer - h2o1 - h2o2
 		bond_dist = np.linalg.norm(a.mols[i].coords[1] - (a.mols[i].coords[4] + a.mols[i].coords[7])/2)
-		print "{%.10f, %.10f}," % (bond_dist, bond_e * 627.509)
+		print("{%.10f, %.10f}," % (bond_dist, bond_e * 627.509))
 
 def train_Poly_GauSH():
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.35, 16)), axis=1)
@@ -826,7 +826,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
+# train_energy_univ("master_jeherr")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -860,7 +860,7 @@ train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # b=MSet()
 # for i in range(2):
 # 	b.mols.append(a.mols[i])
-# 	# print b.mols[i].NAtoms()
+# 	# print(b.mols[i].NAtoms())
 # maxnatoms = b.MaxNAtom()
 # # for mol in b.mols:
 # 	# mol.make_neighbors(7.0)
@@ -928,8 +928,6 @@ train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # # tmp = sparse_pairs(xyzs_tf, zs_tf, nlt_tf)
 # # tmp = sparse_triples(xyzs_tf, zs_tf, tlt_tf)
 # tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
-# # # grads = tf.gradients(tmp, xyzs_tf)[0]
-# # # hess = tf.gradients(grads, xyzs_tf)[0]
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
 # options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -939,9 +937,8 @@ train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
 # 	return tmp3
 # tmp5 = get_pairs()
-# print tmp5
-# # print np.unique(nlt, return_counts=True)
-# print tmp5.shape
+# print(tmp5)
+# print(tmp5.shape)
 # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 # chrome_trace = fetched_timeline.generate_chrome_trace_format()
 # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
