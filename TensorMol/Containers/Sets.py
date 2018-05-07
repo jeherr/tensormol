@@ -260,6 +260,12 @@ class MSet:
 			types = np.union1d(types,m.AtomTypes())
 		return types
 
+	def max_atomic_num(self):
+		types = np.array([],dtype=np.uint8)
+		for m in self.mols:
+			types = np.union1d(types,m.AtomTypes())
+		return np.max(types)
+
 	def BondTypes(self):
 		return np.asarray([x for x in itertools.product(self.AtomTypes().tolist(), repeat=2)])
 
