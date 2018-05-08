@@ -255,7 +255,7 @@ class UniversalNetwork(object):
 		batch_xyzs = self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
 		batch_Zs = self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
 		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
-		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, True)
+		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
 		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 15.0, self.max_num_atoms, False, False)
 		batch_data = []
 		batch_data.append(batch_xyzs)
@@ -345,8 +345,8 @@ class UniversalNetwork(object):
 		with tf.variable_scope("energy_network", reuse=tf.AUTO_REUSE):
 			code_kernel1 = tf.get_variable(name="CodeKernel", shape=(4, 4),dtype=self.tf_precision)
 			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(4, 4),dtype=self.tf_precision)
-			# variables.append(code_kernel1)
-			# variables.append(code_kernel2)
+			variables.append(code_kernel1)
+			variables.append(code_kernel2)
 			coded_weights = tf.matmul(atom_codes, code_kernel1)
 			coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
 			coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
@@ -375,7 +375,6 @@ class UniversalNetwork(object):
 				variables.append(weights)
 				variables.append(biases)
 				output += tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
-				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
 	def charge_inference(self, embed, atom_codes, Zs, n_atoms):
@@ -429,7 +428,6 @@ class UniversalNetwork(object):
 				mask = tf.where(tf.equal(Zs, 0), tf.zeros_like(Zs, dtype=eval(PARAMS["tf_prec"])),
 						tf.ones_like(Zs, dtype=eval(PARAMS["tf_prec"])))
 				output *= mask
-				tf.verify_tensor_all_finite(output,"Nan in output!!!")
 		return output, variables
 
 	def gather_coulomb(self, xyzs, Zs, atom_charges, pairs):
@@ -534,17 +532,14 @@ class UniversalNetwork(object):
 				self.summary_op, self.total_loss, self.energy_loss, self.gradient_loss, self.charge_loss], feed_dict=feed_dict)
 				train_gradient_loss += gradient_loss
 				train_charge_loss += charge_loss
-				print(total_loss, energy_loss, gradient_loss, charge_loss)
 			elif self.train_charges:
 				_, summaries, total_loss, energy_loss, charge_loss = self.sess.run([self.train_op,
 				self.summary_op, self.total_loss, self.energy_loss, self.charge_loss], feed_dict=feed_dict)
 				train_charge_loss += charge_loss
-				print(total_loss, energy_loss, charge_loss)
 			elif self.train_gradients:
 				_, summaries, total_loss, energy_loss, gradient_loss = self.sess.run([self.train_op,
 				self.summary_op, self.total_loss, self.energy_loss, self.gradient_loss], feed_dict=feed_dict)
 				train_gradient_loss += gradient_loss
-				print(total_loss, energy_loss, gradient_loss)
 			else:
 				_, summaries, total_loss, energy_loss = self.sess.run([self.train_op,
 				self.summary_op, self.total_loss, self.energy_loss], feed_dict=feed_dict)
@@ -664,7 +659,7 @@ class UniversalNetwork(object):
 			angular_cutoff = tf.Variable(self.angular_cutoff, trainable=False, dtype = self.tf_precision)
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_precision)
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_precision)
-			self.element_codes = tf.Variable(self.element_codes, trainable=False, dtype=self.tf_precision)
+			self.element_codes = tf.Variable(self.element_codes, trainable=True, dtype=self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 
@@ -703,7 +698,7 @@ class UniversalNetwork(object):
 			self.total_loss = tf.add_n(tf.get_collection('total_loss'))
 			tf.summary.scalar('total_loss', self.total_loss)
 
-			self.train_op = self.optimizer(self.total_loss, self.learning_rate, self.momentum, energy_variables)
+			self.train_op = self.optimizer(self.total_loss, self.learning_rate, self.momentum)
 			self.summary_op = tf.summary.merge_all()
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)

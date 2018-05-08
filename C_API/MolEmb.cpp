@@ -808,13 +808,13 @@ static PyObject* Make_TLTensor(PyObject *self, PyObject  *args)
 					if (I<J)
 					{
 						tmp[I].push_back(Jd);
-						if (J<nreal && DoPerms==1)
+						if (J<nreal)
 							tmp[J].push_back(Id);
 					}
 					else
 					{
 						tmp[J].push_back(Id);
-						if (I<nreal && DoPerms==1)
+						if (I<nreal)
 							tmp[I].push_back(Jd);
 					}
 				}

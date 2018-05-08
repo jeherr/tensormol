@@ -409,11 +409,11 @@ class AtomCoder(Coder):
 		instead I think the encoding shoule be trainable with the energy
 		but for the time-being, let's just give it a try.
 		"""
-		tmp = np.zeros((53,self.out_chan))
-		for I in range(54):
+		tmp = np.zeros((55,self.out_chan))
+		for I in range(0, 55):
 		    data = np.ones((self.batch_size,self.MaxNAtom))*I
 		    feed_dict = {self.Z_pl:data}
-		    lout = ac.sess.run([self.LatentOutput], feed_dict=feed_dict)
+		    lout = self.sess.run([self.LatentOutput], feed_dict=feed_dict)
 		    tmp[I] = lout[0][0]
 		return tmp
 
