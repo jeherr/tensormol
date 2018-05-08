@@ -690,8 +690,8 @@ class UniversalNetwork(object):
 			charge_fit = tf.Variable(self.charge_fit, trainable=False, dtype=self.tf_precision)
 			charge_mean = tf.Variable(self.charge_mean, trainable=False, dtype=self.tf_precision)
 			charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
-			# energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
-			# energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
+			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
+			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
@@ -701,7 +701,7 @@ class UniversalNetwork(object):
 				atom_energy_fit = tf.gather(energy_fit, self.Zs_pl)
 				atom_nn_energies += atom_energy_fit
 				self.mol_nn_energy = tf.reduce_sum(atom_nn_energies, axis=1)
-				# self.mol_nn_energy = (mol_nn_energy * energy_stddev) + energy_mean
+				self.mol_nn_energy = (self.mol_nn_energy * energy_stddev) + energy_mean
 				self.total_energy = self.mol_nn_energy
 			if self.train_charges:
 				with tf.name_scope('charge_inference'):
