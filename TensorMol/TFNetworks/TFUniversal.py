@@ -679,14 +679,16 @@ class UniversalNetwork(object):
 			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			with tf.name_scope('energy_inference'):
 				atom_nn_energies, energy_variables = self.energy_inference(embed, atom_codes, padding_mask)
-				atom_fit = tf.gather(energy_fit, self.Zs_pl)
-				atom_nn_energies += atom_fit
+				atom_energy_fit = tf.gather(energy_fit, self.Zs_pl)
+				atom_nn_energies += atom_energy_fit
 				self.mol_nn_energy = tf.reduce_sum(atom_nn_energies, axis=1)
 				# self.mol_nn_energy = (mol_nn_energy * energy_stddev) + energy_mean
 				self.total_energy = self.mol_nn_energy
 			if self.train_charges:
 				with tf.name_scope('charge_inference'):
 					atom_charges, charge_variables = self.charge_inference(embed, atom_codes, self.Zs_pl, self.num_atoms_pl)
+					atom_charge_fit = tf.gather(charge_fit, self.Zs_pl)
+					atom_charges += atom_charge_fit
 					dxyzs, q1q2 = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, atom_charges, self.coulomb_pairs_pl)
 					atom_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2)
 					atom_coulomb_energy = tf.scatter_nd(padding_mask, atom_coulomb_energy, [self.batch_size, self.max_num_atoms])
