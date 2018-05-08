@@ -21,7 +21,7 @@ class MSet:
 		self.mols=[]
 		self.path=path_
 		self.name=name_
-		self.suffix=".pdb" #Pickle Database? Poor choice.
+		self.suffix=".pdb" #Pickle Database? Poor choice. | We should rename to .mset or .mst - jeherr
 		self.center=center_
 
 	def Save(self, filename=None):
@@ -30,7 +30,6 @@ class MSet:
 		if filename == None:
 			filename = self.name
 		LOGGER.info("Saving set to: %s ", self.path+filename+self.suffix)
-		#print "Saving set to: ", self.path+self.name+self.suffix
 		f=open(self.path+filename+self.suffix,"wb")
 		if sys.version_info[0] < 3:
 			pickle.dump(self.__dict__, f, protocol=pickle.HIGHEST_PROTOCOL)

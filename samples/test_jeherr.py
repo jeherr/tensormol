@@ -315,7 +315,7 @@ def train_energy_GauSHv2(mset):
 	network.start_training()
 
 def train_energy_univ(mset):
-	PARAMS["train_gradients"] = True
+	PARAMS["train_gradients"] = False
 	PARAMS["train_charges"] = False
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512, 512]
