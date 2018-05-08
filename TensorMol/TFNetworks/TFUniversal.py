@@ -407,6 +407,7 @@ class UniversalNetwork(object):
 			# coded_weights = tf.matmul(atom_codes, code_kernel1)
 			# coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
 			# coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
+			embed = tf.reshape(embed, [tf.shape(embed)[0], -1])
 			for i in range(len(self.hidden_layers)):
 				if i == 0:
 					with tf.name_scope('hidden1'):
