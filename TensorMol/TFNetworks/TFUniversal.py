@@ -637,22 +637,23 @@ class UniversalNetwork(object):
 		return test_loss
 
 	def compute_normalization(self):
-		element_charges = []
-		for _ in range(len(self.elements)):
-			element_charges.append([])
-		for mol in self.mol_set.mols:
-			for i, atom in enumerate(mol.atoms.tolist()):
-				for j in range(len(self.elements)):
-					if atom == self.elements[j]:
-						element_charges[j].append(mol.properties["charges"][i])
-		element_charges = [np.array(x) for x in element_charges]
-		charge_mean = [np.mean(x) for x in element_charges]
-		charge_std = [np.std(x) for x in element_charges]
-		self.charge_mean = np.zeros((self.mol_set.max_atomic_num()+1))
-		self.charge_std = np.zeros((self.mol_set.max_atomic_num()+1))
-		for i, element in enumerate(self.elements.tolist()):
-			self.charge_mean[element] = charge_mean[i]
-			self.charge_std[element] = charge_std[i]
+		if self.train_charges:
+			element_charges = []
+			for _ in range(len(self.elements)):
+				element_charges.append([])
+			for mol in self.mol_set.mols:
+				for i, atom in enumerate(mol.atoms.tolist()):
+					for j in range(len(self.elements)):
+						if atom == self.elements[j]:
+							element_charges[j].append(mol.properties["charges"][i])
+			element_charges = [np.array(x) for x in element_charges]
+			charge_mean = [np.mean(x) for x in element_charges]
+			charge_std = [np.std(x) for x in element_charges]
+			self.charge_mean = np.zeros((self.mol_set.max_atomic_num()+1))
+			self.charge_std = np.zeros((self.mol_set.max_atomic_num()+1))
+			for i, element in enumerate(self.elements.tolist()):
+				self.charge_mean[element] = charge_mean[i]
+				self.charge_std[element] = charge_std[i]
 		self.energy_mean = np.mean(self.energy_data)
 		self.energy_stddev = np.std(self.energy_data)
 		self.embed_shape = 4 * (self.radial_rs.shape[0] + self.angular_rs.shape[0] * self.theta_s.shape[0])
@@ -688,8 +689,9 @@ class UniversalNetwork(object):
 			self.element_codes = tf.Variable(self.element_codes, trainable=True, dtype=self.tf_precision)
 			energy_fit = tf.Variable(self.energy_fit, trainable=False, dtype=self.tf_precision)
 			charge_fit = tf.Variable(self.charge_fit, trainable=False, dtype=self.tf_precision)
-			charge_mean = tf.Variable(self.charge_mean, trainable=False, dtype=self.tf_precision)
-			charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
+			if self.train_charges:
+				charge_mean = tf.Variable(self.charge_mean, trainable=False, dtype=self.tf_precision)
+				charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 
@@ -706,8 +708,9 @@ class UniversalNetwork(object):
 			if self.train_charges:
 				with tf.name_scope('charge_inference'):
 					atom_charges, charge_variables = self.charge_inference(embed, atom_codes, self.Zs_pl, self.num_atoms_pl)
-					atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
-					atom_charges = (atom_charges * atom_charge_std) + atom_charge_mean
+					if self.train_charges:
+						atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
+						atom_charges = (atom_charges * atom_charge_std) + atom_charge_mean
 					dxyzs, q1q2 = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, atom_charges, self.coulomb_pairs_pl)
 					atom_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2)
 					atom_coulomb_energy = tf.scatter_nd(padding_mask, atom_coulomb_energy, [self.batch_size, self.max_num_atoms])
