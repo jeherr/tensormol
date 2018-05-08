@@ -68,8 +68,8 @@ class UniversalNetwork(object):
 		self.elements = self.mol_set.AtomTypes()
 		self.max_num_atoms = self.mol_set.MaxNAtom()
 		self.num_molecules = len(self.mol_set.mols)
-		self.energy_fit = np.zeros((self.mol_set.max_atomic_num()))
-		self.charge_fit = np.zeros((self.mol_set.max_atomic_num()))
+		self.energy_fit = np.zeros((self.mol_set.max_atomic_num()+1))
+		self.charge_fit = np.zeros((self.mol_set.max_atomic_num()+1))
 		energy_fit, charge_fit = self.mol_set.RemoveElementAverages()
 		for element in energy_fit.keys():
 			self.energy_fit[element] = energy_fit[element]
@@ -219,7 +219,7 @@ class UniversalNetwork(object):
 			self.xyz_data[i][:mol.NAtoms()] = mol.coords
 			self.Z_data[i][:mol.NAtoms()] = mol.atoms
 			self.charges_data[i][:mol.NAtoms()] = mol.properties["charges"]
-			self.energy_data[i] = mol.properties["atomization"]
+			self.energy_data[i] = mol.properties["energy"]
 			self.gradient_data[i][:mol.NAtoms()] = mol.properties["gradients"]
 			self.num_atoms_data[i] = mol.NAtoms()
 		return
@@ -679,7 +679,9 @@ class UniversalNetwork(object):
 			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			with tf.name_scope('energy_inference'):
 				atom_nn_energies, energy_variables = self.energy_inference(embed, atom_codes, padding_mask)
-				self.mol_nn_energy = tf.reshape(tf.reduce_sum(atom_nn_energies, axis=1), [self.batch_size])
+				atom_fit = tf.gather(energy_fit, self.Zs_pl)
+				atom_nn_energies += atom_fit
+				self.mol_nn_energy = tf.reduce_sum(atom_nn_energies, axis=1)
 				# self.mol_nn_energy = (mol_nn_energy * energy_stddev) + energy_mean
 				self.total_energy = self.mol_nn_energy
 			if self.train_charges:
