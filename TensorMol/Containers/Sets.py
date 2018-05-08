@@ -32,7 +32,10 @@ class MSet:
 		LOGGER.info("Saving set to: %s ", self.path+filename+self.suffix)
 		#print "Saving set to: ", self.path+self.name+self.suffix
 		f=open(self.path+filename+self.suffix,"wb")
-		pickle.dump(self.__dict__, f)
+		if sys.version_info[0] < 3:
+			pickle.dump(self.__dict__, f, protocol=pickle.HIGHEST_PROTOCOL)
+		else:
+			pickle.dump(self.__dict__, f)
 		f.close()
 		return
 
@@ -256,6 +259,12 @@ class MSet:
 		for m in self.mols:
 			types = np.union1d(types,m.AtomTypes())
 		return types
+
+	def max_atomic_num(self):
+		types = np.array([],dtype=np.uint8)
+		for m in self.mols:
+			types = np.union1d(types,m.AtomTypes())
+		return np.max(types)
 
 	def BondTypes(self):
 		return np.asarray([x for x in itertools.product(self.AtomTypes().tolist(), repeat=2)])

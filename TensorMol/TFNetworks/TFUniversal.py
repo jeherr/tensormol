@@ -68,6 +68,12 @@ class UniversalNetwork(object):
 		self.elements = self.mol_set.AtomTypes()
 		self.max_num_atoms = self.mol_set.MaxNAtom()
 		self.num_molecules = len(self.mol_set.mols)
+		self.energy_fit = np.zeros((self.mol_set.max_atomic_num()+1))
+		self.charge_fit = np.zeros((self.mol_set.max_atomic_num()+1))
+		energy_fit, charge_fit = self.mol_set.RemoveElementAverages()
+		for element in energy_fit.keys():
+			self.energy_fit[element] = energy_fit[element]
+			self.charge_fit[element] = charge_fit[element]
 		self.step = 0
 		self.test_freq = PARAMS["test_freq"]
 		self.network_type = "SF_Universal"
@@ -176,7 +182,10 @@ class UniversalNetwork(object):
 	def save_network(self):
 		print("Saving TFInstance")
 		f = open(PARAMS["networks_directory"]+self.name+".tfn","wb")
-		pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+		if sys.version_info[0] < 3:
+			pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+		else:
+			pickle.dump(self, f)
 		f.close()
 		return
 
@@ -210,7 +219,7 @@ class UniversalNetwork(object):
 			self.xyz_data[i][:mol.NAtoms()] = mol.coords
 			self.Z_data[i][:mol.NAtoms()] = mol.atoms
 			self.charges_data[i][:mol.NAtoms()] = mol.properties["charges"]
-			self.energy_data[i] = mol.properties["atomization"]
+			self.energy_data[i] = mol.properties["energy"]
 			self.gradient_data[i][:mol.NAtoms()] = mol.properties["gradients"]
 			self.num_atoms_data[i] = mol.NAtoms()
 		return
@@ -459,11 +468,11 @@ class UniversalNetwork(object):
 		"""
 		dist_tensor = tf.norm(dxyzs+1.e-16)
 		dist_tensor *= 1.889725989
-		srange_inner = 6.0
-		srange_outer = 8.0
+		srange_inner = 4.0
+		srange_outer = 7.0
 		lrange_inner = 13.
 		lrange_outer = 15.
-		a, b, c, d, e, f, g, h = -57.6862, 40.2721, -11.7317, 1.8806, -0.179183, 0.0101501, -0.000316629, 4.19773e-6
+		a, b, c, d, e, f, g, h = -8.59125, 7.37668, -2.4002, 0.428074, -0.0451801, 0.00282152, -0.0000965507, 1.39705e-6
 		mrange_kern = a + b * dist_tensor
 		dist_tensor_sq = tf.square(dist_tensor)
 		mrange_kern += c * dist_tensor_sq
@@ -524,7 +533,7 @@ class UniversalNetwork(object):
 		train_gradient_loss = 0.0
 		train_charge_loss = 0.0
 		num_mols = 0
-		for ministep in range (0, int(Ncase_train/self.batch_size)):
+		for ministep in range (0, int(0.05 * Ncase_train/self.batch_size)):
 			batch_data = self.get_train_batch(self.batch_size)
 			feed_dict = self.fill_feed_dict(batch_data)
 			if self.train_gradients and self.train_charges:
@@ -600,15 +609,15 @@ class UniversalNetwork(object):
 		test_force_outputs = np.concatenate(test_force_outputs)
 		test_force_errors = test_force_labels - test_force_outputs
 		duration = time.time() - start_time
-		for i in [random.randint(0, self.batch_size - 1) for _ in xrange(10)]:
+		for i in [random.randint(0, self.batch_size - 1) for _ in range(10)]:
 			LOGGER.info("Energy label: %11.8f  Energy output: %11.8f", test_energy_labels[i], test_energy_outputs[i])
-		for i in [random.randint(0, num_atoms_epoch - 1) for _ in xrange(10)]:
+		for i in [random.randint(0, num_atoms_epoch - 1) for _ in range(10)]:
 			LOGGER.info("Forces label: %s  Forces output: %s", test_force_labels[i], test_force_outputs[i])
 		if self.train_charges:
 			test_charge_labels = np.concatenate(test_charge_labels)
 			test_charge_outputs = np.concatenate(test_charge_outputs)
 			test_charge_errors = test_charge_labels - test_charge_outputs
-			for i in [random.randint(0, num_atoms_epoch - 1) for _ in xrange(10)]:
+			for i in [random.randint(0, num_atoms_epoch - 1) for _ in range(10)]:
 				LOGGER.info("Charge label: %11.8f  Charge output: %11.8f", test_charge_labels[i], test_charge_outputs[i])
 			LOGGER.info("MAE  Energy: %11.8f  Forces: %11.8f  Charges %11.8f", np.mean(np.abs(test_energy_errors)),
 			np.mean(np.abs(test_force_errors)), np.mean(np.abs(test_charge_errors)))
@@ -660,16 +669,20 @@ class UniversalNetwork(object):
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_precision)
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_precision)
 			self.element_codes = tf.Variable(self.element_codes, trainable=True, dtype=self.tf_precision)
-			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
-			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
+			energy_fit = tf.Variable(self.energy_fit, trainable=False, dtype=self.tf_precision)
+			charge_fit = tf.Variable(self.charge_fit, trainable=False, dtype=self.tf_precision)
+			# energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
+			# energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
 
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
 			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			with tf.name_scope('energy_inference'):
 				atom_nn_energies, energy_variables = self.energy_inference(embed, atom_codes, padding_mask)
-				mol_nn_energy = tf.reshape(tf.reduce_sum(atom_nn_energies, axis=1), [self.batch_size])
-				self.mol_nn_energy = (mol_nn_energy * energy_stddev) + energy_mean
+				atom_fit = tf.gather(energy_fit, self.Zs_pl)
+				atom_nn_energies += atom_fit
+				self.mol_nn_energy = tf.reduce_sum(atom_nn_energies, axis=1)
+				# self.mol_nn_energy = (mol_nn_energy * energy_stddev) + energy_mean
 				self.total_energy = self.mol_nn_energy
 			if self.train_charges:
 				with tf.name_scope('charge_inference'):
