@@ -72,16 +72,21 @@ if (0):
 		UniqueSet.Save("UniqueBonds")
 		MasterSet.Save("MasterSet")
 
+if 1:
+	b = MSet("MasterSet40")
+	b.Load()
+	b.cut_max_num_atoms(40)
+	b.cut_max_grad(2.0)
+	b.cut_energy_outliers()
+	b.cut_max_atomic_number(37)
+	#b.Save("MasterSet40")
+
 if 0:
 	b = MSet("HNCO_small")
 	b.Load()
 	b.cut_max_num_atoms(40)
 	b.cut_max_grad(2.0)
 	b.cut_energy_outliers()
-
-if 1:
-	b = MSet("HNCO_small")
-	b.Load()
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -511,6 +516,47 @@ class SparseCodedChargedGauSHNetwork:
 		If the energy from both these representations is averaged the result
 		will be permutationally invariant (WRT nearest-next-nearest motion)
 		and rotationally invariant.
+
+		Args:
+		        dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
+		        zs: a nMol X maxNatom X maxNatom X 1 tensor of atomic number pairs.
+		        ie: ... X i X i = (0.,0.,0.))
+
+		        also an ncan X nmol X maxNAtom X 1 tensor
+		"""
+		# Append orthogonal axes to dxyzs
+		argshape = tf.shape(dxyzs)
+		realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
+		msk = tf.reshape(sparse_mask,(argshape[0]*argshape[1],argshape[2],1))
+		if (self.ncan == 2):
+			orders = [[0,1],[1,0]]
+		elif (self.ncan == 6):
+			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
+		elif (self.ncan == 12):
+			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
+		tore = []
+		weightstore = []
+		for perm in orders:
+			v1 = tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([1e-8,0.,0.]),dtype=tf.float64)
+			w1 = (tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[0],:]*dxyzs[:,:,perm[0],:],axis=-1),(argshape[0]*argshape[1],1))+1e-8)
+			v1 *= safe_inv_norm(v1)
+			v2 = tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,1e-8,0.]),dtype=tf.float64)
+			w2 = (tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[1],:]*dxyzs[:,:,perm[1],:],axis=-1),(argshape[0]*argshape[1],1))+1e-8)
+			v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
+			v2 *= safe_inv_norm(v2)
+			v3 = tf.cross(v1,v2)
+			v3 *= safe_inv_norm(v3)
+			vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
+			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
+			weightstore.append(w1+w2)
+		return tf.stack(tore,axis=0), tf.reshape(tf.nn.softmax(-1*tf.stack(weightstore,axis=0),axis=0),(self.ncan,argshape[0],argshape[1]))
+
+	def CanonicalizeGS_newnew(self,dxyzs,sparse_mask):
+		"""
+		This version returns two sets of axes for nearest and next-nearest neighbor.
+		If the energy from both these representations is averaged the result
+		will be permutationally invariant (WRT nearest-next-nearest motion)
+		and rotationally invariant.
 		Args:
 			dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
 			zs: a nMol X maxNatom X maxNatom X 1 tensor of atomic number pairs.
@@ -527,9 +573,11 @@ class SparseCodedChargedGauSHNetwork:
 			orders = [[0,1],[1,0]]
 		elif (self.ncan == 4):
 			orders = [[0,1],[1,0],[0,2],[2,0]]
+		elif (self.ncan == 6):
+			orders = [[0,1],[1,0],[0,2],[2,0],[1,2],[2,1]]
 		elif (self.ncan == 12):
-			orders = [[0,1],[1,0],[0,2],[2,0],[0,3],[3,0],[0,4],[4,0],[0,5],[5,0],[0,6],[6,0]]
-
+			orders = [[0,1],[1,0],[0,2],[2,0],[1,2],[2,1],[0,3],[3,0],[1,3],[3,1],[2,3],[3,2]]
+#[0,4],[4,0],[0,5],[5,0],[0,6],[6,0]]
 		tore = []
 		weightstore = []
 		for perm in orders:
@@ -546,7 +594,7 @@ class SparseCodedChargedGauSHNetwork:
 			v3 *= safe_inv_norm(v3)
 			vs =  tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 
-			axis_max = self.RCut_NN+0.0000001
+			axis_max = self.RCut_NN
 			d1w = tf.where(tf.greater(d1,axis_max),tf.zeros_like(d1),tf.cos((d1-1e-13)/axis_max*Pi/2.0)*tf.exp(-2.0*d1)+1e-13)
 			d2w = tf.where(tf.greater(d2,axis_max),tf.zeros_like(d2),tf.cos((d2-1e-13)/axis_max*Pi/2.0)*tf.exp(-2.0*d2)+1e-13)
 			weight = tf.where(tf.greater(msk[:,perm[0]]*msk[:,perm[1]],0.),d1w*d2w,tf.zeros_like(d1w))
@@ -881,7 +929,7 @@ class SparseCodedChargedGauSHNetwork:
 		return
 
 	def print_training(self, step, loss_):
-		if (step%int(50/self.batch_size)==0):
+		if (step%int(500/self.batch_size)==0):
 			if (not np.isnan(loss_)):
 				self.saver.save(self.sess, './networks/SparseCodedGauSH', global_step=step)
 			else:
@@ -1106,7 +1154,11 @@ class SparseCodedChargedGauSHNetwork:
 			tf.add_to_collection('losses', self.Gloss)
 			self.Tloss = (1.0+40.0*self.Eloss)
 			if (self.Canonicalize):
-				self.Tloss += self.EVarianceLoss
+				#self.Tloss += self.EVarianceLoss
+				cens = tf.reduce_sum(self.CAEs + self.AtomCoulEnergies[tf.newaxis,...],axis=2,keepdims=False)
+				self.CEloss = tf.nn.l2_loss(cens - self.groundTruthE_pl[tf.newaxis,...],name='CEloss')/tf.cast(self.batch_size*self.ncan,self.prec)
+				tf.summary.scalar('CELoss',self.CEloss)
+				self.Tloss += self.CEloss
 			if (self.DoForceLearning):
 				self.Tloss += (1.0+self.Gloss)
 			if (self.DoDipoleLearning):
@@ -1137,7 +1189,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=b,load=False,load_averages=False,mode='train')
+net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=True,mode='train')
 net.Train()
 #net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
 
