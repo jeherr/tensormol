@@ -73,14 +73,14 @@ if 0:
 	b.cut_max_atomic_number(37)
 	#b.Save("MasterSet40")
 
-if 0:
+if 1:
 	b = MSet("HNCO_small")
 	b.Load()
 	b.cut_max_num_atoms(40)
 	b.cut_max_grad(2.0)
 	b.cut_energy_outliers()
 
-if 1:
+if 0:
 	b=MSet()
 	m=Mol()
 	m.FromXYZString("""10
@@ -1207,11 +1207,24 @@ class SparseCodedChargedGauSHNetwork:
 			tf.add_to_collection('losses', self.Gloss)
 			self.Tloss = (1.0+40.0*self.Eloss)
 			if (self.Canonicalize):
-				#self.Tloss += self.EVarianceLoss
-				cens = tf.reduce_sum(self.CAEs + self.AtomCoulEnergies[tf.newaxis,...],axis=2,keepdims=False)
-				self.CEloss = tf.nn.l2_loss(cens - self.groundTruthE_pl[tf.newaxis,...],name='CEloss')/tf.cast(self.batch_size*self.ncan,self.prec)
+				CanTotalAtEns = self.CAEs + self.AtomCoulEnergies[tf.newaxis,...]
+				CanEns = tf.reduce_sum(CanTotalAtEns,axis=2,keepdims=False)
+				self.CEloss = tf.nn.l2_loss(CanEns - self.groundTruthE_pl[tf.newaxis,...],name='CEloss')/tf.cast(self.batch_size*self.ncan,self.prec)
 				tf.summary.scalar('CELoss',self.CEloss)
 				self.Tloss += self.CEloss
+
+				if (self.DoForceLearning):
+					LCanEns = tf.unstack(CanEns,axis=0)
+					CanGrads0 = tf.stack([tf.gradients(XXX,self.xyzs_pl)[0] for XXX in LCanEns],axis=0)
+					cmsk = tf.tile(msk[tf.newaxis,...],[self.ncan,1,1,1])
+					CanGrads = tf.where(cmsk,CanGrads0,tf.zeros_like(CanGrads0))
+					cdiff = tf.reshape(CanGrads,(self.ncan,self.batch_size,-1)) - t2[tf.newaxis,...]
+					self.CGradDiff = tf.clip_by_value(cdiff*cdiff,1e-36,1.0)
+					self.CGloss = tf.reduce_sum(self.GradDiff)/tf.cast(self.batch_size*self.MaxNAtom*3*self.ncan,self.prec)
+					tf.losses.add_loss(self.CGloss,loss_collection=tf.GraphKeys.LOSSES)
+					tf.summary.scalar('CGloss',self.CGloss)
+					self.Tloss += 5.*self.CGloss
+
 			if (self.DoForceLearning):
 				self.Tloss += (1.0+self.Gloss)
 			if (self.DoDipoleLearning):
@@ -1242,8 +1255,8 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=True,mode='eval')
-#net.Train()
+net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=True,mode='train')
+net.Train()
 #net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
 
 def MethCoords(R1,R2,R3):
