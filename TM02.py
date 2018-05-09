@@ -232,8 +232,8 @@ class SparseCodedChargedGauSHNetwork:
 		self.MaxNAtom = 32
 		self.MaxNeigh_NN = self.MaxNAtom
 		self.MaxNeigh_J = self.MaxNAtom
-		self.learning_rate = 0.0001
-		self.ncan = 6
+		self.learning_rate = 0.0002
+		self.ncan = 12
 		self.DoHess=False
 		self.mode = mode
 		if (mode == 'eval'):
