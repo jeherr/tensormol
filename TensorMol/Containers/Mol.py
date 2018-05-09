@@ -50,6 +50,9 @@ class Mol:
 			self.properties[akey] = tore[akey]
 		return tore
 
+	def MassVector(self):
+		return np.array([AtomData[atom][3] for atom in self.atoms])
+
 	def MolecularWeight(self):
 		MW = 0.0
 		for atom in self.atoms:

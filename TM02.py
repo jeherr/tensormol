@@ -15,14 +15,6 @@ if (0):
 from TensorMol import *
 import numpy as np
 
-if 0:
-	b = MSet("debug")
-	b.ReadXYZ("debug")
-	for dbcase in b.mols:
-		dbcase.properties["energy"] = 1.0
-		dbcase.properties["charges"] = np.zeros(dbcase.NAtoms())
-		dbcase.properties["gradients"] = np.zeros((dbcase.NAtoms(),3))
-
 if (0):
 	a = MSet("Heavy")
 	b = MSet("CrCuSiBe")
@@ -81,12 +73,62 @@ if 0:
 	b.cut_max_atomic_number(37)
 	#b.Save("MasterSet40")
 
-if 1:
+if 0:
 	b = MSet("HNCO_small")
 	b.Load()
 	b.cut_max_num_atoms(40)
 	b.cut_max_grad(2.0)
 	b.cut_energy_outliers()
+
+if 1:
+	b=MSet()
+	m=Mol()
+	m.FromXYZString("""10
+
+	C         -2.10724        0.51908       -0.00001
+	C         -1.49330       -0.51788        0.00002
+	H         -2.60197        1.45402        0.00000
+	C          1.78974        0.78601        0.00001
+	C          1.32265       -0.32486       -0.00003
+	H          2.15290        1.77949       -0.00001
+	C         -0.66955       -1.70685       -0.00000
+	C          0.66874       -1.61509        0.00001
+	H         -1.14475       -2.68318        0.00001
+	H          1.27274       -2.51742        0.00000
+	""")
+	#b.mols.append(m)
+	m2=Mol()
+	m2.FromXYZString("""5
+
+	C          1.62942        0.65477        0.00000
+	H          2.69942        0.65477        0.00000
+	H          1.27276        1.65379        0.14017
+	H          1.27275        0.03387        0.79509
+	H          1.27275        0.27665       -0.93526
+	""")
+	b.mols.append(m2)
+	m3=Mol()
+	m3.FromXYZString("""17
+
+	C         -0.49579        0.02905       -0.16610
+	C          0.63324       -0.60448       -1.00024
+	H          1.45203       -0.96642       -0.34138
+	H          1.05971        0.13678       -1.71028
+	H          0.25074       -1.46793       -1.58647
+	C         -1.06604       -1.01999        0.80663
+	H         -1.47567       -1.89007        0.24925
+	H         -1.88382       -0.58297        1.41962
+	H         -0.27438       -1.38856        1.49434
+	C         -1.61377        0.52024       -1.10455
+	H         -2.03216       -0.32525       -1.69245
+	H         -1.22318        1.27947       -1.81627
+	H         -2.44030        0.98186       -0.52208
+	C          0.06341        1.22042        0.63377
+	H          0.87311        0.88762        1.31872
+	H         -0.73634        1.69321        1.24400
+	H          0.48078        1.99083       -0.05018
+	""")
+	b.mols.append(m3)
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -191,7 +233,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.MaxNeigh_NN = self.MaxNAtom
 		self.MaxNeigh_J = self.MaxNAtom
 		self.learning_rate = 0.0001
-		self.ncan = 12
+		self.ncan = 6
 		self.DoHess=False
 		self.mode = mode
 		if (mode == 'eval'):
@@ -323,11 +365,55 @@ class SparseCodedChargedGauSHNetwork:
 				print(nls_nn,nls_j)
 			if (DoForce):
 				ens,fs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
+				ifrc = RemoveInvariantForce(xyz_,fs[0][:m.NAtoms()],m.MassVector())
+				return ens[0],ifrc*(-JOULEPERHARTREE)
+			else:
+				ens = self.sess.run(self.MolEnergies, feed_dict=feed_dict)[0]
+				return ens[0]
+		return EF
+
+	def GetBatchedEnergyForceRoutine(self,mset,Debug=False):
+		self.batch_size=len(mset.mols)
+		MustPrepare=True
+		if (mset.MaxNAtom() > self.MaxNAtom):
+			self.MaxNAtom = mset.MaxNAtom()
+		xyzs_t = np.zeros((self.batch_size,self.MaxNAtom,3))
+		Zs_t = np.zeros((self.batch_size,self.MaxNAtom,1),dtype=np.int32)
+		xyzs_t[0,:m.NAtoms(),:] = m.coords
+		Zs_t[0,:m.NAtoms(),0] = m.atoms
+		nlt_nn, nlt_j = self.NLTensors(xyzs_t,Zs_t)
+		if ((self.MaxNeigh_J > self.MaxNeigh_J_prep) or (self.MaxNeigh_NN > self.MaxNeigh_NN_prep)):
+			self.batch_size=1
+			MustPrepare=True
+		if (MustPrepare):
+			self.Prepare()
+			self.Load()
+		def EF(xyz_,DoForce=True,Debug = False):
+			xyzs = np.zeros((self.batch_size,self.MaxNAtom,3))
+			Zs = np.zeros((self.batch_size,self.MaxNAtom,1),dtype=np.int32)
+			nls_nn = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_NN),dtype=np.int32)
+			nls_j = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_J),dtype=np.int32)
+			xyzs[0,:m.NAtoms(),:] = xyz_
+			Zs[0,:m.NAtoms(),0] = m.atoms
+			nlt_nn, nlt_j = self.NLTensors(xyzs,Zs)
+			if ((self.MaxNeigh_J > self.MaxNeigh_J_prep) or (self.MaxNeigh_NN > self.MaxNeigh_NN_prep)):
+				print("Too Many Neighbors.")
+				raise Exception('NeighborOverflow')
+			nls_nn[:nlt_nn.shape[0],:nlt_nn.shape[1],:nlt_nn.shape[2]] = nlt_nn
+			nls_j[:nlt_j.shape[0],:nlt_j.shape[1],:nlt_j.shape[2]] = nlt_j
+			feed_dict = {self.xyzs_pl:xyzs, self.zs_pl:Zs,self.nl_nn_pl:nls_nn,self.nl_j_pl:nls_j}
+			if (self.DoRotGrad):
+				print("RotGrad:",self.sess.run([self.RotGrad], feed_dict=feed_dict))
+			if (Debug):
+				print(nls_nn,nls_j)
+			if (DoForce):
+				ens,fs = self.sess.run([self.MolEnergies,self.MolGrads], feed_dict=feed_dict)
 				return ens[0],fs[0][:m.NAtoms()]*(-JOULEPERHARTREE)
 			else:
 				ens = self.sess.run(self.MolEnergies, feed_dict=feed_dict)[0]
 				return ens[0]
 		return EF
+
 
 	def GetEnergyForceHessRoutine(self,m):
 		if (m.NAtoms() > self.MaxNAtom):
@@ -542,14 +628,16 @@ class SparseCodedChargedGauSHNetwork:
 		tore = []
 		weightstore = []
 		for perm in orders:
-			v1 = tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([1e-8,0.,0.]),dtype=tf.float64)
-			v2 = tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,1e-8,0.]),dtype=tf.float64)
-			w1 = (tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[0],:]*dxyzs[:,:,perm[0],:],axis=-1),(argshape[0]*argshape[1],1))+1e-8)
-			w2 = (tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[1],:]*dxyzs[:,:,perm[1],:],axis=-1),(argshape[0]*argshape[1],1))+1e-8)
-			w3 = tf.reduce_sum(v1*v2,axis=-1)[...,tf.newaxis]
+			v1 = tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([1e-23,0.,0.]),dtype=tf.float64)
+			v2 = tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,1e-23,0.]),dtype=tf.float64)
+			w1 = (tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[0],:]*dxyzs[:,:,perm[0],:],axis=-1),(argshape[0]*argshape[1],1)))
+			w2 = (tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[1],:]*dxyzs[:,:,perm[1],:],axis=-1),(argshape[0]*argshape[1],1)))
 
 			v1n = safe_inv_norm(v1)*v1
 			v2n = safe_inv_norm(v2)*v2
+			w3p = tf.reduce_sum(v1n*v2n,axis=-1)[...,tf.newaxis]
+			w3 = 1.0/(1.01-w3p*w3p)
+
 			v3refl = tf.cross(v1n,v2n)
 			posz = tf.tile(tf.greater(tf.reduce_sum(v3refl*tf.constant([[1.,1.,1.]],dtype=self.prec),keepdims=True,axis=-1),0.),[1,3])
 			v3 = tf.where(posz,v3refl,-1.*v3refl)
@@ -565,14 +653,15 @@ class SparseCodedChargedGauSHNetwork:
 
 			vs = tf.concat([first[:,tf.newaxis,:],second[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
 			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
-			weightstore.append((w1+w2+w3)*msk[:,perm[0],:]*msk[:,perm[1],:])
+			weightstore.append(((w1+w2+w3))*msk[:,perm[0],:]*msk[:,perm[1],:])
 
 			vs2 = tf.concat([second[:,tf.newaxis,:],first[:,tf.newaxis,:],-1*v3[:,tf.newaxis,:]],axis=1)
 			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs2),tf.shape(dxyzs)))
-			weightstore.append((w1+w2+w3)*msk[:,perm[0],:]*msk[:,perm[1],:])
+			weightstore.append(((w1+w2+w3))*msk[:,perm[0],:]*msk[:,perm[1],:])
 
 		weights = tf.reshape(tf.nn.softmax(-1*tf.stack(weightstore,axis=0),axis=0),(self.ncan,argshape[0],argshape[1]))
-#		weights = tf.Print(weights,[weights[:,0,0]],"Weights",summarize=10000)
+		#weights = tf.Print(weights,[self.nl_nn_pl[0,:2]],"NL",summarize=10000)
+		#weights = tf.Print(weights,[weights[:,0,:2]],"Weights",summarize=10000)
 		return tf.stack(tore,axis=0), weights
 
 	def CanonicalizeGS(self,dxyzs,sparse_mask):
@@ -1209,12 +1298,12 @@ if 1:
 		EF = net.GetEnergyForceRoutine(m)
 		print(EF(m.coords))
 		Opt = GeomOptimizer(EF)
-		m1=Opt.Opt(m,"TEST"+str(i))
+		m1=Opt.OptGD(m,"TEST"+str(i))
 		#m2 = Mol(m.atoms,m.coords)
 		#m2.Distort(0.3)
 		#m2=Opt.Opt(m2,"FromDistorted"+str(i))
 		# Do a detailed energy, force scan for geoms along the opt coordinate.
-		interp = m1.Interpolation(b.mols[mi],n=50)
+		interp = m1.Interpolation(b.mols[mi],n=20)
 		ens = np.zeros(len(interp))
 		fs = np.zeros((len(interp),m1.NAtoms(),3))
 		axes = []
@@ -1248,7 +1337,7 @@ if 1:
 		plt.show()
 		plt.plot(np.reshape(ews,(len(interp),m1.NAtoms()*net.ncan)))
 		plt.show()
-		if (0):
+		if (1):
 			plt.plot(np.reshape(xws,(len(interp),m1.NAtoms()*net.ncan)))
 			plt.show()
 			plt.plot(np.reshape(yws,(len(interp),m1.NAtoms()*net.ncan)))
@@ -1260,9 +1349,6 @@ if 1:
 		# Compare force projected on each step with evaluated force.
 		#for j in range(1,len(interp)):
 		#	fs[j-1]
-
-
-
 
 if 1:
 	from matplotlib import pyplot as plt
