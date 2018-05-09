@@ -325,8 +325,10 @@ def train_energy_univ(mset):
 	PARAMS["batch_size"] = 100
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float64"
-	network = UniversalNetwork(mset)
-	network.start_training()
+	# network = UniversalNetwork(mset)
+	# network.start_training()
+	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_08_17.03.48_2018")
+	network.restart_training()
 
 def test_h2o():
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)

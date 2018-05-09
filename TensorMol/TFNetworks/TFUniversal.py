@@ -87,7 +87,7 @@ class UniversalNetwork(object):
 
 	def __getstate__(self):
 		state = self.__dict__.copy()
-		remove_vars = ["mol_set", "activation_function", "xyz_data", "Z_data", "energy_data", "dipole_data",
+		remove_vars = ["mol_set", "activation_function", "xyz_data", "Z_data", "energy_data", "charges_data",
 						"num_atoms_data", "gradient_data"]
 		for var in remove_vars:
 			try:
@@ -265,7 +265,7 @@ class UniversalNetwork(object):
 		batch_Zs = self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
 		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
 		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
-		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 15.0, self.max_num_atoms, False, False)
+		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 19.0, self.max_num_atoms, False, False)
 		batch_data = []
 		batch_data.append(batch_xyzs)
 		batch_data.append(batch_Zs)
@@ -286,7 +286,7 @@ class UniversalNetwork(object):
 		batch_Zs = self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
 		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
 		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
-		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 15.0, self.max_num_atoms, False, False)
+		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 19.0, self.max_num_atoms, False, False)
 		batch_data = []
 		batch_data.append(batch_xyzs)
 		batch_data.append(batch_Zs)
@@ -469,11 +469,11 @@ class UniversalNetwork(object):
 		"""
 		dist_tensor = tf.norm(dxyzs+1.e-16)
 		dist_tensor *= 1.889725989
-		srange_inner = 4.0
-		srange_outer = 7.0
-		lrange_inner = 13.
-		lrange_outer = 15.
-		a, b, c, d, e, f, g, h = -8.59125, 7.37668, -2.4002, 0.428074, -0.0451801, 0.00282152, -0.0000965507, 1.39705e-6
+		srange_inner = 4.5
+		srange_outer = 8.0
+		lrange_inner = 16.
+		lrange_outer = 19.
+		a, b, c, d, e, f, g, h = -6.16678, 4.51993, -1.19869, 0.173217, -0.0147328, 0.000738124, -0.0000201926, 2.32989e-7
 		mrange_kern = a + b * dist_tensor
 		dist_tensor_sq = tf.square(dist_tensor)
 		mrange_kern += c * dist_tensor_sq
@@ -766,3 +766,30 @@ class UniversalNetwork(object):
 			LOGGER.info("step: %5d  duration: %.3f  train loss: %.10f  energy loss: %.10f  gradient loss: %.10f  charge loss: %.10f",
 			step, duration, loss, energy_loss, gradient_loss, charge_loss)
 		return
+
+	def evaluate_set(self):
+		"""
+		Takes coordinates and atomic numbers from a manager and feeds them into the network
+		for evaluation of the forces
+
+		Args:
+			xyzs (np.float): numpy array of atomic coordinates
+			Zs (np.int32): numpy array of atomic numbers
+		"""
+		self.assign_activation()
+		self.reload_set()
+		self.load_data()
+		self.train_prepare(restart=True)
+		labels, preds, idxs = [], [], []
+		for ministep in range (0, int(0.05 * self.num_train_cases/self.batch_size)):
+			batch_data = self.get_train_batch(self.batch_size)
+			feed_dict = self.fill_feed_dict(batch_data)
+			total_loss, energy_loss, total_energy, energy_label = self.sess.run([self.total_loss,
+				self.energy_loss, self.total_energy, self.energy_pl], feed_dict=feed_dict)
+			labels.append(energy_label)
+			preds.append(total_energy)
+			idxs.append(self.train_idxs[self.train_pointer - self.batch_size:self.train_pointer])
+		labels = np.concatenate(labels)
+		preds = np.concatenate(preds)
+		idxs = np.concatenate(idxs)
+		return labels, preds, idxs
