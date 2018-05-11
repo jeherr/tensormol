@@ -473,7 +473,7 @@ class UniversalNetwork(object):
 
 		The hard cutoff is LROuter
 		"""
-		dist_tensor = tf.norm(dxyzs+1.e-16)
+		dist_tensor = tf.norm(dxyzs+1.e-16, axis=-1)
 		dist_tensor *= 1.889725989
 		srange_inner = 4.5
 		srange_outer = 8.0

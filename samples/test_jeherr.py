@@ -815,7 +815,7 @@ def minimize_ob():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("master_jeherr", 500000)
+# RandomSmallSet("chemspider20_345_opt", 1000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -844,84 +844,150 @@ train_energy_univ("master_jeherr_rand")
 # metaopt_chemsp()
 # water_web()
 
-# PARAMS["tf_prec"] = "tf.float32"
-# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
-# PARAMS["SH_NRAD"] = 16
-# a = MSet("SmallMols_rand")
-# a.Load()
-# # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
-# # # # Tesselate that water to create a box
-# # ntess = 16
-# # latv = 2.8*np.eye(3)
-# # # # # Start with a water in a ten angstrom box.
-# # lat = Lattice(latv)
-# # mc = lat.CenteredInLattice(a.mols[0])
-# # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
-# # # # mt.WriteXYZfile()
-# b=MSet()
-# for i in range(2):
-# 	b.mols.append(a.mols[i])
-# 	# print(b.mols[i].NAtoms())
-# maxnatoms = b.MaxNAtom()
-# # for mol in b.mols:
-# 	# mol.make_neighbors(7.0)
-# # max_num_pairs = b.max_neighbors()
-#
-# zlist = []
-# xyzlist = []
-# gradlist = []
-# nnlist = []
-# # n_atoms_list = []
-# for i, mol in enumerate(b.mols):
-# 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float64)
-# 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
-# 	paddedz = np.zeros((maxnatoms), dtype=np.int32)
-# 	paddedz[:mol.atoms.shape[0]] = mol.atoms
-# 	# paddedgrad = np.zeros((maxnatoms,3), dtype=np.float32)
-# 	# paddedgrad[:mol.atoms.shape[0]] = mol.properties["gradients"]
-# 	# paddednn = np.zeros((maxnatoms, 2), dtype=np.int32)
-# 	# paddednn[:mol.atoms.shape[0]] = mol.nearest_ns
-# 	# for j, atom_pairs in enumerate(mol.neighbor_list):
-# 	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]), mol.atoms[atom_pairs]], axis=-1)
-# 	# 	paddedpairs[j,:len(atom_pairs)] = molpair
-# 	xyzlist.append(paddedxyz)
-# 	zlist.append(paddedz)
-# 	# gradlist.append(paddedgrad)
-# 	# nnlist.append(paddednn)
-# 	# n_atoms_list.append(mol.NAtoms())
-# 	# if i == 1:
-# 	# 	break
-# xyzs_tf = tf.cast(tf.stack(xyzlist), tf.float32)
-# zs_tf = tf.cast(tf.stack(zlist), tf.int32)
-# xyzs_np = np.stack(xyzlist).astype(np.float64)
-# zs_np = np.stack(zlist).astype(np.int32)
-# # gradstack = tf.stack(gradlist)
-# # nnstack = tf.stack(nnlist)
-# # natomsstack = tf.stack(n_atoms_list)
-# # r_cutoff = 6.5
-# # gauss_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
-# elements = [1, 6, 7, 8]
-# elements_tf = tf.constant([1, 6, 7, 8], dtype=tf.int32)
-# element_pairs = np.array([[elements[i], elements[j]] for i in range(len(elements)) for j in range(i, len(elements))])
-# element_pairs_tf = tf.constant(element_pairs, dtype=tf.int32)
-# element_codes = tf.Variable(ELEMENTCODES, trainable=False, dtype=tf.float32)
-#
-# AN1_r_Rs = PARAMS["AN1_r_Rs"]
-# AN1_a_Rs = PARAMS["AN1_a_Rs"]
-# AN1_a_As = PARAMS["AN1_a_As"]
-# AN1_r_Rc = PARAMS["AN1_r_Rc"]
-# AN1_a_Rc = PARAMS["AN1_a_Rc"]
-# AN1_eta = PARAMS["AN1_eta"]
-# AN1_zeta = PARAMS["AN1_zeta"]
-#
-# radial_rs = tf.Variable(AN1_r_Rs, trainable=False, dtype = tf.float32)
-# angular_rs = tf.Variable(AN1_a_Rs, trainable=False, dtype = tf.float32)
-# theta_s = tf.Variable(AN1_a_As, trainable=False, dtype = tf.float32)
-# radial_cut = tf.Variable(AN1_r_Rc, trainable=False, dtype = tf.float32)
-# angular_cut = tf.Variable(AN1_a_Rc, trainable=False, dtype = tf.float32)
-# zeta = tf.Variable(AN1_zeta, trainable=False, dtype = tf.float32)
-# eta = tf.Variable(AN1_eta, trainable=False, dtype = tf.float32)
-#
+def calculate_coulomb_energy(dxyzs, q1q2):
+	"""
+	Polynomial cutoff 1/r (in BOHR) obeying:
+	kern = 1/r at SROuter and LRInner
+	d(kern) = d(1/r) (true force) at SROuter,LRInner
+	d**2(kern) = d**2(1/r) at SROuter and LRInner.
+	d(kern) = 0 (no force) at/beyond SRInner and LROuter
+
+	The hard cutoff is LROuter
+	"""
+	dist_tensor = tf.norm(dxyzs+1.e-16, axis=-1)
+	dist_tensor *= 1.889725989
+	srange_inner = 4.5
+	srange_outer = 8.0
+	lrange_inner = 16.
+	lrange_outer = 19.
+	a, b, c, d, e, f, g, h = -6.16678, 4.51993, -1.19869, 0.173217, -0.0147328, 0.000738124, -0.0000201926, 2.32989e-7
+	mrange_kern = a + b * dist_tensor
+	dist_tensor_sq = tf.square(dist_tensor)
+	mrange_kern += c * dist_tensor_sq
+	dist_tensor_cu = dist_tensor_sq * dist_tensor
+	mrange_kern += d * dist_tensor_cu
+	dist_tensor_4 = dist_tensor_cu * dist_tensor
+	mrange_kern += d * dist_tensor_4
+	dist_tensor_5 = dist_tensor_4 * dist_tensor
+	mrange_kern += f * dist_tensor_5
+	dist_tensor_6 = dist_tensor_5 * dist_tensor
+	mrange_kern += g * dist_tensor_6
+	dist_tensor_7 = dist_tensor_6 * dist_tensor
+	mrange_kern += h * dist_tensor_7
+	kern = tf.where(tf.less(dist_tensor, srange_inner), tf.ones_like(dist_tensor) / srange_inner, mrange_kern / dist_tensor)
+	kern = tf.where(tf.greater(dist_tensor, lrange_outer), tf.ones_like(dist_tensor) / lrange_outer, kern)
+	mrange_energy = tf.reduce_sum(kern * q1q2, axis=1)
+	lrange_energy = tf.reduce_sum(q1q2, axis=1) / lrange_outer
+	return mrange_energy - lrange_energy
+
+def gather_coulomb(xyzs, Zs, atom_charges, pairs):
+	padding_mask = tf.where(tf.logical_and(tf.not_equal(Zs, 0), tf.reduce_any(tf.not_equal(pairs, -1), axis=-1)))
+	# padding_mask = tf.where(tf.not_equal(Zs, 0))
+	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
+	central_atom_charge = tf.gather_nd(atom_charges, padding_mask)
+	pairs = tf.gather_nd(pairs, padding_mask)
+	padded_pairs = tf.equal(pairs, -1)
+	tmp_pairs = tf.where(padded_pairs, tf.zeros_like(pairs), pairs)
+	gather_pairs = tf.stack([tf.cast(tf.tile(padding_mask[:,:1], [1, tf.shape(pairs)[1]]), tf.int32), tmp_pairs], axis=-1)
+	pair_coords = tf.gather_nd(xyzs, gather_pairs)
+	dxyzs = tf.expand_dims(central_atom_coords, axis=1) - pair_coords
+	pair_mask = tf.where(padded_pairs, tf.zeros_like(pairs), tf.ones_like(pairs))
+	dxyzs *= tf.cast(tf.expand_dims(pair_mask, axis=-1), eval(PARAMS["tf_prec"]))
+	pair_charges = tf.gather_nd(atom_charges, gather_pairs)
+	pair_charges *= tf.cast(pair_mask, eval(PARAMS["tf_prec"]))
+	q1q2 = tf.expand_dims(central_atom_charge, axis=-1) * pair_charges
+	return dxyzs, q1q2
+
+PARAMS["tf_prec"] = "tf.float32"
+PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
+PARAMS["SH_NRAD"] = 16
+a = MSet("chemspider20_345_opt_rand")
+a.Load()
+# a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
+# # # Tesselate that water to create a box
+# ntess = 16
+# latv = 2.8*np.eye(3)
+# # # # Start with a water in a ten angstrom box.
+# lat = Lattice(latv)
+# mc = lat.CenteredInLattice(a.mols[0])
+# mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
+# # # mt.WriteXYZfile()
+b=MSet()
+for i in range(1):
+	b.mols.append(a.mols[i])
+	# print(b.mols[i].NAtoms())
+maxnatoms = b.MaxNAtom()
+# for mol in b.mols:
+	# mol.make_neighbors(7.0)
+# max_num_pairs = b.max_neighbors()
+
+zlist = []
+xyzlist = []
+gradlist = []
+nnlist = []
+chargeslist = []
+# n_atoms_list = []
+for i, mol in enumerate(b.mols):
+	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float64)
+	paddedxyz[:mol.atoms.shape[0]] = mol.coords
+	paddedz = np.zeros((maxnatoms), dtype=np.int32)
+	paddedz[:mol.atoms.shape[0]] = mol.atoms
+	paddedcharges = np.zeros((maxnatoms), dtype=np.float64)
+	paddedcharges[:mol.atoms.shape[0]] = mol.properties["charges"]
+	# paddedgrad = np.zeros((maxnatoms,3), dtype=np.float32)
+	# paddedgrad[:mol.atoms.shape[0]] = mol.properties["gradients"]
+	# paddednn = np.zeros((maxnatoms, 2), dtype=np.int32)
+	# paddednn[:mol.atoms.shape[0]] = mol.nearest_ns
+	# for j, atom_pairs in enumerate(mol.neighbor_list):
+	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]), mol.atoms[atom_pairs]], axis=-1)
+	# 	paddedpairs[j,:len(atom_pairs)] = molpair
+	xyzlist.append(paddedxyz)
+	zlist.append(paddedz)
+	chargeslist.append(paddedcharges)
+	# gradlist.append(paddedgrad)
+	# nnlist.append(paddednn)
+	# n_atoms_list.append(mol.NAtoms())
+	# if i == 1:
+	# 	break
+xyzs_tf = tf.cast(tf.stack(xyzlist), tf.float32)
+zs_tf = tf.cast(tf.stack(zlist), tf.int32)
+charges_tf = tf.cast(tf.stack(chargeslist), tf.float32)
+xyzs_np = np.stack(xyzlist).astype(np.float64)
+zs_np = np.stack(zlist).astype(np.int32)
+# gradstack = tf.stack(gradlist)
+# nnstack = tf.stack(nnlist)
+# natomsstack = tf.stack(n_atoms_list)
+# r_cutoff = 6.5
+# gauss_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
+elements = [1, 6, 7, 8]
+elements_tf = tf.constant([1, 6, 7, 8], dtype=tf.int32)
+element_pairs = np.array([[elements[i], elements[j]] for i in range(len(elements)) for j in range(i, len(elements))])
+element_pairs_tf = tf.constant(element_pairs, dtype=tf.int32)
+element_codes = tf.Variable(ELEMENTCODES, trainable=False, dtype=tf.float32)
+
+AN1_r_Rs = PARAMS["AN1_r_Rs"]
+AN1_a_Rs = PARAMS["AN1_a_Rs"]
+AN1_a_As = PARAMS["AN1_a_As"]
+AN1_r_Rc = PARAMS["AN1_r_Rc"]
+AN1_a_Rc = PARAMS["AN1_a_Rc"]
+AN1_eta = PARAMS["AN1_eta"]
+AN1_zeta = PARAMS["AN1_zeta"]
+
+radial_rs = tf.Variable(AN1_r_Rs, trainable=False, dtype = tf.float32)
+angular_rs = tf.Variable(AN1_a_Rs, trainable=False, dtype = tf.float32)
+theta_s = tf.Variable(AN1_a_As, trainable=False, dtype = tf.float32)
+radial_cut = tf.Variable(AN1_r_Rc, trainable=False, dtype = tf.float32)
+angular_cut = tf.Variable(AN1_a_Rc, trainable=False, dtype = tf.float32)
+zeta = tf.Variable(AN1_zeta, trainable=False, dtype = tf.float32)
+eta = tf.Variable(AN1_eta, trainable=False, dtype = tf.float32)
+
+nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 19.0, maxnatoms, False, False)
+nlt_tf = tf.constant(nlt, dtype=tf.int32)
+
+tmp = gather_coulomb(xyzs_tf, zs_tf, charges_tf, nlt_tf)
+# atom_coulomb_energy = calculate_coulomb_energy(dxyzs, q1q2)
+
+
 # nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 4.6, maxnatoms, True, True)
 # tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 4.0, maxnatoms, False)
 # nlt_tf = tf.constant(nlt, dtype=tf.int32)
@@ -929,17 +995,17 @@ train_energy_univ("master_jeherr_rand")
 # # tmp = sparse_pairs(xyzs_tf, zs_tf, nlt_tf)
 # # tmp = sparse_triples(xyzs_tf, zs_tf, tlt_tf)
 # tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
-# sess = tf.Session()
-# sess.run(tf.global_variables_initializer())
-# options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-# run_metadata = tf.RunMetadata()
-# @TMTiming("test")
-# def get_pairs():
-# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
-# 	return tmp3
-# tmp5 = get_pairs()
-# print(tmp5)
-# print(tmp5.shape)
+sess = tf.Session()
+sess.run(tf.global_variables_initializer())
+options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+run_metadata = tf.RunMetadata()
+@TMTiming("test")
+def get_pairs():
+	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
+	return tmp3
+tmp5 = get_pairs()
+print(tmp5)
+print(tmp5.shape)
 # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 # chrome_trace = fetched_timeline.generate_chrome_trace_format()
 # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
