@@ -52,6 +52,15 @@ class UniversalNetwork(object):
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.test_ratio = PARAMS["TestRatio"]
 		self.element_codes = ELEMENTCODES
+		self.element_codepairs = np.zeros((self.element_codes.shape[0]*(self.element_codes.shape[0]+1)/2, self.element_codes.shape[1]))
+		self.codepair_idx = np.zeros((self.element_codes.shape[0], self.element_codes.shape[0]), dtype=np.int32)
+		counter = 0
+		for i in range(len(self.element_codes)):
+			for j in range(i, len(self.element_codes)):
+				self.codepair_idx[i,j] = counter
+				self.codepair_idx[j,i] = counter
+				self.element_codepairs[counter] = self.element_codes[i] * self.element_codes[j]
+				counter += 1
 		self.assign_activation()
 
 		#Reloads a previous network if name variable is not None
@@ -687,6 +696,8 @@ class UniversalNetwork(object):
 			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_precision)
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_precision)
 			self.element_codes = tf.Variable(self.element_codes, trainable=True, dtype=self.tf_precision, name="element_codes")
+			self.element_codepairs = tf.Variable(self.element_codepairs, trainable=True, dtype=self.tf_precision, name="element_codepairs")
+			self.codepair_idx = tf.Variable(self.codepair_idx, trainable=False, dtype=self.tf_precision)
 			energy_fit = tf.Variable(self.energy_fit, trainable=False, dtype=self.tf_precision)
 			charge_fit = tf.Variable(self.charge_fit, trainable=False, dtype=self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
@@ -696,7 +707,8 @@ class UniversalNetwork(object):
 				charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
 
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
-			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
+			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes,
+					self.element_codepairs, self.codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
 			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			with tf.name_scope('energy_inference'):
 				atom_nn_energy, atom_nn_charges, variables = self.energy_inference(embed, atom_codes, padding_mask)

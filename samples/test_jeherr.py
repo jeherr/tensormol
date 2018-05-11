@@ -827,7 +827,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("master_jeherr_rand")
+# train_energy_univ("master_jeherr_rand")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -957,3 +957,22 @@ train_energy_univ("master_jeherr_rand")
 # # chrome_trace = fetched_timeline.generate_chrome_trace_format()
 # # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
 # # 	f.write(chrome_trace)
+
+elementcodepairs = np.zeros((ELEMENTCODES.shape[0] * (ELEMENTCODES.shape[0] + 1) / 2, ELEMENTCODES.shape[1]))
+gather_idx = np.zeros((ELEMENTCODES.shape[0], ELEMENTCODES.shape[0]))
+counter = 0
+for i in range(len(ELEMENTCODES)):
+	for j in range(i, len(ELEMENTCODES)):
+		gather_idx[i, j] = counter
+		gather_idx[j, i] = counter
+		elementcodepairs[counter] = ELEMENTCODES[i] * ELEMENTCODES[j]
+		counter += 1
+print gather_idx
+print elementcodepairs
+# list = []
+# for i in range(len(ELEMENTCODES)):
+# 	for j in range(i, len(ELEMENTCODES)):
+# 		list.append((ELEMENTCODES[i], ELEMENTCODES[j]))
+# 		print i * (len(ELEMENTCODES)-1) + j
+# print len(list)
+# ELEMENTCODES.shape

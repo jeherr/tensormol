@@ -3436,7 +3436,7 @@ def NNInterface(R, Zs, eles_, GM):
 		IndexList.append(tf.reshape(tf.slice(GatherList[-1],[0,0],[NAtomOfEle,1]),[NAtomOfEle]))
 	return SymList, IndexList
 
-def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta):
+def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, element_codepairs, codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta):
 	"""
 	A tensorflow implementation of the AN1 symmetry function for a set of molecule.
 	Args:
@@ -3456,7 +3456,7 @@ def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, radial_ga
 	radial_embed = tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta)
 	dtxyzs, triples_Zs, scatter_idx = sparse_triples(xyzs, Zs, triples)
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
-	angular_embed = tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codes, angular_gauss, thetas, angular_cutoff, zeta, eta, padding_mask)
+	angular_embed = tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codepairs, codepair_idx, angular_gauss, thetas, angular_cutoff, zeta, eta, padding_mask)
 	embed = tf.concat([radial_embed, angular_embed], axis=-1)
 	return embed
 
@@ -3488,7 +3488,7 @@ def tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutof
 	radial_embed = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(tf.expand_dims(cutoff, axis=-1) * pair_codes, axis=-1)
 	return tf.reduce_sum(radial_embed, axis=1)
 
-def tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codes, angular_gauss, thetas, angular_cutoff, zeta, eta, padding_mask):
+def tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codepairs, codepair_idx, angular_gauss, thetas, angular_cutoff, zeta, eta, padding_mask):
 	"""
 	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
 	Here j,k are all other atoms, but implicitly the output
@@ -3527,9 +3527,9 @@ def tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codes, angular_
 	cutoff = cutoffj * cutoffk
 	angular_embed = tf.expand_dims(tf.pow(1.0 + cos_factor, zeta), axis=-1) * tf.expand_dims(dist_factor, axis=-2)
 	angular_embed *= tf.expand_dims(tf.expand_dims(cutoff, axis=-1), axis=-1)
-	angular_embed = (tf.expand_dims(angular_embed, axis=-3)
-					* tf.expand_dims(tf.expand_dims(tf.reduce_prod(tf.gather(element_codes,
-					triples_Zs), axis=-2), axis=-1), axis=-1))
+	codepair_gather = tf.gather_nd(codepair_gather, triples_Zs)
+	codepairs = tf.gather(element_codepairs, codepair_gather)
+	angular_embed = tf.expand_dims(angular_embed, axis=-3) * tf.expand_dims(tf.expand_dims(codepairs, axis=-1), axis=-1)
 	scatter_shape = [tf.shape(padding_mask)[0], tf.reduce_max(scatter_idx[:,1]) + 1, tf.shape(element_codes)[1], 8, 8]
 	angular_embed = tf.reduce_sum(tf.scatter_nd(scatter_idx, angular_embed, scatter_shape), axis=1)
 	angular_embed *= tf.pow(tf.cast(2.0, eval(PARAMS["tf_prec"])), 1.0 - zeta)
