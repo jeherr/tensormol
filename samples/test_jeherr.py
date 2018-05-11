@@ -815,7 +815,7 @@ def minimize_ob():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("chemspider20_345_opt", 1000)
+# RandomSmallSet("master_jeherr", 1000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -827,7 +827,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("master_jeherr_rand")
+# train_energy_univ("master_jeherr_rand")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -844,7 +844,7 @@ train_energy_univ("master_jeherr_rand")
 # metaopt_chemsp()
 # water_web()
 
-def calculate_coulomb_energy(dxyzs, q1q2):
+def calculate_coulomb_energy(dxyzs, q1q2, scatter_idx):
 	"""
 	Polynomial cutoff 1/r (in BOHR) obeying:
 	kern = 1/r at SROuter and LRInner
@@ -875,14 +875,15 @@ def calculate_coulomb_energy(dxyzs, q1q2):
 	dist_tensor_7 = dist_tensor_6 * dist_tensor
 	mrange_kern += h * dist_tensor_7
 	kern = tf.where(tf.less(dist_tensor, srange_inner), tf.ones_like(dist_tensor) / srange_inner, mrange_kern / dist_tensor)
+	return tf.reduce_max(kern)
 	kern = tf.where(tf.greater(dist_tensor, lrange_outer), tf.ones_like(dist_tensor) / lrange_outer, kern)
 	mrange_energy = tf.reduce_sum(kern * q1q2, axis=1)
 	lrange_energy = tf.reduce_sum(q1q2, axis=1) / lrange_outer
-	return mrange_energy - lrange_energy
+	coulomb_energy = mrange_energy - lrange_energy
+	return tf.reduce_sum(tf.scatter_nd(scatter_idx, coulomb_energy, [100, 39]), axis=-1)
 
 def gather_coulomb(xyzs, Zs, atom_charges, pairs):
 	padding_mask = tf.where(tf.logical_and(tf.not_equal(Zs, 0), tf.reduce_any(tf.not_equal(pairs, -1), axis=-1)))
-	# padding_mask = tf.where(tf.not_equal(Zs, 0))
 	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
 	central_atom_charge = tf.gather_nd(atom_charges, padding_mask)
 	pairs = tf.gather_nd(pairs, padding_mask)
@@ -896,12 +897,12 @@ def gather_coulomb(xyzs, Zs, atom_charges, pairs):
 	pair_charges = tf.gather_nd(atom_charges, gather_pairs)
 	pair_charges *= tf.cast(pair_mask, eval(PARAMS["tf_prec"]))
 	q1q2 = tf.expand_dims(central_atom_charge, axis=-1) * pair_charges
-	return dxyzs, q1q2
+	return dxyzs, q1q2, padding_mask
 
 PARAMS["tf_prec"] = "tf.float32"
 PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
 PARAMS["SH_NRAD"] = 16
-a = MSet("chemspider20_345_opt_rand")
+a = MSet("master_jeherr_rand")
 a.Load()
 # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
 # # # Tesselate that water to create a box
@@ -913,7 +914,7 @@ a.Load()
 # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
 # # # mt.WriteXYZfile()
 b=MSet()
-for i in range(1):
+for i in range(100):
 	b.mols.append(a.mols[i])
 	# print(b.mols[i].NAtoms())
 maxnatoms = b.MaxNAtom()
@@ -984,8 +985,8 @@ eta = tf.Variable(AN1_eta, trainable=False, dtype = tf.float32)
 nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 19.0, maxnatoms, False, False)
 nlt_tf = tf.constant(nlt, dtype=tf.int32)
 
-tmp = gather_coulomb(xyzs_tf, zs_tf, charges_tf, nlt_tf)
-# atom_coulomb_energy = calculate_coulomb_energy(dxyzs, q1q2)
+dxyzs, q1q2, scatter_idx = gather_coulomb(xyzs_tf, zs_tf, charges_tf, nlt_tf)
+tmp = calculate_coulomb_energy(dxyzs, q1q2, scatter_idx)
 
 
 # nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 4.6, maxnatoms, True, True)
@@ -1006,6 +1007,7 @@ def get_pairs():
 tmp5 = get_pairs()
 print(tmp5)
 print(tmp5.shape)
+print(maxnatoms)
 # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 # chrome_trace = fetched_timeline.generate_chrome_trace_format()
 # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:

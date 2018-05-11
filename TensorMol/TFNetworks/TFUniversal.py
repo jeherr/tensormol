@@ -761,7 +761,7 @@ class UniversalNetwork(object):
 			tf.summary.scalar("energy_loss", self.energy_loss)
 			tf.add_to_collection('total_loss', self.energy_loss)
 			with tf.name_scope('gradients'):
-				xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
+				self.xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 				self.gradients = tf.gather_nd(xyz_grad, padding_mask)
 				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
 				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
@@ -821,3 +821,21 @@ class UniversalNetwork(object):
 		preds = np.concatenate(preds)
 		idxs = np.concatenate(idxs)
 		return labels, preds, idxs
+
+	def evaluate_mol(self, mol):
+		try:
+			self.sess
+		except AttributeError:
+			self.sess = None
+		if self.sess is None:
+			self.batch_size = 1
+			self.assign_activation()
+			self.max_num_atoms = mol.NAtoms()
+			self.train_prepare(restart=True)
+		xyzs_feed = mol.coords
+		Zs_feed = mol.atoms
+		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
+		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
+		feed_dict={self.xyzs_pl:xyzs_feed, self.Zs_pl:Zs_feed, self.nn_pairs_pl:nn_pairs, self.nn_triples_pl:nn_triples)
+		energy, gradients = self.sess.run([self.total_energy, self.xyz_grad], feed_dict=feed_dict)
+		return energy, -gradients
