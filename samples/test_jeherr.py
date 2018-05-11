@@ -316,19 +316,18 @@ def train_energy_GauSHv2(mset):
 
 def train_energy_univ(mset):
 	PARAMS["train_gradients"] = False
-	PARAMS["train_charges"] = False
+	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [512, 512, 512]
-	PARAMS["learning_rate"] = 0.0001
+	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
+	PARAMS["learning_rate"] = 0.001
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
 	PARAMS["batch_size"] = 100
+	PARAMS["Profiling"] = False
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float64"
-	# network = UniversalNetwork(mset)
-	# network.start_training()
-	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_08_17.03.48_2018")
-	network.restart_training()
+	network = UniversalNetwork(mset)
+	network.start_training()
 
 def test_h2o():
 	PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 16), np.repeat(0.30, 16)), axis=1)
@@ -816,7 +815,7 @@ def minimize_ob():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("chemspider12_wb97xd_6311gss", 1000000)
+# RandomSmallSet("master_jeherr", 500000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -828,7 +827,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
+train_energy_univ("master_jeherr_rand")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()

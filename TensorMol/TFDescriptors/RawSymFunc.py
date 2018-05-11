@@ -3512,12 +3512,8 @@ def tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codes, angular_
 		Digested Mol. In the shape nmol X maxnatom X nelepairs X nZeta X nEta X nThetas X nRs
 	"""
 	dist_jk_tensor = tf.norm(dtxyzs+1.e-16, axis=-1)
-	# dist_jk_tensor = tf.where(tf.less(dist_jk_tensor, 1.e-16), tf.zeros_like(dist_jk_tensor), dist_jk_tensor)
-	# dij_dik = dist_jk_tensor[...,0] * dist_jk_tensor[...,1]
-	# dij_dik = tf.reduce_prod(dist_jk_tensor, axis=-1)
 	dij_dik = dist_jk_tensor[...,0] * dist_jk_tensor[...,1]
 	ij_dot_ik = tf.reduce_sum(dtxyzs[...,0,:] * dtxyzs[...,1,:], axis=-1)
-	# dij_dik = tf.where(tf.less(dij_dik, 1.e-16), tf.ones_like(dij_dik), dij_dik)
 	cos_angle = ij_dot_ik / dij_dik
 	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle) - 1.e-16, cos_angle)
 	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle) + 1.e-16, cos_angle)
@@ -3529,7 +3525,6 @@ def tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codes, angular_
 	cutoffj = 0.5 * (tf.cos(np.pi * dist_jk_tensor[...,0] / angular_cutoff) + 1.0)
 	cutoffk = 0.5 * (tf.cos(np.pi * dist_jk_tensor[...,1] / angular_cutoff) + 1.0)
 	cutoff = cutoffj * cutoffk
-	# cutoff = tf.reduce_prod(0.5 * (tf.cos(np.pi * dist_jk_tensor / angular_cutoff) + 1.0), axis=-1)
 	angular_embed = tf.expand_dims(tf.pow(1.0 + cos_factor, zeta), axis=-1) * tf.expand_dims(dist_factor, axis=-2)
 	angular_embed *= tf.expand_dims(tf.expand_dims(cutoff, axis=-1), axis=-1)
 	angular_embed = (tf.expand_dims(angular_embed, axis=-3)
