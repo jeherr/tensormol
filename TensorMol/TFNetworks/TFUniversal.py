@@ -836,6 +836,6 @@ class UniversalNetwork(object):
 		Zs_feed = mol.atoms
 		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
 		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
-		feed_dict={self.xyzs_pl:xyzs_feed, self.Zs_pl:Zs_feed, self.nn_pairs_pl:nn_pairs, self.nn_triples_pl:nn_triples)
+		feed_dict={self.xyzs_pl:xyzs_feed, self.Zs_pl:Zs_feed, self.nn_pairs_pl:nn_pairs, self.nn_triples_pl:nn_triples}
 		energy, gradients = self.sess.run([self.total_energy, self.xyz_grad], feed_dict=feed_dict)
 		return energy, -gradients
