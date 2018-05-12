@@ -957,3 +957,5 @@ train_energy_univ("master_jeherr_rand")
 # # chrome_trace = fetched_timeline.generate_chrome_trace_format()
 # # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
 # # 	f.write(chrome_trace)
+
+# print ELEMENTCODES.shape[0]*(ELEMENTCODES.shape[0]+1)/2

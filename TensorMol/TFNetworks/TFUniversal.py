@@ -385,19 +385,13 @@ class UniversalNetwork(object):
 						variables.append(weights)
 						variables.append(biases)
 			with tf.name_scope('regression_linear'):
-				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 2],
+				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 1],
 						stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
 				biases = tf.Variable(tf.zeros([2], dtype=self.tf_precision), name='biases')
 				outputs = tf.matmul(activations, weights) + biases
 				variables.append(weights)
 				variables.append(biases)
-				atom_nn_energy = tf.scatter_nd(indices, outputs[...,0], [self.batch_size, self.max_num_atoms])
-				atom_nn_charges = tf.scatter_nd(indices, outputs[...,1], [self.batch_size, self.max_num_atoms])
-			# excess_charge = tf.reduce_sum(atom_charges, axis=1)
-			# atom_charges -= tf.expand_dims(excess_charge / tf.cast(n_atoms, eval(PARAMS["tf_prec"])), axis=-1)
-			# mask = tf.where(tf.equal(Zs, 0), tf.zeros_like(Zs, dtype=eval(PARAMS["tf_prec"])),
-			# 		tf.ones_like(Zs, dtype=eval(PARAMS["tf_prec"])))
-			# atom_charges *= mask
+				atom_nn_energy = tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
 		return atom_nn_energy, atom_nn_charges, variables
 
 	def charge_inference(self, embed, atom_codes, Zs, n_atoms):
@@ -412,15 +406,14 @@ class UniversalNetwork(object):
 		"""
 		indices = tf.where(tf.not_equal(Zs, 0))
 		variables=[]
-		output = tf.zeros([self.batch_size, self.max_num_atoms], dtype=self.tf_precision)
 		with tf.variable_scope("charge_network", reuse=tf.AUTO_REUSE):
-			# code_kernel1 = tf.get_variable(name="CodeKernel", shape=(4, 4),dtype=self.tf_precision)
-			# code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(4, 4),dtype=self.tf_precision)
-			# variables.append(code_kernel1)
-			# variables.append(code_kernel2)
-			# coded_weights = tf.matmul(atom_codes, code_kernel1)
-			# coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
-			# coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
+			code_kernel1 = tf.get_variable(name="CodeKernel", shape=(4, 4),dtype=self.tf_precision)
+			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(4, 4),dtype=self.tf_precision)
+			variables.append(code_kernel1)
+			variables.append(code_kernel2)
+			coded_weights = tf.matmul(atom_codes, code_kernel1)
+			coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
+			coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
 			embed = tf.reshape(embed, [tf.shape(embed)[0], -1])
 			for i in range(len(self.hidden_layers)):
 				if i == 0:
@@ -446,13 +439,13 @@ class UniversalNetwork(object):
 				outputs = tf.squeeze(tf.matmul(activations, weights) + biases, axis=1)
 				variables.append(weights)
 				variables.append(biases)
-				output += tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
+				output = tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
 				excess_charge = tf.reduce_sum(output, axis=1)
 				output -= tf.expand_dims(excess_charge / tf.cast(n_atoms, eval(PARAMS["tf_prec"])), axis=-1)
 				mask = tf.where(tf.equal(Zs, 0), tf.zeros_like(Zs, dtype=eval(PARAMS["tf_prec"])),
 						tf.ones_like(Zs, dtype=eval(PARAMS["tf_prec"])))
-				output *= mask
-		return output, variables
+				atom_nn_charges = output * mask
+		return atom_nn_charges, variables
 
 	def gather_coulomb(self, xyzs, Zs, atom_charges, pairs):
 		padding_mask = tf.where(tf.logical_and(tf.not_equal(Zs, 0), tf.reduce_any(tf.not_equal(pairs, -1), axis=-1)))
@@ -697,33 +690,25 @@ class UniversalNetwork(object):
 			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_precision)
 			self.element_codes = tf.Variable(self.element_codes, trainable=True, dtype=self.tf_precision, name="element_codes")
 			self.element_codepairs = tf.Variable(self.element_codepairs, trainable=True, dtype=self.tf_precision, name="element_codepairs")
-			self.codepair_idx = tf.Variable(self.codepair_idx, trainable=False, dtype=self.tf_precision)
+			self.codepair_idx = tf.Variable(self.codepair_idx, trainable=False, dtype=tf.int32)
 			energy_fit = tf.Variable(self.energy_fit, trainable=False, dtype=self.tf_precision)
 			charge_fit = tf.Variable(self.charge_fit, trainable=False, dtype=self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
-			if self.train_charges:
-				charge_mean = tf.Variable(self.charge_mean, trainable=False, dtype=self.tf_precision)
-				charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
+			charge_mean = tf.Variable(self.charge_mean, trainable=False, dtype=self.tf_precision)
+			charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
 
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes,
 					self.element_codepairs, self.codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
 			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			with tf.name_scope('energy_inference'):
-				atom_nn_energy, atom_nn_charges, variables = self.energy_inference(embed, atom_codes, padding_mask)
+				atom_nn_energy, variables = self.energy_inference(embed, atom_codes, padding_mask)
 				self.mol_nn_energy = tf.reduce_sum(atom_nn_energy, axis=1) * energy_stddev
 				mol_energy_fit = tf.reduce_sum(tf.gather(energy_fit, self.Zs_pl), axis=1)
 				self.mol_nn_energy += mol_energy_fit
 				self.total_energy = self.mol_nn_energy
 
-				atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
-				atom_nn_charges = (atom_nn_charges * atom_charge_std) + atom_charge_mean
-				excess_charge = tf.reduce_sum(atom_nn_charges, axis=1)
-				atom_nn_charges -= tf.expand_dims(excess_charge / tf.cast(self.num_atoms_pl, eval(PARAMS["tf_prec"])), axis=-1)
-				mask = tf.where(tf.equal(self.Zs_pl, 0), tf.zeros_like(self.Zs_pl, dtype=eval(PARAMS["tf_prec"])),
-						tf.ones_like(self.Zs_pl, dtype=eval(PARAMS["tf_prec"])))
-				atom_nn_charges *= mask
 				dxyzs, q1q2, scatter_coulomb = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, atom_nn_charges, self.coulomb_pairs_pl)
 				self.mol_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2, scatter_coulomb)
 				# self.mol_coulomb_energy = tf.reshape(tf.reduce_sum(atom_coulomb_energy, axis=1), [self.batch_size])
@@ -733,22 +718,20 @@ class UniversalNetwork(object):
 				self.charge_loss = self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
 				tf.summary.scalar("charge_loss", self.charge_loss)
 				tf.add_to_collection('total_loss', self.charge_loss)
-			# if self.train_charges:
-			# 	with tf.name_scope('charge_inference'):
-			# 		atom_charges, charge_variables = self.charge_inference(embed, atom_codes, self.Zs_pl, self.num_atoms_pl)
-			# 		atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
-			# 		atom_charges = (atom_charges * atom_charge_std) + atom_charge_mean
-			# 		dxyzs, q1q2 = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, atom_charges, self.coulomb_pairs_pl)
-			# 		atom_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2)
-			# 		atom_coulomb_energy = tf.scatter_nd(padding_mask, atom_coulomb_energy, [self.batch_size, self.max_num_atoms])
-			# 		self.charges = tf.gather_nd(atom_charges, padding_mask)
-			# 		self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
-			# 		self.charge_loss = self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
-			# 		tf.summary.scalar("charge_loss", self.charge_loss)
-			# 		tf.add_to_collection('total_loss', self.charge_loss)
-			# 		self.mol_coulomb_energy = tf.reshape(tf.reduce_sum(atom_coulomb_energy, axis=1), [self.batch_size])
-			# 		self.total_energy += self.mol_coulomb_energy
-			self.energy_loss = self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+			if self.train_charges:
+				with tf.name_scope('charge_inference'):
+					atom_nn_charges, charge_variables = self.charge_inference(embed, atom_codes, self.Zs_pl, self.num_atoms_pl)
+					atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
+					atom_nn_charges = (atom_nn_charges * atom_charge_std) + atom_charge_mean
+					dxyzs, q1q2, scatter_coulomb = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, atom_nn_charges, self.coulomb_pairs_pl)
+					self.mol_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2, scatter_coulomb)
+					self.total_energy += self.mol_coulomb_energy
+					self.charges = tf.gather_nd(atom_charges, padding_mask)
+					self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
+					self.charge_loss = self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+					tf.summary.scalar("charge_loss", self.charge_loss)
+					tf.add_to_collection('total_loss', self.charge_loss)
+			self.energy_loss = 100 * self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
 			tf.summary.scalar("energy_loss", self.energy_loss)
 			tf.add_to_collection('total_loss', self.energy_loss)
 			with tf.name_scope('gradients'):

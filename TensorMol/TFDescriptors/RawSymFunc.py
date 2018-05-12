@@ -3527,7 +3527,7 @@ def tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codepairs, code
 	cutoff = cutoffj * cutoffk
 	angular_embed = tf.expand_dims(tf.pow(1.0 + cos_factor, zeta), axis=-1) * tf.expand_dims(dist_factor, axis=-2)
 	angular_embed *= tf.expand_dims(tf.expand_dims(cutoff, axis=-1), axis=-1)
-	codepair_gather = tf.gather_nd(codepair_gather, triples_Zs)
+	codepair_gather = tf.gather_nd(codepair_idx, triples_Zs)
 	codepairs = tf.gather(element_codepairs, codepair_gather)
 	angular_embed = tf.expand_dims(angular_embed, axis=-3) * tf.expand_dims(tf.expand_dims(codepairs, axis=-1), axis=-1)
 	scatter_shape = [tf.shape(padding_mask)[0], tf.reduce_max(scatter_idx[:,1]) + 1, tf.shape(element_codes)[1], 8, 8]
