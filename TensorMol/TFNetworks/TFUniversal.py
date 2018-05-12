@@ -52,7 +52,7 @@ class UniversalNetwork(object):
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.test_ratio = PARAMS["TestRatio"]
 		self.element_codes = ELEMENTCODES
-		self.element_codepairs = np.zeros((self.element_codes.shape[0]*(self.element_codes.shape[0]+1)/2, self.element_codes.shape[1]))
+		self.element_codepairs = np.zeros((int(self.element_codes.shape[0]*(self.element_codes.shape[0]+1)/2), self.element_codes.shape[1]))
 		self.codepair_idx = np.zeros((self.element_codes.shape[0], self.element_codes.shape[0]), dtype=np.int32)
 		counter = 0
 		for i in range(len(self.element_codes)):
@@ -536,7 +536,7 @@ class UniversalNetwork(object):
 		train_gradient_loss = 0.0
 		train_charge_loss = 0.0
 		num_batches = 0
-		for ministep in range (0, int(0.025 * Ncase_train/self.batch_size)):
+		for ministep in range (0, int(0.1 * Ncase_train/self.batch_size)):
 			batch_data = self.get_train_batch(self.batch_size)
 			feed_dict = self.fill_feed_dict(batch_data)
 			if self.train_gradients and self.train_charges:
