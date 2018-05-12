@@ -52,7 +52,7 @@ class UniversalNetwork(object):
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.test_ratio = PARAMS["TestRatio"]
 		self.element_codes = ELEMENTCODES
-		self.element_codepairs = np.zeros((self.element_codes.shape[0]*(self.element_codes.shape[0]+1)/2, self.element_codes.shape[1]))
+		self.element_codepairs = np.zeros((int(self.element_codes.shape[0]*(self.element_codes.shape[0]+1)/2), self.element_codes.shape[1]))
 		self.codepair_idx = np.zeros((self.element_codes.shape[0], self.element_codes.shape[0]), dtype=np.int32)
 		counter = 0
 		for i in range(len(self.element_codes)):
