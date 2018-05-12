@@ -387,12 +387,12 @@ class UniversalNetwork(object):
 			with tf.name_scope('regression_linear'):
 				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 1],
 						stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
-				biases = tf.Variable(tf.zeros([2], dtype=self.tf_precision), name='biases')
-				outputs = tf.matmul(activations, weights) + biases
+				biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
+				outputs = tf.squeeze(tf.matmul(activations, weights) + biases, axis=1)
 				variables.append(weights)
 				variables.append(biases)
 				atom_nn_energy = tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
-		return atom_nn_energy, atom_nn_charges, variables
+		return atom_nn_energy, variables
 
 	def charge_inference(self, embed, atom_codes, Zs, n_atoms):
 		"""
@@ -716,7 +716,7 @@ class UniversalNetwork(object):
 					dxyzs, q1q2, scatter_coulomb = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, atom_nn_charges, self.coulomb_pairs_pl)
 					self.mol_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2, scatter_coulomb)
 					self.total_energy += self.mol_coulomb_energy
-					self.charges = tf.gather_nd(atom_charges, padding_mask)
+					self.charges = tf.gather_nd(atom_nn_charges, padding_mask)
 					self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
 					self.charge_loss = self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
 					tf.summary.scalar("charge_loss", self.charge_loss)

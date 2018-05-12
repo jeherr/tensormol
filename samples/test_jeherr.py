@@ -827,7 +827,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("master_jeherr_rand")
+train_energy_univ("chemspider20_345_opt_rand")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
