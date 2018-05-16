@@ -127,7 +127,7 @@ class MSet:
 	def cut_min_num_atoms(self, min_n_atoms):
 		cut_down_mols = []
 		for mol in self.mols:
-			if mol.atoms.shape[0] >= max_n_atoms:
+			if mol.atoms.shape[0] >= min_n_atoms:
 				cut_down_mols.append(mol)
 		self.mols = cut_down_mols
 
