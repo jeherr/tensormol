@@ -709,19 +709,19 @@ class SparseCodedChargedGauSHNetwork:
 			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5]]
 		elif (self.ncan == 21):
 			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6]]
-		if (1):
-			if (self.ncan == 2):
-				orders = [[0,1]]
-			elif (self.ncan == 6):
-				orders = [[0,1],[1,2],[0,2]]
-			elif (self.ncan == 12):
-				orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3]]
-			elif (self.ncan == 20):
-				orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4]]
-			elif (self.ncan == 30):
-				orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5]]
-			elif (self.ncan == 42):
-				orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6]]
+
+		if (self.ncan == 2):
+			orders = [[0,1]]
+		elif (self.ncan == 6):
+			orders = [[0,1],[1,2],[0,2]]
+		elif (self.ncan == 12):
+			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3]]
+		elif (self.ncan == 20):
+			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4]]
+		elif (self.ncan == 30):
+			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5]]
+		elif (self.ncan == 42):
+			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6]]
 
 		weightstore = []
 		cuttore = []
@@ -761,106 +761,6 @@ class SparseCodedChargedGauSHNetwork:
 			cuttore.append(Cutoffs)
 			axtore.append(vs)
 
-			if 1:
-				vs2 = tf.concat([second[:,tf.newaxis,:],first[:,tf.newaxis,:],-1*v3[:,tf.newaxis,:]],axis=1)
-				weightstore.append(w1+w2)
-				cuttore.append(Cutoffs)
-				axtore.append(vs)
-
-
-		Cuts = tf.stack(cuttore,axis=0)
-		pw = Cuts*tf.exp(-tf.stack(weightstore,axis=0))#/(tf.stack(weightstore,axis=0) + 1e-9)
-		tdn = tf.where(tf.greater_equal(Cuts,0.), pw, tf.zeros_like(pw))
-		dn = tf.reduce_sum(tdn,axis=0,keepdims=True)
-		tw = tf.where(tf.greater_equal(Cuts,0.), tdn/(dn+1e-19), tf.zeros_like(tdn))
-		weights = tf.reshape(tw,(self.ncan,argshape[0],argshape[1]))
-
-		return weights, tf.stack(axtore,axis=0)
-
-	def CanonicalizeAngleAverage(self,dxyzs,sparse_mask):
-		"""
-		This version returns two sets of axes for nearest and next-nearest neighbor.
-		If the energy from both these representations is averaged the result
-		will be permutationally invariant (WRT nearest-next-nearest motion)
-		and rotationally invariant.
-
-		Args:
-		        dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
-		        zs: a nMol X maxNatom X maxNatom X 1 tensor of atomic number pairs.
-		        ie: ... X i X i = (0.,0.,0.))
-
-		        also an ncan X nmol X maxNAtom X 1 tensor
-		"""
-		# Append orthogonal axes to dxyzs
-		argshape = tf.shape(dxyzs)
-		realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
-		msk = tf.reshape(sparse_mask,(argshape[0]*argshape[1],argshape[2],1))
-		axis_cutoff = self.RCut_NN*self.RCut_NN
-		orders=[]
-		if (self.ncan == 1):
-			orders = [[0,1]]
-		elif (self.ncan == 3):
-			orders = [[0,1],[1,2],[0,2]]
-		elif (self.ncan == 6):
-			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3]]
-		elif (self.ncan == 10):
-			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4]]
-		elif (self.ncan == 15):
-			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5]]
-		elif (self.ncan == 21):
-			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6]]
-		if (1):
-			if (self.ncan == 2):
-				orders = [[0,1]]
-			elif (self.ncan == 6):
-				orders = [[0,1],[1,2],[0,2]]
-			elif (self.ncan == 12):
-				orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3]]
-			elif (self.ncan == 20):
-				orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4]]
-			elif (self.ncan == 30):
-				orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5]]
-			elif (self.ncan == 42):
-				orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6]]
-		weightstore = []
-		cuttore = []
-		axtore = []
-
-		for perm in orders:
-			v1 = tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([1e-23,0.,0.]),dtype=tf.float64)
-			v2 = tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,1e-23,0.]),dtype=tf.float64)
-			w1 = tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[0],:]*dxyzs[:,:,perm[0],:],axis=-1),(argshape[0]*argshape[1],1))+1e-9
-			w2 = tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[1],:]*dxyzs[:,:,perm[1],:],axis=-1),(argshape[0]*argshape[1],1))+1e-9
-
-			v1n = safe_inv_norm(v1)*v1
-			v2n = safe_inv_norm(v2)*v2
-			w3p = tf.abs(tf.reduce_sum(v1n*v2n,axis=-1)[...,tf.newaxis])
-
-			v3refl = tf.cross(v1n,v2n)
-			posz = tf.tile(tf.greater(tf.reduce_sum(v3refl*tf.constant([[1.,1.,1.]],dtype=self.prec),keepdims=True,axis=-1),0.),[1,3])
-			v3 = tf.where(posz,v3refl,-1.*v3refl)
-			v3 *= safe_inv_norm(v3)
-
-			# Compute the average of v1, v2, and their projections onto the plane.
-			v_av = (v1n+v2n)/2.0
-			v_av *= safe_inv_norm(v_av)
-
-			# Rotate pi/4 cw and ccw to obtain v1,v2
-			first = TF_AxisAngleRotation(v3,v_av,tf.constant(Pi/4.,dtype=self.prec))
-			second = TF_AxisAngleRotation(v3,v_av,tf.constant(-Pi/4.,dtype=self.prec))
-
-			vs = tf.concat([first[:,tf.newaxis,:],second[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
-			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
-
-			cw1 = tf.where(tf.less(w1,axis_cutoff),tf.cos(w1/axis_cutoff*Pi/2.0),tf.zeros_like(w1))
-			cw2 = tf.where(tf.less(w2,axis_cutoff),tf.cos(w2/axis_cutoff*Pi/2.0),tf.zeros_like(w2))
-			ca = tf.where(tf.greater(w3p,0.95),tf.zeros_like(w3p),tf.cos(w3p/0.95*Pi/2.))
-
-			Cutoffs = cw1*cw2*ca*msk[:,perm[0],:]*msk[:,perm[1],:]
-			weightstore.append(w1+w2)
-			cuttore.append(Cutoffs)
-			axtore.append(vs)
-
 			vs2 = tf.concat([second[:,tf.newaxis,:],first[:,tf.newaxis,:],-1*v3[:,tf.newaxis,:]],axis=1)
 			weightstore.append(w1+w2)
 			cuttore.append(Cutoffs)
@@ -876,11 +776,7 @@ class SparseCodedChargedGauSHNetwork:
 		tw = tf.where(tf.greater_equal(Cuts,0.), tdn/(dn), tf.zeros_like(tdn))
 
 		weights = tf.reshape(tw,(self.ncan,argshape[0],argshape[1]))
-		#weights = tf.Print(weights,[weights[:,0,:2]],"Weights",summarize=100000)
-		#weights = tf.Print(weights,[tf.reduce_sum(tf.reduce_mean(tformedcoords,axis=3)*weights[...,tf.newaxis],axis=0)],"Center of Canonicalization",summarize=100000)
-		#weights = tf.Print(weights,[self.nl_nn_pl[0,:2]],"NL",summarize=10000)
-		#weights = tf.Print(weights,[weights[:,0,:2]],"Weights",summarize=10000)
-		return tformedcoords, weights, tf.stack(axtore,axis=0)
+		return weights, tf.stack(axtore,axis=0)
 
 	def CanonicalizeGS(self,dxyzs,sparse_mask):
 		"""
