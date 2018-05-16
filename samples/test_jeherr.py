@@ -315,14 +315,15 @@ def train_energy_GauSHv2(mset):
 	network.start_training()
 
 def train_energy_univ(mset):
-	PARAMS["train_gradients"] = False
-	PARAMS["train_charges"] = False
+	PARAMS["train_gradients"] = True
+	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [512, 512, 512]
+	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
 	PARAMS["learning_rate"] = 0.0001
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
 	PARAMS["batch_size"] = 100
+	PARAMS["Profiling"] = False
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float64"
 	network = UniversalNetwork(mset)
@@ -814,7 +815,7 @@ def minimize_ob():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("chemspider12_wb97xd_6311gss", 1000000)
+# RandomSmallSet("master_jeherr", 500000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -826,7 +827,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
+train_energy_univ("chemspider20_345_opt_rand")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -843,10 +844,11 @@ train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # metaopt_chemsp()
 # water_web()
 
+#
 # PARAMS["tf_prec"] = "tf.float32"
 # PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
 # PARAMS["SH_NRAD"] = 16
-# a = MSet("SmallMols_rand")
+# a = MSet("master_jeherr_rand")
 # a.Load()
 # # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
 # # # # Tesselate that water to create a box
@@ -858,7 +860,7 @@ train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
 # # # # mt.WriteXYZfile()
 # b=MSet()
-# for i in range(2):
+# for i in range(100):
 # 	b.mols.append(a.mols[i])
 # 	# print(b.mols[i].NAtoms())
 # maxnatoms = b.MaxNAtom()
@@ -870,12 +872,15 @@ train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # xyzlist = []
 # gradlist = []
 # nnlist = []
+# chargeslist = []
 # # n_atoms_list = []
 # for i, mol in enumerate(b.mols):
 # 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float64)
 # 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
 # 	paddedz = np.zeros((maxnatoms), dtype=np.int32)
 # 	paddedz[:mol.atoms.shape[0]] = mol.atoms
+# 	paddedcharges = np.zeros((maxnatoms), dtype=np.float64)
+# 	paddedcharges[:mol.atoms.shape[0]] = mol.properties["charges"]
 # 	# paddedgrad = np.zeros((maxnatoms,3), dtype=np.float32)
 # 	# paddedgrad[:mol.atoms.shape[0]] = mol.properties["gradients"]
 # 	# paddednn = np.zeros((maxnatoms, 2), dtype=np.int32)
@@ -885,6 +890,7 @@ train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # 	# 	paddedpairs[j,:len(atom_pairs)] = molpair
 # 	xyzlist.append(paddedxyz)
 # 	zlist.append(paddedz)
+# 	chargeslist.append(paddedcharges)
 # 	# gradlist.append(paddedgrad)
 # 	# nnlist.append(paddednn)
 # 	# n_atoms_list.append(mol.NAtoms())
@@ -892,6 +898,7 @@ train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # 	# 	break
 # xyzs_tf = tf.cast(tf.stack(xyzlist), tf.float32)
 # zs_tf = tf.cast(tf.stack(zlist), tf.int32)
+# charges_tf = tf.cast(tf.stack(chargeslist), tf.float32)
 # xyzs_np = np.stack(xyzlist).astype(np.float64)
 # zs_np = np.stack(zlist).astype(np.int32)
 # # gradstack = tf.stack(gradlist)
@@ -921,13 +928,20 @@ train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # zeta = tf.Variable(AN1_zeta, trainable=False, dtype = tf.float32)
 # eta = tf.Variable(AN1_eta, trainable=False, dtype = tf.float32)
 #
-# nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 4.6, maxnatoms, True, True)
-# tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 4.0, maxnatoms, False)
+# nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 19.0, maxnatoms, False, False)
 # nlt_tf = tf.constant(nlt, dtype=tf.int32)
-# tlt_tf = tf.constant(tlt, dtype=tf.int32)
-# # tmp = sparse_pairs(xyzs_tf, zs_tf, nlt_tf)
-# # tmp = sparse_triples(xyzs_tf, zs_tf, tlt_tf)
-# tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
+#
+# dxyzs, q1q2, scatter_idx = gather_coulomb(xyzs_tf, zs_tf, charges_tf, nlt_tf)
+# tmp = calculate_coulomb_energy(dxyzs, q1q2, scatter_idx)
+#
+#
+# # nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 4.6, maxnatoms, True, True)
+# # tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 4.0, maxnatoms, False)
+# # nlt_tf = tf.constant(nlt, dtype=tf.int32)
+# # tlt_tf = tf.constant(tlt, dtype=tf.int32)
+# # # tmp = sparse_pairs(xyzs_tf, zs_tf, nlt_tf)
+# # # tmp = sparse_triples(xyzs_tf, zs_tf, tlt_tf)
+# # tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
 # options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -939,7 +953,9 @@ train_energy_univ("chemspider20_1_meta_withcharge_noerror_all")
 # tmp5 = get_pairs()
 # print(tmp5)
 # print(tmp5.shape)
-# fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-# chrome_trace = fetched_timeline.generate_chrome_trace_format()
-# with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
-# 	f.write(chrome_trace)
+# # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+# # chrome_trace = fetched_timeline.generate_chrome_trace_format()
+# # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
+# # 	f.write(chrome_trace)
+
+# print ELEMENTCODES.shape[0]*(ELEMENTCODES.shape[0]+1)/2
