@@ -124,6 +124,13 @@ class MSet:
 				known_hashes.append(mol.properties['bond_hash'])
 		self.mols = cut_down_mols
 
+	def cut_min_num_atoms(self, min_n_atoms):
+		cut_down_mols = []
+		for mol in self.mols:
+			if mol.atoms.shape[0] >= max_n_atoms:
+				cut_down_mols.append(mol)
+		self.mols = cut_down_mols
+
 	def cut_max_num_atoms(self, max_n_atoms):
 		cut_down_mols = []
 		for mol in self.mols:
