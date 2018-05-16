@@ -766,7 +766,6 @@ class SparseCodedChargedGauSHNetwork:
 			cuttore.append(Cutoffs)
 			axtore.append(vs)
 
-		tformedcoords = tf.stack(tore,axis=0)
 		Cuts = tf.stack(cuttore,axis=0)
 		safeweights = tf.clip_by_value(tf.stack(weightstore,axis=0),1e-19,36.0)
 		#pw = tf.nn.softmax(-1*tf.stack(weightstore,axis=0),axis=0)*Cuts
