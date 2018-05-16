@@ -64,10 +64,11 @@ if (0):
 		UniqueSet.Save("UniqueBonds")
 		MasterSet.Save("MasterSet")
 
-if 0:
+if 1:
 	b = MSet("MasterSet40")
 	b.Load()
 	b.cut_max_num_atoms(40)
+	b.cut_min_num_atoms(4)
 	b.cut_max_grad(2.0)
 	b.cut_energy_outliers()
 	b.cut_max_atomic_number(37)
@@ -80,7 +81,7 @@ if 0:
 	b.cut_max_grad(2.0)
 	b.cut_energy_outliers()
 
-if 1:
+if 0:
 	b=MSet()
 	m4 = Mol()
 	m4.FromXYZString("""73
@@ -1489,9 +1490,9 @@ class SparseCodedChargedGauSHNetwork:
 		self.sess.run(self.init)
 		#self.sess.graph.finalize()
 
-#net = SparseCodedChargedGauSHNetwork(aset=b,load=False,load_averages=False,mode='train')
-#net.Train()
-net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
+net = SparseCodedChargedGauSHNetwork(aset=b,load=True,load_averages=True,mode='train')
+net.Train()
+#net = SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
