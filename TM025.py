@@ -159,7 +159,7 @@ if 1:
 	H          8.49250       -1.93230        1.08330
 	Mg        -1.34673        0.02041       -0.06327
 	""")
-	#b.mols.append(m4)
+	b.mols.append(m4)
 	m=Mol()
 	m.FromXYZString("""10
 
@@ -808,7 +808,7 @@ class SparseCodedChargedGauSHNetwork:
 			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5]]
 		elif (self.ncan == 21):
 			orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6]]
-		if (0):
+		if (1):
 			if (self.ncan == 2):
 				orders = [[0,1]]
 			elif (self.ncan == 6):
@@ -821,7 +821,6 @@ class SparseCodedChargedGauSHNetwork:
 				orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5]]
 			elif (self.ncan == 42):
 				orders = [[0,1],[1,2],[0,2],[0,3],[1,3],[2,3],[0,4],[1,4],[2,4],[3,4],[0,5],[1,5],[2,5],[3,5],[4,5],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6]]
-		tore = []
 		weightstore = []
 		cuttore = []
 		axtore = []
@@ -829,8 +828,8 @@ class SparseCodedChargedGauSHNetwork:
 		for perm in orders:
 			v1 = tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([1e-23,0.,0.]),dtype=tf.float64)
 			v2 = tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,1e-23,0.]),dtype=tf.float64)
-			w1 = tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[0],:]*dxyzs[:,:,perm[0],:],axis=-1),(argshape[0]*argshape[1],1))
-			w2 = tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[1],:]*dxyzs[:,:,perm[1],:],axis=-1),(argshape[0]*argshape[1],1))
+			w1 = tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[0],:]*dxyzs[:,:,perm[0],:],axis=-1),(argshape[0]*argshape[1],1))+1e-9
+			w2 = tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[1],:]*dxyzs[:,:,perm[1],:],axis=-1),(argshape[0]*argshape[1],1))+1e-9
 
 			v1n = safe_inv_norm(v1)*v1
 			v2n = safe_inv_norm(v2)*v2
@@ -861,21 +860,19 @@ class SparseCodedChargedGauSHNetwork:
 			cuttore.append(Cutoffs)
 			axtore.append(vs)
 
-			if 0:
-				vs2 = tf.concat([second[:,tf.newaxis,:],first[:,tf.newaxis,:],-1*v3[:,tf.newaxis,:]],axis=1)
-				tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs2),tf.shape(dxyzs)))
-				weightstore.append(w1+w2)
-				cuttore.append(Cutoffs)
-				axtore.append(vs)
-
+			vs2 = tf.concat([second[:,tf.newaxis,:],first[:,tf.newaxis,:],-1*v3[:,tf.newaxis,:]],axis=1)
+			weightstore.append(w1+w2)
+			cuttore.append(Cutoffs)
+			axtore.append(vs)
 
 		tformedcoords = tf.stack(tore,axis=0)
 		Cuts = tf.stack(cuttore,axis=0)
+		safeweights = tf.clip_by_value(tf.stack(weightstore,axis=0),1e-19,36.0)
 		#pw = tf.nn.softmax(-1*tf.stack(weightstore,axis=0),axis=0)*Cuts
-		pw = Cuts*tf.exp(-tf.stack(weightstore,axis=0))#/(tf.stack(weightstore,axis=0) + 1e-9)
+		pw = Cuts*tf.exp(-safeweights)#/(tf.stack(weightstore,axis=0) + 1e-9)
 		tdn = tf.where(tf.greater_equal(Cuts,0.), pw, tf.zeros_like(pw))
-		dn = tf.reduce_sum(tdn,axis=0,keepdims=True)
-		tw = tf.where(tf.greater_equal(Cuts,0.), tdn/(dn+1e-19), tf.zeros_like(tdn))
+		dn = tf.clip_by_value(tf.reduce_sum(tdn,axis=0,keepdims=True),1e-19,1e19)
+		tw = tf.where(tf.greater_equal(Cuts,0.), tdn/(dn), tf.zeros_like(tdn))
 
 		weights = tf.reshape(tw,(self.ncan,argshape[0],argshape[1]))
 		#weights = tf.Print(weights,[weights[:,0,:2]],"Weights",summarize=100000)
