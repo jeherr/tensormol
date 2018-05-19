@@ -764,7 +764,7 @@ class SparseCodedChargedGauSHNetwork:
 				vs2 = tf.concat([second[:,tf.newaxis,:],first[:,tf.newaxis,:],-1*v3[:,tf.newaxis,:]],axis=1)
 				weightstore.append(w1+w2)
 				cuttore.append(Cutoffs)
-				axtore.append(vs)
+				axtore.append(vs2)
 
 
 		Cuts = tf.stack(cuttore,axis=0)
@@ -866,7 +866,7 @@ class SparseCodedChargedGauSHNetwork:
 				tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs2),tf.shape(dxyzs)))
 				weightstore.append(w1+w2)
 				cuttore.append(Cutoffs)
-				axtore.append(vs)
+				axtore.append(vs2)
 
 
 		tformedcoords = tf.stack(tore,axis=0)
