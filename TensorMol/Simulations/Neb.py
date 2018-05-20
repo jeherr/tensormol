@@ -143,6 +143,29 @@ class NudgedElasticBand:
 			TE = np.sum(self.Es)+self.SpringEnergy(beads_)
 			return TE
 
+	def IntegrateEnergy(self):
+		"""
+		Use the fundamental theorem of line integrals to calculate an energy.
+		An interpolated path could improve this a lot.
+		"""
+		self.Esi[0] = self.Es[0]
+		for i in range(1,self.nbeads):
+			dR = self.beads[i] - self.beads[i-1]
+			dV = -1*(self.Fs[i] + self.Fs[i-1])/2. # midpoint rule.
+			self.Esi[i] = self.Esi[i-1]+np.einsum("ia,ia",dR,dV)
+
+	def WriteTrajectory(self,nm_):
+		for i,bead in enumerate(self.beads):
+			m=Mol(self.atoms,bead)
+			m.WriteXYZfile("./results/", "Bead"+str(i))
+		for i,bead in enumerate(self.beads):
+			m=Mol(self.atoms,bead)
+			m.properties["bead"] = i
+			m.properties["Energy"] = self.Es[i]
+			m.properties["NormNebForce"]=np.linalg.norm(self.Fs[i])
+			m.WriteXYZfile("./results/", nm_+"Traj")
+		return
+
 	def Opt(self, filename="Neb",Debug=False, callback = None):
 		"""
 		Optimize the nudged elastic band using the solver that has been selected.
@@ -183,7 +206,7 @@ class NudgedElasticBand:
 		return self.beads
 
 class BatchedNudgedElasticBand(NudgedElasticBand):
-	def __init__(self,bf_,g0_,g1_,name_="Neb",thresh_=None,nbeads_=None):
+	def __init__(self,net_,g0_,g1_,name_="Neb",thresh_=None,nbeads_=None):
 		"""
 		Nudged Elastic band. JCP 113 9978
 
@@ -195,9 +218,17 @@ class BatchedNudgedElasticBand(NudgedElasticBand):
 		Returns:
 			A reaction path.
 		"""
-		NudgedElasticBand.__init__(self,bf_,g0_,g1_,name_,thresh_,nbeads_, callback_)
-		self.f = bf_
+		self.nbeads = PARAMS["NebNumBeads"]
+		if (nbeads_!=None):
+			self.nbeads = nbeads_
+		s = MSet()
+		s.mols = [g0_ for i in range(self.nbeads)]
+		bf_ = net_.GetBatchedEnergyForceRoutine(s)
+		NudgedElasticBand.__init__(self, bf_, g0_, g1_, name_, thresh_, nbeads_)
+		#print("BEADS:",self.beads)
+		#print("Ef0",self.f(self.beads))
 		return
+
 	def NebForce(self, beads_, i, DoForce = True):
 		"""
 		This uses the mixing of Perpendicular spring force

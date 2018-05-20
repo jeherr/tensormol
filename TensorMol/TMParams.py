@@ -12,7 +12,7 @@ class TMParams(dict):
 		self["GIT_REVISION"] = os.popen("git rev-parse --short HEAD").read()
 		self["CheckLevel"] = 1 # whether to test the consistency of several things...
 		self["PrintTMTimer"] = False # whether to emit timing messages.
-		self["MAX_ATOMIC_NUMBER"] = 10
+		self["MAX_ATOMIC_NUMBER"] = 55
 		# Parameters of MolEmb
 		self["RBFS"] = np.array([[0.35, 0.35], [0.70, 0.35], [1.05, 0.35], [1.40, 0.35], [1.75, 0.35], [2.10, 0.35], [2.45, 0.35],
 									[2.80, 0.35], [3.15, 0.35], [3.50, 0.35], [3.85, 0.35], [4.20, 0.35], [4.55, 0.35], [4.90, 0.35]])
