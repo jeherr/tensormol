@@ -64,7 +64,7 @@ if (0):
 		UniqueSet.Save("UniqueBonds")
 		MasterSet.Save("MasterSet")
 
-if 1:
+if 0:
 	b = MSet("MasterSet40")
 	b.Load()
 	b.cut_max_num_atoms(40)
@@ -74,7 +74,7 @@ if 1:
 	b.cut_max_atomic_number(37)
 	#b.Save("MasterSet40")
 
-if 0:
+if 1:
 	b = MSet("HNCO_small")
 	b.Load()
 	b.cut_max_num_atoms(40)
@@ -185,7 +185,7 @@ if 0:
 	H          1.27275        0.03387        0.79509
 	H          1.27275        0.27665       -0.93526
 	""")
-	b.mols.append(m2)
+	#b.mols.append(m2)
 	m3=Mol()
 	m3.FromXYZString("""17
 
@@ -208,6 +208,10 @@ if 0:
 	H          0.48078        1.99083       -0.05018
 	""")
 	#b.mols.append(m3)
+
+if 0:
+	b = MSet()
+	b.ReadXYZ("pblms")
 
 MAX_ATOMIC_NUMBER = 55
 
@@ -311,7 +315,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.MaxNAtom = 32
 		self.MaxNeigh_NN = self.MaxNAtom
 		self.MaxNeigh_J = self.MaxNAtom
-		self.learning_rate = 0.0005
+		self.learning_rate = 0.00005
 		self.ncan = 12
 		self.DoHess=False
 		self.mode = mode
@@ -427,11 +431,15 @@ class SparseCodedChargedGauSHNetwork:
 		if (MustPrepare):
 			self.Prepare()
 			self.Load()
+		self.NEFCalls = 0
 		self.CAxes = np.zeros((self.ncan,self.batch_size*self.MaxNAtom,3,3))
 		self.CWeights = np.zeros((self.ncan,self.batch_size,self.MaxNAtom))
 		self.CWeights, self.CAxes = self.sess.run([self.CanonicalAxes(self.dxyzs,self.sparse_mask)],feed_dict=self.MakeFeed(Mol(m.atoms,m.coords)))[0]
 		def EF(xyz_,DoForce=True,Debug = False):
+			self.NEFCalls += 1
 			feed_dict = self.MakeFeed(Mol(m.atoms,xyz_))
+			#if (self.NEFCalls%100==0):
+			#	self.CWeights, self.CAxes = self.sess.run([self.CanonicalAxes(self.dxyzs,self.sparse_mask)],feed_dict=self.MakeFeed(Mol(m.atoms,xyz_)))[0]
 			if (self.DoRotGrad):
 				print("RotGrad:",self.sess.run([self.RotGrad], feed_dict=feed_dict))
 			if (Debug):
@@ -539,8 +547,8 @@ class SparseCodedChargedGauSHNetwork:
 		nls_nn = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_NN),dtype=np.int32)
 		nls_j = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_J),dtype=np.int32)
 		if ((self.MaxNeigh_J > self.MaxNeigh_J_prep) or (self.MaxNeigh_NN > self.MaxNeigh_NN_prep)):
-			print("Too Many Neighbors.")
-			raise Exception('NeighborOverflow')
+			self.Prepare()
+			self.Load()
 		nls_nn[:nlt_nn.shape[0],:nlt_nn.shape[1],:nlt_nn.shape[2]] = nlt_nn
 		nls_j[:nlt_j.shape[0],:nlt_j.shape[1],:nlt_j.shape[2]] = nlt_j
 		return {self.xyzs_pl:xyzs,
@@ -602,8 +610,8 @@ class SparseCodedChargedGauSHNetwork:
 		nls_nn = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_NN),dtype=np.int32)
 		nls_j = -1*np.ones((self.batch_size,self.MaxNAtom,self.MaxNeigh_J),dtype=np.int32)
 		if ((self.MaxNeigh_J > self.MaxNeigh_J_prep) or (self.MaxNeigh_NN > self.MaxNeigh_NN_prep)):
-			print("Too Many Neighbors.")
-			raise Exception('NeighborOverflow')
+			self.Prepare()
+			self.Load()
 		nls_nn[:nlt_nn.shape[0],:nlt_nn.shape[1],:nlt_nn.shape[2]] = nlt_nn
 		nls_j[:nlt_j.shape[0],:nlt_j.shape[1],:nlt_j.shape[2]] = nlt_j
 		return {self.xyzs_pl:xyzs, self.zs_pl:zs,self.nl_nn_pl:nls_nn,self.nl_j_pl:nls_j,self.groundTruthE_pl:true_ae, self.groundTruthG_pl:true_force, self.groundTruthQ_pl:qs, self.groundTruthD_pl:ds}, mols
@@ -737,9 +745,9 @@ class SparseCodedChargedGauSHNetwork:
 			v2n = safe_inv_norm(v2)*v2
 			w3p = tf.abs(tf.reduce_sum(v1n*v2n,axis=-1)[...,tf.newaxis])
 
-			v3refl = tf.cross(v1n,v2n)
-			posz = tf.tile(tf.greater(tf.reduce_sum(v3refl*tf.constant([[1.,1.,1.]],dtype=self.prec),keepdims=True,axis=-1),0.),[1,3])
-			v3 = tf.where(posz,v3refl,-1.*v3refl)
+			v3 = tf.cross(v1n,v2n)
+			#posz = tf.tile(tf.greater(tf.reduce_sum(v3refl*tf.constant([[1.,1.,1.]],dtype=self.prec),keepdims=True,axis=-1),0.),[1,3])
+			#v3 = tf.where(posz,v3refl,-1.*v3refl)
 			v3 *= safe_inv_norm(v3)
 
 			# Compute the average of v1, v2, and their projections onto the plane.
@@ -754,7 +762,7 @@ class SparseCodedChargedGauSHNetwork:
 
 			cw1 = tf.where(tf.less(w1,axis_cutoff),tf.cos(w1/axis_cutoff*Pi/2.0),tf.zeros_like(w1))
 			cw2 = tf.where(tf.less(w2,axis_cutoff),tf.cos(w2/axis_cutoff*Pi/2.0),tf.zeros_like(w2))
-			ca = tf.where(tf.greater(w3p,0.95),tf.zeros_like(w3p),tf.cos(w3p/0.95*Pi/2.))
+			ca = tf.where(tf.greater(w3p,0.92),tf.zeros_like(w3p),tf.cos(w3p/0.92*Pi/2.))
 
 			Cutoffs = cw1*cw2*ca*msk[:,perm[0],:]*msk[:,perm[1],:]
 			weightstore.append(w1+w2)
@@ -764,9 +772,8 @@ class SparseCodedChargedGauSHNetwork:
 			vs2 = tf.concat([second[:,tf.newaxis,:],first[:,tf.newaxis,:],-1*v3[:,tf.newaxis,:]],axis=1)
 			weightstore.append(w1+w2)
 			cuttore.append(Cutoffs)
-			axtore.append(vs)
+			axtore.append(vs2)
 
-		tformedcoords = tf.stack(tore,axis=0)
 		Cuts = tf.stack(cuttore,axis=0)
 		safeweights = tf.clip_by_value(tf.stack(weightstore,axis=0),1e-19,36.0)
 		#pw = tf.nn.softmax(-1*tf.stack(weightstore,axis=0),axis=0)*Cuts
@@ -774,59 +781,8 @@ class SparseCodedChargedGauSHNetwork:
 		tdn = tf.where(tf.greater_equal(Cuts,0.), pw, tf.zeros_like(pw))
 		dn = tf.clip_by_value(tf.reduce_sum(tdn,axis=0,keepdims=True),1e-19,1e19)
 		tw = tf.where(tf.greater_equal(Cuts,0.), tdn/(dn), tf.zeros_like(tdn))
-
 		weights = tf.reshape(tw,(self.ncan,argshape[0],argshape[1]))
 		return weights, tf.stack(axtore,axis=0)
-
-	def CanonicalizeGS(self,dxyzs,sparse_mask):
-		"""
-		This version returns two sets of axes for nearest and next-nearest neighbor.
-		If the energy from both these representations is averaged the result
-		will be permutationally invariant (WRT nearest-next-nearest motion)
-		and rotationally invariant.
-
-		Args:
-		        dxyz: a nMol X maxNatom X maxNatom X 3 tensor of atoms. (differenced from center of embedding
-		        zs: a nMol X maxNatom X maxNatom X 1 tensor of atomic number pairs.
-		        ie: ... X i X i = (0.,0.,0.))
-
-		        also an ncan X nmol X maxNAtom X 1 tensor
-		"""
-		# Append orthogonal axes to dxyzs
-		argshape = tf.shape(dxyzs)
-		realdata = tf.reshape(dxyzs,(argshape[0]*argshape[1],argshape[2],3))
-		msk = tf.reshape(sparse_mask,(argshape[0]*argshape[1],argshape[2],1))
-		if (self.ncan == 1):
-			orders = [[0,1]]
-		if (self.ncan == 2):
-			orders = [[0,1],[1,0]]
-		elif (self.ncan == 6):
-			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0]]
-		elif (self.ncan == 12):
-			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3]]
-		elif (self.ncan == 16):
-			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3],[0,4],[4,0],[1,4],[4,1]]
-		elif (self.ncan == 20):
-			orders = [[0,1],[1,0],[1,2],[2,1],[0,2],[2,0],[0,3],[3,0],[1,3],[3,1],[3,2],[2,3],[0,4],[4,0],[1,4],[4,1],[2,4],[4,2],[3,4],[4,3]]
-		tore = []
-		weightstore = []
-		for perm in orders:
-			v1 = tf.reshape(dxyzs[:,:,perm[0],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([1e-8,0.,0.]),dtype=tf.float64)
-			w1 = (tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[0],:]*dxyzs[:,:,perm[0],:],axis=-1),(argshape[0]*argshape[1],1))+1e-8)
-			v1 *= safe_inv_norm(v1)
-			v2 = tf.reshape(dxyzs[:,:,perm[1],:],(argshape[0]*argshape[1],3))+tf.constant(np.array([0.,1e-8,0.]),dtype=tf.float64)
-			#w2 = (tf.reshape(tf.reduce_sum(dxyzs[:,:,perm[1],:]*dxyzs[:,:,perm[1],:],axis=-1),(argshape[0]*argshape[1],1))+1e-8)
-			v2 -= tf.einsum('ij,ij->i',v1,v2)[:,tf.newaxis]*v1
-			v2 *= safe_inv_norm(v2)
-			v3refl = tf.cross(v1,v2)
-			posz = tf.tile(tf.greater(tf.reduce_sum(v3refl*tf.constant([[1.,1.,1.]],dtype=self.prec),keepdims=True,axis=-1),0.),[1,3])
-			v3 = tf.where(posz,v3refl,-1*v3refl)
-			v3 *= safe_inv_norm(v3)
-			vs = tf.concat([v1[:,tf.newaxis,:],v2[:,tf.newaxis,:],v3[:,tf.newaxis,:]],axis=1)
-			tore.append(tf.reshape(tf.einsum('ijk,ilk->ijl',realdata,vs),tf.shape(dxyzs)))
-			#weightstore.append((w1+w2)*msk[:,perm[0],:]*msk[:,perm[1],:])
-			weightstore.append((w1)*msk[:,perm[0],:]*msk[:,perm[1],:])
-		return tf.stack(tore,axis=0), tf.reshape(tf.nn.softmax(-1*tf.stack(weightstore,axis=0),axis=0),(self.ncan,argshape[0],argshape[1]))
 
 	def ChargeEmbeddedModel(self, dxyzs, Zs, zjs, gather_inds, pair_mask, gauss_params, atom_codes, l_max):
 		"""
@@ -1087,10 +1043,8 @@ class SparseCodedChargedGauSHNetwork:
 		_ , train_loss = self.sess.run([self.train_op, self.Tloss], feed_dict=feed_dict)
 		if (np.isnan(train_loss)):
 			print("Problem Batch discovered.")
-			GD = self.sess.run([self.GradDiff], feed_dict=feed_dict)[0]
-			print("Grad Diff:", np.reduce_sum(GD,axis=(-1,-2)))
-			for k,mol in enumerate(mols):
-				print(k,mol)
+			for m in mols:
+				print(m)
 		self.print_training(step, train_loss)
 		return
 
@@ -1466,10 +1420,10 @@ if 1:
 			ens[j],fs[j] = EF(mp.coords)
 			ate = net.sess.run([net.CAEs[:,:,:,0]],feed_dict=net.MakeFeed(mp))[0]
 			#a,bp,axs = net.sess.run([net.CanonicalizeGS(net.dxyzs)],feed_dict=net.MakeFeed(mp))[0]
-			cdyx, bp, axs = net.sess.run([net.CanonicalizeAngleAverage(net.dxyzs,net.sparse_mask)],feed_dict=net.MakeFeed(mp))[0]
+			#cdyx, bp, axs = net.sess.run([net.CanonicalizeAngleAverage(net.dxyzs,net.sparse_mask)],feed_dict=net.MakeFeed(mp))[0]
 			#print(a,"b",b)
-			ws[j]=np.transpose(bp[:,0,:m1.NAtoms()])
-			if (j>0):
+			#ws[j]=np.transpose(bp[:,0,:m1.NAtoms()])
+			if (j>0 and False):
 				sw1 = np.sort(ws[j])
 				sw2 = np.sort(ws[j-1])
 				if (np.any(np.greater(np.abs(sw1-sw2),0.1))):
