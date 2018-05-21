@@ -399,6 +399,7 @@ if 0:
 	plt.show()
 
 # Some code to find and visualize largest errors in the set.
+from TensorMol.Containers import Mol
 
 m = Mol()
 m.FromXYZString("""68
