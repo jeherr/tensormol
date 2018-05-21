@@ -34,7 +34,7 @@ class SteepestDescent:
 		"""
 		e,g = self.EForce(new_vec_)
 		self.step += 1
-		return new_vec_ + PARAMS["SDStep"]*g, e, g
+		return new_vec_ + 0.05*g, e, g
 
 class VerletOptimizer:
 	def __init__(self, ForceAndEnergy_,x0_):

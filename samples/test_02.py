@@ -89,8 +89,8 @@ def TestNeb():
 	txyz = np.zeros((len(s.mols),s.mols[0].coords.shape[0],s.mols[0].coords.shape[1]))
 	for i in range(len(s.mols)):
 		txyz[i] = s.mols[i].coords
-	NEB = TensorMol.Simulations.BatchedNudgedElasticBand(net,s.mols[1],s.mols[2],thresh_=0.003)
-	NEB.Opt()
+	NEB = TensorMol.Simulations.BatchedNudgedElasticBand(net,s.mols[0],s.mols[3],thresh_=0.003,nbeads_=20)
+	NEB.Opt(eff_max_step=100)
 
 #(self,bf_,g0_,g1_,name_="Neb",thresh_=None,nbeads_=None):
 if 0:

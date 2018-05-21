@@ -35,6 +35,7 @@ class NudgedElasticBand:
 		self.nbeads = PARAMS["NebNumBeads"]
 		if (nbeads_!=None):
 			self.nbeads = nbeads_
+		self.SpringsOn = True
 		self.k = PARAMS["NebK"]
 		self.f = f_
 		self.atoms = g0_.atoms.copy()
@@ -50,7 +51,7 @@ class NudgedElasticBand:
 		self.step=0
 		if (PARAMS["NebSolver"]=="SD"):
 			self.Solver = SteepestDescent(self.WrappedEForce,self.beads)
-		if (PARAMS["NebSolver"]=="Verlet"):
+		elif (PARAMS["NebSolver"]=="Verlet"):
 			self.Solver = VerletOptimizer(self.WrappedEForce,self.beads)
 		elif (PARAMS["NebSolver"]=="BFGS"):
 			self.Solver = BFGS_WithLinesearch(self.WrappedEForce,self.beads)
@@ -59,7 +60,7 @@ class NudgedElasticBand:
 		elif (PARAMS["NebSolver"]=="CG"):
 			self.Solver = ConjGradient(self.WrappedEForce,self.beads)
 		else:
-			raise Exception("Missing Neb Solver")
+			raise Exception("Missing Neb Solver",PARAMS["NebSolver"])
 		for i,bead in enumerate(self.beads):
 			m=Mol(self.atoms,bead)
 			m.WriteXYZfile("./results/", "NebTraj0")
@@ -106,6 +107,8 @@ class NudgedElasticBand:
 		# Compute the spring part of the energy.
 		if (not DoForce):
 			return self.Es[i]
+		elif (not self.SpringsOn):
+			return self.Es[i], self.Fs[i]
 		t = self.Tangent(beads_,i)
 		self.Ts[i] = t
 		S = -1.0*self.SpringDeriv(beads_,i)
@@ -127,6 +130,7 @@ class NudgedElasticBand:
 			print("Climbing image i", i)
 			Fneb = self.Fs[i] + -2.0*np.sum(self.Fs[i]*self.Ts[i])*self.Ts[i]
 		return self.Es[i], Fneb
+
 	def WrappedEForce(self, beads_, DoForce=True):
 		F = np.zeros(beads_.shape)
 		if (DoForce):
@@ -166,16 +170,22 @@ class NudgedElasticBand:
 			m.WriteXYZfile("./results/", nm_+"Traj")
 		return
 
-	def Opt(self, filename="Neb",Debug=False, callback = None):
+	def Opt(self, filename="Neb",Debug=False, callback = None, eff_max_step=None):
 		"""
 		Optimize the nudged elastic band using the solver that has been selected.
 		"""
 		# Sweeps one at a time
 		self.step=0
 		self.Fs = np.ones(self.beads.shape)
+		if (eff_max_step != None):
+			self.max_opt_step = eff_max_step
 		PES = np.zeros((self.max_opt_step, self.nbeads))
 		while(self.step < self.max_opt_step and np.sqrt(np.mean(self.Fs*self.Fs))>self.thresh):
 			# Update the positions of every bead together.
+			if (self.step < 20):
+				self.SpringsOn = False
+			else:
+				self.SpringsOn = True
 			self.beads, energy, self.Fs = self.Solver(self.beads)
 			PES[self.step] = self.Es.copy()
 			self.IntegrateEnergy()
@@ -190,7 +200,7 @@ class NudgedElasticBand:
 			print("Dist Profile: ", beadRs)
 			print("BCos Profile: ", beadCosines)
 			minforce = np.min(beadFs)
-			if (self.step%10==0):
+			if (self.step%1==0):
 				self.WriteTrajectory(filename)
 			if (callback != None):
 				mols =[]
@@ -241,9 +251,13 @@ class BatchedNudgedElasticBand(NudgedElasticBand):
 			self.Es[i], self.Fs[i] = self.RawEs[i], self.RawFs[i]
 		else:
 			self.Es[i] = self.RawEs[i]
+
 		# Compute the spring part of the energy.
 		if (not DoForce):
 			return self.Es[i]
+		elif (not self.SpringsOn):
+			return self.Es[i], self.Fs[i]
+
 		t = self.Tangent(beads_,i)
 		self.Ts[i] = t
 		S = -1.0*self.SpringDeriv(beads_,i)
@@ -251,20 +265,19 @@ class BatchedNudgedElasticBand(NudgedElasticBand):
 		self.Ss[i] = Spara
 		F = self.Fs[i].copy()
 		F = self.Perpendicular(F,t)
-		# Instead use Wales' DNEB
-		if (0):
+		if (0): # Instead use Wales' DNEB
 			if (np.linalg.norm(F) != 0.0):
 				Fn = F/np.linalg.norm(F)
 			else:
 				Fn = F
 			Sperp = self.Perpendicular(self.Perpendicular(S,t),Fn)
-			#Fneb = self.PauliForce(i)+Spara+Sperp+F
 		Fneb = Spara+F
 		# If enabled and this is the TS bead, do the climbing image.
 		if (PARAMS["NebClimbingImage"] and self.step>10 and i==self.TSI):
 			print("Climbing image i", i)
 			Fneb = self.Fs[i] + -2.0*np.sum(self.Fs[i]*self.Ts[i])*self.Ts[i]
 		return self.Es[i], Fneb
+
 	def WrappedEForce(self, beads_, DoForce=True):
 		F = np.zeros(beads_.shape)
 		self.RawEs, self.RawFs = self.f(self.beads, DoForce)

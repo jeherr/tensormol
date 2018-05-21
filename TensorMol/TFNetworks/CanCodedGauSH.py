@@ -103,12 +103,12 @@ class SparseCodedChargedGauSHNetwork:
 		self.MaxNeigh_NN = self.MaxNAtom
 		self.MaxNeigh_J = self.MaxNAtom
 		self.learning_rate = 0.00005
-		self.ncan = 12
+		self.ncan = 6
 		self.DoHess=False
 		self.mode = mode
 		self.Lsq = False
 		if (mode == 'eval'):
-			self.ncan = 12
+			self.ncan = 6
 		self.RCut_Coulomb = 19.0
 		self.RCut_NN = 7.0
 		self.AtomCodes = ELEMENTCODES
@@ -267,6 +267,10 @@ class SparseCodedChargedGauSHNetwork:
 
 		FD = {self.xyzs_pl:xyzs_t, self.zs_pl:Zs_t, self.nl_nn_pl:nls_nn,self.nl_j_pl:nls_j}
 		self.CWeights, self.CAxes = self.sess.run([self.CanonicalAxes(self.dxyzs,self.sparse_mask)],feed_dict=FD)[0]
+		for k in range(self.CWeights.shape[0]):
+			self.CWeights[k] = self.CWeights[0]
+			self.CAxes[k] = self.CAxes[0]
+
 		def EF(xyz_,DoForce=True,Debug = False):
 			xyzs = np.zeros((self.batch_size,self.MaxNAtom,3))
 			Zs = np.zeros((self.batch_size,self.MaxNAtom,1),dtype=np.int32)
@@ -1028,7 +1032,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.AtomCharges = tf.zeros((self.batch_size,self.MaxNAtom),dtype=self.prec,name='AtomCharges')
 
 		if (self.Canonicalize):
-			if (self.mode=='train'):
+			if 1:#(self.mode=='train'):
 				weights,axs = self.CanonicalAxes(self.dxyzs,self.sparse_mask)
 			else:
 				weights,axs = self.cw_pl, self.cax_pl
