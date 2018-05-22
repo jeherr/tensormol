@@ -251,8 +251,6 @@ def MetadynamicsStatistics():
 	traj = MetaDynamics(None, m,"MetaMD_100_10_X",F)
 	traj.Prop()
 
-
-
 def Bullvalene():
 	"""
 	Gather statistics about the metadynamics exploration process varying bump depth, and width.

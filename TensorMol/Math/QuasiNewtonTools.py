@@ -40,6 +40,7 @@ def DiagHess(f_,x_,eps_=0.0005):
 		tore[it.multi_index] = ((f_(x_t) - f_x_)/eps_)[it.multi_index]
 		it.iternext()
 	return tore
+
 def FdiffGradient(f_, x_, eps_=0.0001):
 	"""
 	Computes a finite difference gradient of a single or multi-valued function
@@ -56,6 +57,7 @@ def FdiffGradient(f_, x_, eps_=0.0001):
 		tore[it.multi_index] = ((f_(x_t) - f_x_)/eps_)
 		it.iternext()
 	return tore
+
 def CoordinateScan(f_, x_, name_="", eps_=0.03, num_=15):
 	# Writes a plaintext file containing scans of each coordinate.
 	samps = np.logspace(0.0,eps_,num_)-1.0
