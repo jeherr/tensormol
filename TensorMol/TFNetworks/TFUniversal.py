@@ -786,7 +786,7 @@ class UniversalNetwork(object):
 			step, duration, loss, energy_loss, gradient_loss, charge_loss)
 		return
 
-	def evaluate_set(self):
+	def evaluate_set(self, mset):
 		"""
 		Takes coordinates and atomic numbers from a manager and feeds them into the network
 		for evaluation of the forces
@@ -796,22 +796,23 @@ class UniversalNetwork(object):
 			Zs (np.int32): numpy array of atomic numbers
 		"""
 		self.assign_activation()
+		self.mol_set_name = mset
 		self.reload_set()
+		self.max_num_atoms = self.mol_set.MaxNAtom()
+		self.num_molecules = len(self.mol_set.mols)
 		self.load_data()
 		self.train_prepare(restart=True)
 		labels, preds, idxs = [], [], []
-		for ministep in range (0, int(0.05 * self.num_train_cases/self.batch_size)):
+		for ministep in range (0, int(self.num_train_cases/self.batch_size)):
 			batch_data = self.get_train_batch(self.batch_size)
 			feed_dict = self.fill_feed_dict(batch_data)
 			total_loss, energy_loss, total_energy, energy_label = self.sess.run([self.total_loss,
 				self.energy_loss, self.total_energy, self.energy_pl], feed_dict=feed_dict)
 			labels.append(energy_label)
 			preds.append(total_energy)
-			idxs.append(self.train_idxs[self.train_pointer - self.batch_size:self.train_pointer])
 		labels = np.concatenate(labels)
 		preds = np.concatenate(preds)
-		idxs = np.concatenate(idxs)
-		return labels, preds, idxs
+		return labels, preds
 
 	def evaluate_mol(self, mol):
 		try:
