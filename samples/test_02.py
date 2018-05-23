@@ -221,7 +221,9 @@ if 0:
 	""")
 	#b.mols.append(m3)
 
-TestNeb()
+#TestNeb()
+
+def TestAngleAverage(): 
 
 def MethCoords(R1,R2,R3):
 	angle = 2*Pi*(35.25/360.)
