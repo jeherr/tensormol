@@ -23,10 +23,7 @@ from tensorflow.python.client import timeline
 
 class UniversalNetwork(object):
 	"""
-	Base class for Behler-Parinello network using embedding from RawEmbeddings.py
-	Do not use directly, only for inheritance to derived classes
-	also has sparse evaluation using an updated version of the
-	neighbor list, and a polynomial cutoff coulomb interaction.
+	The 0.2 model chemistry.
 	"""
 	def __init__(self, mol_set_name=None, name=None):
 		"""
@@ -997,3 +994,73 @@ class UniversalNetwork(object):
 		print(tmp.shape)
 		# print(codes.shape)
 		# return energy, -gradients
+
+	def GetEnergyForceRoutine(self,mol):
+		try:
+			self.sess
+		except AttributeError:
+			self.sess = None
+		if self.sess is None:
+			self.assign_activation()
+			self.max_num_atoms = mol.NAtoms()
+			self.batch_size = 1
+			self.train_prepare(restart=True)
+		num_mols = 1
+		xyz_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype = np.float64)
+		Z_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.int32)
+		num_atoms_data = np.zeros((num_mols), dtype = np.int32)
+		num_atoms_data[0] = mol.NAtoms()
+		Z_data[0][:mol.NAtoms()] = mol.atoms
+		def EF(xyz_, DoForce=True):
+			xyz_data[0][:mol.NAtoms()] = xyz_
+			nn_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, self.radial_cutoff, self.max_num_atoms, True, True)
+			nn_triples = MolEmb.Make_TLTensor(xyz_data, Z_data, self.angular_cutoff, self.max_num_atoms, False)
+			coulomb_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, 19.0, self.max_num_atoms, False, False)
+			feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
+						self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs, self.num_atoms_pl:num_atoms_data}
+			energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
+			print(-JOULEPERHARTREE*gradients)
+			if (DoForce):
+				return energy, -JOULEPERHARTREE*gradients
+			else:
+				return energy
+		return EF
+
+	def GetBatchedEnergyForceRoutine(self,mset):
+		self.assign_activation()
+		self.max_num_atoms = mset.MaxNAtom()
+		self.batch_size = len(mset.mols)
+		num_mols = len(mset.mols)
+		xyz_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype = np.float64)
+		Z_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.int32)
+		charges_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.float64)
+		num_atoms_data = np.zeros((num_mols), dtype = np.int32)
+		energy_data = np.zeros((num_mols), dtype = np.float64)
+		gradient_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype=np.float64)
+		for i, mol in enumerate(mset.mols):
+			xyz_data[i][:mol.NAtoms()] = mol.coords
+			Z_data[i][:mol.NAtoms()] = mol.atoms
+			num_atoms_data[i] = mol.NAtoms()
+		eval_pointer = 0
+
+		try:
+			self.sess
+		except AttributeError:
+			self.sess = None
+		if self.sess is None:
+			self.assign_activation()
+			self.train_prepare(restart=True)
+
+		def EF(xyzs_, DoForce=True):
+			xyz_data[:,:mol.NAtoms(),:] = xyzs_.copy()
+			nn_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, self.radial_cutoff, self.max_num_atoms, True, True)
+			nn_triples = MolEmb.Make_TLTensor(xyz_data, Z_data, self.angular_cutoff, self.max_num_atoms, False)
+			coulomb_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, 19.0, self.max_num_atoms, False, False)
+			feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
+						self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs, self.num_atoms_pl:num_atoms_data}
+			energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
+			if (DoForce):
+				return energy, -JOULEPERHARTREE*gradients
+			else:
+				return energy
+		return EF
