@@ -51,6 +51,7 @@ class UniversalNetwork(object):
 		self.profiling = PARAMS["Profiling"]
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.test_ratio = PARAMS["TestRatio"]
+		self.alchem_transform = False
 		self.element_codes = ELEMENTCODES
 		self.element_codepairs = np.zeros((int(self.element_codes.shape[0]*(self.element_codes.shape[0]+1)/2), self.element_codes.shape[1]))
 		self.codepair_idx = np.zeros((self.element_codes.shape[0], self.element_codes.shape[0]), dtype=np.int32)
@@ -680,7 +681,7 @@ class UniversalNetwork(object):
 			self.energy_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size])
 			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
 			self.charges_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms])
-
+			self.lambda_pl = tf.placeholder(self.tf_precision, shape=[1])
 			radial_gauss = tf.Variable(self.radial_rs, trainable=False, dtype = self.tf_precision)
 			angular_gauss = tf.Variable(self.angular_rs, trainable=False, dtype = self.tf_precision)
 			thetas = tf.Variable(self.theta_s, trainable=False, dtype = self.tf_precision)
@@ -702,6 +703,11 @@ class UniversalNetwork(object):
 			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes,
 					self.element_codepairs, self.codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
 			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
+			if self.alchem_transform:
+				embed = tf.scatter_nd(padding_mask, embed, [self.batch_size, self.max_num_atoms, self.element_codes.shape[1] * (self.radial_rs.shape[0] + self.angular_rs.shape[0] * self.theta_s.shape[0])])
+				embed = tf.reduce_mean(tf.stack([embed[0] * self.lambda_pl, embed[1] * (1.0 - self.lambda_pl)], axis=0), axis=0)
+				atom_codes = tf.scatter_nd(padding_mask, atom_codes, [self.batch_size, self.max_num_atoms, 4])
+				atom_codes = tf.reduce_mean(tf.stack([atom_codes[0] * self.lambda_pl, atom_codes[1] * (1.0 - self.lambda_pl)], axis=0), axis=0)
 			with tf.name_scope('energy_inference'):
 				atom_nn_energy, variables = self.energy_inference(embed, atom_codes, padding_mask)
 				self.mol_nn_energy = tf.reduce_sum(atom_nn_energy, axis=1) * energy_stddev
@@ -712,11 +718,11 @@ class UniversalNetwork(object):
 				with tf.name_scope('charge_inference'):
 					atom_nn_charges, charge_variables = self.charge_inference(embed, atom_codes, self.Zs_pl, self.num_atoms_pl)
 					atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
-					atom_nn_charges = (atom_nn_charges * atom_charge_std) + atom_charge_mean
-					dxyzs, q1q2, scatter_coulomb = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, atom_nn_charges, self.coulomb_pairs_pl)
+					self.atom_nn_charges = (atom_nn_charges * atom_charge_std) + atom_charge_mean
+					dxyzs, q1q2, scatter_coulomb = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, self.atom_nn_charges, self.coulomb_pairs_pl)
 					self.mol_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2, scatter_coulomb)
 					self.total_energy += self.mol_coulomb_energy
-					self.charges = tf.gather_nd(atom_nn_charges, padding_mask)
+					self.charges = tf.gather_nd(self.atom_nn_charges, padding_mask)
 					self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
 					self.charge_loss = self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
 					tf.summary.scalar("charge_loss", self.charge_loss)
@@ -759,6 +765,24 @@ class UniversalNetwork(object):
 			step, duration, loss, energy_loss, gradient_loss, charge_loss)
 		return
 
+	def get_eval_batch(self, batch_size):
+		batch_xyzs = self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		batch_Zs = self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
+		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
+		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 19.0, self.max_num_atoms, False, False)
+		batch_data = []
+		batch_data.append(batch_xyzs)
+		batch_data.append(batch_Zs)
+		batch_data.append(nn_pairs)
+		batch_data.append(nn_triples)
+		batch_data.append(coulomb_pairs)
+		batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(self.charges_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		return batch_data
+
 	def evaluate_set(self, mset):
 		"""
 		Takes coordinates and atomic numbers from a manager and feeds them into the network
@@ -769,23 +793,63 @@ class UniversalNetwork(object):
 			Zs (np.int32): numpy array of atomic numbers
 		"""
 		self.assign_activation()
-		self.mol_set_name = mset
-		self.reload_set()
-		self.max_num_atoms = self.mol_set.MaxNAtom()
-		self.num_molecules = len(self.mol_set.mols)
-		self.load_data()
+		self.max_num_atoms = mset.MaxNAtom()
+		self.batch_size = 200
+		num_mols = len(mset.mols)
+		xyz_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype = np.float64)
+		Z_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.int32)
+		charges_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.float64)
+		num_atoms_data = np.zeros((num_mols), dtype = np.int32)
+		energy_data = np.zeros((num_mols), dtype = np.float64)
+		gradient_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype=np.float64)
+		for i, mol in enumerate(mset.mols):
+			xyz_data[i][:mol.NAtoms()] = mol.coords
+			Z_data[i][:mol.NAtoms()] = mol.atoms
+			charges_data[i][:mol.NAtoms()] = mol.properties["charges"]
+			energy_data[i] = mol.properties["energy"]
+			gradient_data[i][:mol.NAtoms()] = mol.properties["gradients"]
+			num_atoms_data[i] = mol.NAtoms()
+		eval_pointer = 0
 		self.train_prepare(restart=True)
-		labels, preds, idxs = [], [], []
-		for ministep in range (0, int(self.num_train_cases/self.batch_size)):
-			batch_data = self.get_train_batch(self.batch_size)
+		energy_true, energy_pred = [], []
+		gradients_true, gradient_preds = [], []
+		charges_true, charge_preds = [], []
+		for ministep in range(int(num_mols / self.batch_size)):
+			eval_pointer += self.batch_size
+			batch_xyzs = xyz_data[eval_pointer - self.batch_size:eval_pointer]
+			batch_Zs = Z_data[eval_pointer - self.batch_size:eval_pointer]
+			nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
+			nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
+			coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 19.0, self.max_num_atoms, False, False)
+			batch_data = []
+			batch_data.append(batch_xyzs)
+			batch_data.append(batch_Zs)
+			batch_data.append(nn_pairs)
+			batch_data.append(nn_triples)
+			batch_data.append(coulomb_pairs)
+			batch_data.append(num_atoms_data[eval_pointer - self.batch_size:eval_pointer])
+			batch_data.append(energy_data[eval_pointer - self.batch_size:eval_pointer])
+			batch_data.append(gradient_data[eval_pointer - self.batch_size:eval_pointer])
+			batch_data.append(charges_data[eval_pointer - self.batch_size:eval_pointer])
 			feed_dict = self.fill_feed_dict(batch_data)
-			total_loss, energy_loss, total_energy, energy_label = self.sess.run([self.total_loss,
-				self.energy_loss, self.total_energy, self.energy_pl], feed_dict=feed_dict)
-			labels.append(energy_label)
-			preds.append(total_energy)
-		labels = np.concatenate(labels)
-		preds = np.concatenate(preds)
-		return labels, preds
+			total_energy, energy_label, gradients, gradient_labels, charges, charge_labels = self.sess.run([self.total_energy,
+				self.energy_pl, self.gradients, self.gradient_labels, self.charges, self.charge_labels], feed_dict=feed_dict)
+			energy_true.append(energy_label)
+			energy_pred.append(total_energy)
+			gradients_true.append(gradient_labels)
+			gradient_preds.append(gradients)
+			charges_true.append(charge_labels)
+			charge_preds.append(charges)
+		energy_true = np.concatenate(energy_true)
+		energy_pred = np.concatenate(energy_pred)
+		gradients_true = np.concatenate(gradients_true)
+		gradient_preds = np.concatenate(gradient_preds)
+		charges_true = np.concatenate(charges_true)
+		charge_preds = np.concatenate(charge_preds)
+		energy_errors = energy_true - energy_pred
+		gradient_errors = gradients_true - gradient_preds
+		charge_errors = charges_true - charge_preds
+		return energy_errors, gradient_errors, charge_errors
 
 	def evaluate_mol(self, mol):
 		try:
@@ -797,10 +861,35 @@ class UniversalNetwork(object):
 			self.assign_activation()
 			self.max_num_atoms = mol.NAtoms()
 			self.train_prepare(restart=True)
-		xyzs_feed = mol.coords
-		Zs_feed = mol.atoms
-		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
-		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
-		feed_dict={self.xyzs_pl:xyzs_feed, self.Zs_pl:Zs_feed, self.nn_pairs_pl:nn_pairs, self.nn_triples_pl:nn_triples}
-		energy, gradients = self.sess.run([self.total_energy, self.xyz_grad], feed_dict=feed_dict)
-		return energy, -gradients
+		xyzs_feed = mol.coords.reshape((1, mol.NAtoms(), 3))
+		Zs_feed = mol.atoms.reshape((1, mol.NAtoms()))
+		num_atoms_feed = np.asarray(mol.NAtoms()).reshape((1))
+		nn_pairs = MolEmb.Make_NLTensor(xyzs_feed, Zs_feed, self.radial_cutoff, self.max_num_atoms, True, True)
+		nn_triples = MolEmb.Make_TLTensor(xyzs_feed, Zs_feed, self.angular_cutoff, self.max_num_atoms, False)
+		coulomb_pairs = MolEmb.Make_NLTensor(xyzs_feed, Zs_feed, 19.0, self.max_num_atoms, False, False)
+		feed_dict = {self.xyzs_pl:xyzs_feed, self.Zs_pl:Zs_feed, self.nn_pairs_pl:nn_pairs,
+					self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs, self.num_atoms_pl:num_atoms_feed}
+		energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
+		return energy, -gradients, charges
+
+	# def evaluate_alchem_mol(self, mols, lambda):
+	# 	try:
+	# 		self.sess
+	# 	except AttributeError:
+	# 		self.sess = None
+	# 	if self.sess is None:
+	# 		self.batch_size = 2
+	# 		self.assign_activation()
+	# 		self.max_num_atoms = np.greater(mols[0].NAtoms(), mols[1].NAtoms())
+	# 		self.train_prepare(restart=True)
+	# 	xyzs_feed = np.zeros((2, self.max_num_atoms, 3))
+	# 	xyzs_feed[0] = mols[0].coords
+	# 	xyzs_feed[1] = mols[1].coords
+	# 	Zs_feed = np.zeros((2, self.max_num_atoms), dtype=np.int32)
+	# 	Zs_feed[0] = mols[0].atoms
+	# 	Zs_feed[1] = mols[1].atoms
+	# 	nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
+	# 	nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
+	# 	feed_dict={self.xyzs_pl:xyzs_feed, self.Zs_pl:Zs_feed, self.nn_pairs_pl:nn_pairs, self.nn_triples_pl:nn_triples}
+	# 	energy, gradients = self.sess.run([self.total_energy, self.xyz_grad], feed_dict=feed_dict)
+	# 	return energy, -gradients
