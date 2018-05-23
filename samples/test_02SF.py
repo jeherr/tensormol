@@ -38,7 +38,21 @@ def evaluate_mol(mol):
 	print("Force labels: ", -mol.properties["gradients"], " Prediction: ", forces)
 	print("Charge label: ", mol.properties["charges"], " Prediction: ", charges)
 
-a=MSet("kaggle_opt")
-a.Load()
-mol=a.mols[0]
-evaluate_mol(mol)
+def TestKaggle():
+	a=MSet("kaggle_opt")
+	a.Load()
+	mol=a.mols[0]
+	evaluate_mol(mol)
+
+TestKaggle()
+
+def TestNeb():
+	net = TensorMol.TFNetworks.SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
+	s = TensorMol.MSet()
+	s.ReadXYZ("Endiandric")
+	EFt = net.GetBatchedEnergyForceRoutine(s)
+	txyz = np.zeros((len(s.mols),s.mols[0].coords.shape[0],s.mols[0].coords.shape[1]))
+	for i in range(len(s.mols)):
+		txyz[i] = s.mols[i].coords
+	NEB = TensorMol.Simulations.BatchedNudgedElasticBand(net,s.mols[0],s.mols[3],thresh_=0.003,nbeads_=20)
+	NEB.Opt(eff_max_step=100)
