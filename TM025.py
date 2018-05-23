@@ -1087,7 +1087,7 @@ class SparseCodedChargedGauSHNetwork:
 		if (np.isnan(train_loss)):
 			print("Problem Batch discovered.")
 			GD = self.sess.run([self.GradDiff], feed_dict=feed_dict)[0]
-			print("Grad Diff:", np.reduce_sum(GD,axis=(-1,-2)))
+			print("Grad Diff:", np.sum(GD,axis=(-1,-2)))
 			for k,mol in enumerate(mols):
 				print(k,mol)
 		self.print_training(step, train_loss)
