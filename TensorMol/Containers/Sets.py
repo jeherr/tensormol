@@ -294,6 +294,7 @@ class MSet:
 			Currently only valid properties are "name", "energy", "forces", "dipole", and "mulliken_charges".
 			Other properties to be added as needed.
 		"""
+		from .Mol import Mol
 		from os import listdir
 		from os.path import isfile, join
 		onlyfiles = [f for f in listdir(path) if isfile(join(path, f))]
