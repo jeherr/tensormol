@@ -38,7 +38,32 @@ def evaluate_mol(mol):
 	print("Force labels: ", -mol.properties["gradients"], " Prediction: ", forces)
 	print("Charge label: ", mol.properties["charges"], " Prediction: ", charges)
 
+# a=MSet("kaggle_opt")
+# a.Load()
+# mol=a.mols[0]
+# evaluate_mol(mol)
+
+def run_md(mol):
+	"""
+	Run a molecular dynamics simulation using the Symmetry Function Universal network.
+	"""
+	PARAMS["MDdt"] = 0.5
+	PARAMS["RemoveInvariant"]=True
+	PARAMS["MDMaxStep"] = 20000
+	PARAMS["MDThermostat"] = None
+	PARAMS["MDTemp"]= 300.0
+	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
+	def force_field(coords, eval_forces=True):
+		m=Mol(mol.atoms, coords)
+		energy, forces, charges = network.evaluate_mol(m)
+		if eval_forces:
+			return energy, JOULEPERHARTREE*forces
+		else:
+			return energy
+	md = VelocityVerlet(force_field, mol, EandF_=force_field)
+	md.Prop()
+
 a=MSet("kaggle_opt")
 a.Load()
 mol=a.mols[0]
-evaluate_mol(mol)
+run_md(mol)
