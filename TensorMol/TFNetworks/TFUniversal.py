@@ -857,18 +857,22 @@ class UniversalNetwork(object):
 		except AttributeError:
 			self.sess = None
 		if self.sess is None:
-			self.batch_size = 1
 			self.assign_activation()
 			self.max_num_atoms = mol.NAtoms()
+			self.batch_size = 1
 			self.train_prepare(restart=True)
-		xyzs_feed = mol.coords.reshape((1, mol.NAtoms(), 3))
-		Zs_feed = mol.atoms.reshape((1, mol.NAtoms()))
-		num_atoms_feed = np.asarray(mol.NAtoms()).reshape((1))
-		nn_pairs = MolEmb.Make_NLTensor(xyzs_feed, Zs_feed, self.radial_cutoff, self.max_num_atoms, True, True)
-		nn_triples = MolEmb.Make_TLTensor(xyzs_feed, Zs_feed, self.angular_cutoff, self.max_num_atoms, False)
-		coulomb_pairs = MolEmb.Make_NLTensor(xyzs_feed, Zs_feed, 19.0, self.max_num_atoms, False, False)
-		feed_dict = {self.xyzs_pl:xyzs_feed, self.Zs_pl:Zs_feed, self.nn_pairs_pl:nn_pairs,
-					self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs, self.num_atoms_pl:num_atoms_feed}
+		num_mols = 1
+		xyz_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype = np.float64)
+		Z_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.int32)
+		num_atoms_data = np.zeros((num_mols), dtype = np.int32)
+		xyz_data[0][:mol.NAtoms()] = mol.coords
+		Z_data[0][:mol.NAtoms()] = mol.atoms
+		num_atoms_data[0] = mol.NAtoms()
+		nn_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, self.radial_cutoff, self.max_num_atoms, True, True)
+		nn_triples = MolEmb.Make_TLTensor(xyz_data, Z_data, self.angular_cutoff, self.max_num_atoms, False)
+		coulomb_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, 19.0, self.max_num_atoms, False, False)
+		feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
+					self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs, self.num_atoms_pl:num_atoms_data}
 		energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
 		return energy, -gradients, charges
 

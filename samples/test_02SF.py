@@ -5,21 +5,13 @@ def evaluate_set(mset):
 	Evaluate energy, force, and charge error statistics on an entire set
 	using the Symmetry Function Universal network. Prints MAE, MSE, and RMSE.
 	"""
-	PARAMS["train_gradients"] = True
-	PARAMS["train_charges"] = True
-	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
-	PARAMS["learning_rate"] = 0.0001
-	PARAMS["max_steps"] = 1000
-	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 100
-	PARAMS["Profiling"] = False
-	PARAMS["NeuronType"] = "shifted_softplus"
-	PARAMS["tf_prec"] = "tf.float64"
 	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
 	molset = MSet(mset)
 	molset.Load()
 	energy_errors, gradient_errors, charge_errors = network.evaluate_set(molset)
+	print(energy_errors[:10])
+	print(gradient_errors[:10])
+	print(charge_errors[:10])
 	mae_e = np.mean(np.abs(energy_errors))
 	mse_e = np.mean(energy_errors)
 	rmse_e = np.sqrt(np.mean(np.square(energy_errors)))
@@ -40,17 +32,6 @@ def evaluate_mol(mol):
 	Evaluate single point energy, force, and charge for a molecule using the
 	Symmetry Function Universal network.
 	"""
-	PARAMS["train_gradients"] = True
-	PARAMS["train_charges"] = True
-	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
-	PARAMS["learning_rate"] = 0.0001
-	PARAMS["max_steps"] = 1000
-	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 100
-	PARAMS["Profiling"] = False
-	PARAMS["NeuronType"] = "shifted_softplus"
-	PARAMS["tf_prec"] = "tf.float64"
 	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
 	energy, forces, charges = network.evaluate_mol(mol)
 	print("Energy label: ", mol.properties["energy"], " Prediction: ", energy)
