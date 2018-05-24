@@ -392,7 +392,7 @@ class UniversalNetwork(object):
 				atom_nn_energy = tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
 		return atom_nn_energy, variables
 
-	def charge_inference(self, embed, atom_codes, Zs, n_atoms):
+	def charge_inference(self, embed, atom_codes, indices):
 		"""
 		Builds a Behler-Parinello graph
 
@@ -402,7 +402,6 @@ class UniversalNetwork(object):
 		Returns:
 			The BP graph output
 		"""
-		indices = tf.where(tf.not_equal(Zs, 0))
 		variables=[]
 		with tf.variable_scope("charge_network", reuse=tf.AUTO_REUSE):
 			code_kernel1 = tf.get_variable(name="CodeKernel", shape=(4, 4),dtype=self.tf_precision)
@@ -437,13 +436,26 @@ class UniversalNetwork(object):
 				outputs = tf.squeeze(tf.matmul(activations, weights) + biases, axis=1)
 				variables.append(weights)
 				variables.append(biases)
-				output = tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
-				excess_charge = tf.reduce_sum(output, axis=1)
-				output -= tf.expand_dims(excess_charge / tf.cast(n_atoms, eval(PARAMS["tf_prec"])), axis=-1)
-				mask = tf.where(tf.equal(Zs, 0), tf.zeros_like(Zs, dtype=eval(PARAMS["tf_prec"])),
-						tf.ones_like(Zs, dtype=eval(PARAMS["tf_prec"])))
-				atom_nn_charges = output * mask
+				atom_nn_charges = tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
 		return atom_nn_charges, variables
+
+	def charge_equalization(self, atom_nn_charges, num_atoms, Zs):
+		excess_charge = tf.reduce_sum(atom_nn_charges, axis=1)
+		atom_nn_charges -= tf.expand_dims(excess_charge / tf.cast(num_atoms, eval(PARAMS["tf_prec"])), axis=-1)
+		mask = tf.where(tf.equal(Zs, 0), tf.zeros_like(Zs, dtype=eval(PARAMS["tf_prec"])),
+				tf.ones_like(Zs, dtype=eval(PARAMS["tf_prec"])))
+		atom_nn_charges = atom_nn_charges * mask
+		return atom_nn_charges
+
+	def alchem_charge_equalization(self, atom_nn_charges, num_alchem_atoms, alchem_switch):
+		excess_charge = tf.reduce_sum(atom_nn_charges, axis=1)
+		atom_nn_charges -= tf.expand_dims(excess_charge / num_alchem_atoms, axis=-1)
+		# atom_nn_charges *= alchem_switch
+		return excess_charge
+		mask = tf.where(tf.equal(Zs, 0), tf.zeros_like(Zs, dtype=eval(PARAMS["tf_prec"])),
+				tf.ones_like(Zs, dtype=eval(PARAMS["tf_prec"])))
+		atom_nn_charges = atom_nn_charges * mask
+		return atom_nn_charges
 
 	def gather_coulomb(self, xyzs, Zs, atom_charges, pairs):
 		padding_mask = tf.where(tf.logical_and(tf.not_equal(Zs, 0), tf.reduce_any(tf.not_equal(pairs, -1), axis=-1)))
@@ -707,9 +719,10 @@ class UniversalNetwork(object):
 				self.total_energy = self.mol_nn_energy
 			if self.train_charges:
 				with tf.name_scope('charge_inference'):
-					atom_nn_charges, charge_variables = self.charge_inference(self.embed, self.atom_codes, self.Zs_pl, self.num_atoms_pl)
+					atom_nn_charges, charge_variables = self.charge_inference(embed, atom_codes, padding_mask)
 					atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
 					self.atom_nn_charges = (atom_nn_charges * atom_charge_std) + atom_charge_mean
+					self.atom_nn_charges = self.charge_equalization(self.atom_nn_charges, self.num_atoms_pl, self.Zs_pl)
 					dxyzs, q1q2, scatter_coulomb = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, self.atom_nn_charges, self.coulomb_pairs_pl)
 					self.mol_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2, scatter_coulomb)
 					self.total_energy += self.mol_coulomb_energy
@@ -783,31 +796,37 @@ class UniversalNetwork(object):
 			charge_mean = tf.Variable(self.charge_mean, trainable=False, dtype=self.tf_precision)
 			charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
 
-			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
+			self.padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			self.embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes,
 					self.element_codepairs, self.codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
-			self.atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
-			if self.alchem_transform:
-				self.embed = tf.scatter_nd(padding_mask, self.embed, [tf.cast(tf.shape(self.Zs_pl)[0], tf.int64), self.max_num_atoms, self.element_codes.shape[1], (self.radial_rs.shape[0] + self.angular_rs.shape[0] * self.theta_s.shape[0])])
-				self.embed = tf.reduce_mean(tf.stack([self.embed[0] * self.delta_pl, self.embed[1] * (1.0 - self.delta_pl)], axis=0), axis=0)
-
-				self.atom_codes = tf.scatter_nd(padding_mask, self.atom_codes, [tf.cast(tf.shape(self.Zs_pl)[0], tf.int64), self.max_num_atoms, 4])
-				self.atom_codes = tf.reduce_mean(tf.stack([self.atom_codes[0] * self.delta_pl, self.atom_codes[1] * (1.0 - self.delta_pl)], axis=0), axis=0)
-				padding_mask = tf.where(tf.reduce_any(tf.not_equal(self.Zs_pl, 0), keepdims=True))
-			# with tf.name_scope('energy_inference'):
-			# 	atom_nn_energy, variables = self.energy_inference(self.embed, self.atom_codes, padding_mask)
-			# 	self.mol_nn_energy = tf.reduce_sum(atom_nn_energy, axis=1) * energy_stddev
-			# 	mol_energy_fit = tf.reduce_sum(tf.gather(energy_fit, self.Zs_pl), axis=1)
-			# 	self.mol_nn_energy += mol_energy_fit
-			# 	self.total_energy = self.mol_nn_energy
+			self.atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, self.padding_mask))
+			self.reconst_embed = tf.scatter_nd(self.padding_mask, self.embed, [tf.cast(tf.shape(self.Zs_pl)[0], tf.int64), self.max_num_atoms, self.element_codes.shape[1], (self.radial_rs.shape[0] + self.angular_rs.shape[0] * self.theta_s.shape[0])])
+			self.alchem_embed = tf.reduce_sum(tf.stack([self.reconst_embed[0] * (1.0 - self.delta_pl), self.reconst_embed[1] * self.delta_pl], axis=0), axis=0)
+			self.alchem_switch = tf.where(tf.not_equal(self.Zs_pl, 0), tf.stack([tf.tile(1.0 - self.delta_pl,
+								[self.max_num_atoms]), tf.tile(self.delta_pl, [self.max_num_atoms])]),
+								tf.zeros_like(self.Zs_pl, dtype=eval(PARAMS["tf_prec"])))
+			self.atom_codes = tf.scatter_nd(self.padding_mask, self.atom_codes, [tf.cast(tf.shape(self.Zs_pl)[0], tf.int64), self.max_num_atoms, 4])
+			self.atom_codes = tf.reduce_mean(tf.stack([self.atom_codes[0] * self.delta_pl, self.atom_codes[1] * (1.0 - self.delta_pl)], axis=0), axis=0)
+			self.alchem_padding_mask = tf.where(tf.reduce_any(tf.not_equal(self.Zs_pl, 0), axis=0, keepdims=True))
+			with tf.name_scope('energy_inference'):
+				self.atom_nn_energy, variables = self.energy_inference(self.alchem_embed, self.atom_codes, self.alchem_padding_mask)
+				self.atom_nn_energy *= tf.reduce_sum(self.alchem_switch, axis=0)
+				# self.alchem_zeros = tf.reduce_all(tf.reduce_all(tf.equal(self.embed, 0.0), axis=-1), axis=-1)
+				# alchem_mask = tf.where(alchem_zeros, tf.zeros_like(alchem_zeros, self.tf_precision), tf.ones_like(alchem_zeros, self.tf_precision))
+				# alchem_mask = tf.scatter_nd(padding_mask, alchem_mask, [self.batch_size, self.max_num_atoms])
+				# self.atom_nn_energy *= alchem_mask
+				self.mol_nn_energy = tf.reduce_sum(self.atom_nn_energy, axis=1) * energy_stddev
+				self.mol_energy_fit = tf.reduce_sum(tf.reduce_sum(tf.gather(energy_fit, self.Zs_pl) * self.alchem_switch, axis=0), axis=0)
+				self.mol_nn_energy += self.mol_energy_fit
+				self.total_energy = self.mol_nn_energy
 			if self.train_charges:
 				with tf.name_scope('charge_inference'):
-					if self.alchem_transform:
-						atom_nn_charges, charge_variables = self.charge_inference(self.embed, self.atom_codes, tf.reduce_max(self.Zs_pl, axis=0, keepdims=True), tf.reduce_max(self.num_atoms_pl, keepdims=True))
-					else:
-						atom_nn_charges, charge_variables = self.charge_inference(self.embed, self.atom_codes, self.Zs_pl, self.num_atoms_pl)
-					atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
-					self.atom_nn_charges = (atom_nn_charges * atom_charge_std) + atom_charge_mean
+					self.atom_nn_charges, charge_variables = self.charge_inference(self.alchem_embed, self.atom_codes, self.alchem_padding_mask)
+					self.atom_nn_charges *= tf.reduce_sum(self.alchem_switch, axis=0)
+					self.num_alchem_atoms = tf.reduce_sum(self.alchem_switch)
+					self.atom_nn_charges = self.alchem_charge_equalization(self.atom_nn_charges, self.num_alchem_atoms, tf.reduce_sum(self.alchem_switch, axis=0))
+			# 		atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
+			# 		self.atom_nn_charges = (atom_nn_charges * atom_charge_std) + atom_charge_mean
 			# 		dxyzs, q1q2, scatter_coulomb = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, self.atom_nn_charges, self.coulomb_pairs_pl)
 			# 		self.mol_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2, scatter_coulomb)
 			# 		self.total_energy += self.mol_coulomb_energy
