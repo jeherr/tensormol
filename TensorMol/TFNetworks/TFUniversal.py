@@ -546,7 +546,7 @@ class UniversalNetwork(object):
 		train_gradient_loss = 0.0
 		train_charge_loss = 0.0
 		num_batches = 0
-		for ministep in range (0, int(0.025 * Ncase_train/self.batch_size)):
+		for ministep in range (0, int(0.1 * Ncase_train/self.batch_size)):
 			batch_data = self.get_train_batch(self.batch_size)
 			feed_dict = self.fill_feed_dict(batch_data)
 			if self.train_gradients and self.train_charges:
@@ -728,7 +728,7 @@ class UniversalNetwork(object):
 					self.total_energy += self.mol_coulomb_energy
 					self.charges = tf.gather_nd(self.atom_nn_charges, padding_mask)
 					self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
-					self.charge_loss = self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
+					self.charge_loss = 0.1 * self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
 					tf.summary.scalar("charge_loss", self.charge_loss)
 					tf.add_to_collection('total_loss', self.charge_loss)
 			self.energy_loss = 100 * self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
@@ -738,7 +738,7 @@ class UniversalNetwork(object):
 				self.xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 				self.gradients = tf.gather_nd(self.xyz_grad, padding_mask)
 				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
-				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
+				self.gradient_loss = 0.1 * self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
 				if self.train_gradients:
 					tf.add_to_collection('total_loss', self.gradient_loss)
 					tf.summary.scalar("gradient_loss", self.gradient_loss)
