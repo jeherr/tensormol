@@ -38,10 +38,10 @@ def evaluate_mol(mol):
 	print("Force labels: ", -mol.properties["gradients"], " Prediction: ", forces)
 	print("Charge label: ", mol.properties["charges"], " Prediction: ", charges)
 
-# a=MSet("kaggle_opt")
-# a.Load()
-# mol=a.mols[0]
-# evaluate_mol(mol)
+a=MSet("kaggle_opt")
+a.Load()
+mol=a.mols[0]
+evaluate_mol(mol)
 
 def run_md(mol):
 	"""
@@ -50,7 +50,7 @@ def run_md(mol):
 	PARAMS["MDdt"] = 0.5
 	PARAMS["RemoveInvariant"]=True
 	PARAMS["MDMaxStep"] = 20000
-	PARAMS["MDThermostat"] = None
+	PARAMS["MDThermostat"] = "Nose"
 	PARAMS["MDTemp"]= 300.0
 	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
 	def force_field(coords, eval_forces=True):
@@ -63,10 +63,35 @@ def run_md(mol):
 	md = VelocityVerlet(force_field, mol, EandF_=force_field)
 	md.Prop()
 
-a=MSet("kaggle_opt")
-a.Load()
-mol=a.mols[0]
-run_md(mol)
+# a=MSet("kaggle_opt")
+# a.Load()
+# mol=a.mols[0]
+# run_md(mol)
+
+def run_alchemical_trans(mols):
+	"""
+	Run an alchemical transformation using the Symmetry Function Universal network.
+
+	Args:
+		mols (list): a sequential list of Mols to undergo the alchemical changes
+	"""
+	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
+	e, f = [], []
+	for i in range(100):
+		delta = np.array(i / 100.).reshape((1))
+		network.evaluate_alchem_mol(mols, delta)
+		# exit(0)
+		# e.append(energy)
+		# f.append(forces)
+	# print(e)
+
+# a=MSet("water")
+# a.ReadXYZ()
+# b=MSet("methanol")
+# b.ReadXYZ()
+# mols = [a.mols[0], b.mols[0]]
+# run_alchemical_trans(mols)
+
 
 def TestKaggle():
 	a=MSet("kaggle_opt")
@@ -157,7 +182,7 @@ def TestOpt():
 	Opt = GeomOptimizer(EF)
 	m1=Opt.Opt(m,"TEST",eff_max_step=500)
 
-TestOpt()
+# TestOpt()
 
 def TestNeb():
 	net = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
