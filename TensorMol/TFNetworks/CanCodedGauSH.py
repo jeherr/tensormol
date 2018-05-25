@@ -220,7 +220,9 @@ class SparseCodedChargedGauSHNetwork:
 		self.NEFCalls = 0
 		self.CAxes = np.zeros((self.ncan,self.batch_size*self.MaxNAtom,3,3))
 		self.CWeights = np.zeros((self.ncan,self.batch_size,self.MaxNAtom))
-		self.CWeights, self.CAxes = self.sess.run([self.CanonicalAxes(self.dxyzs,self.sparse_mask)],feed_dict=self.MakeFeed(Mol(m.atoms,m.coords)))[0]
+		FD = self.MakeFeed(Mol(m.atoms,m.coords))
+		#print([n.values() for n in self.sess.graph.get_operations()])
+		self.CWeights, self.CAxes = self.sess.run([self.CanonicalAxes(self.dxyzs,self.sparse_mask)],feed_dict=FD)[0]
 		def EF(xyz_,DoForce=True,Debug = False):
 			self.NEFCalls += 1
 			feed_dict = self.MakeFeed(Mol(m.atoms,xyz_))
@@ -1032,7 +1034,7 @@ class SparseCodedChargedGauSHNetwork:
 		self.AtomCharges = tf.zeros((self.batch_size,self.MaxNAtom),dtype=self.prec,name='AtomCharges')
 
 		if (self.Canonicalize):
-			if 1:#(self.mode=='train'):
+			if (self.mode=='train'):
 				weights,axs = self.CanonicalAxes(self.dxyzs,self.sparse_mask)
 			else:
 				weights,axs = self.cw_pl, self.cax_pl
