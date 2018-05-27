@@ -484,11 +484,12 @@ class UniversalNetwork(object):
 
 		The hard cutoff is LROuter
 		"""
-		srange_inner = 4.5
-		srange_outer = 7.5
+		srange_inner = 6.0
+		srange_outer = 9.0
 		lrange_inner = 16.
 		lrange_outer = 19.
-		a, b, c, d, e, f, g, h = -7.25102, 5.35606, -1.45437, 0.213988, -0.0184294, 0.000930203, -0.0000255246, 2.94322e-7
+		a, b, c, d, e, f, g, h = -17.8953, 11.0312, -2.72193, 0.36794, -0.0294324, 0.00139391, -0.0000362146, 3.98488e-7
+		# a, b, c, d, e, f, g, h = -7.25102, 5.35606, -1.45437, 0.213988, -0.0184294, 0.000930203, -0.0000255246, 2.94322e-7
 		dist = tf.norm(dxyzs+1.e-16, axis=-1)
 		dist *= 1.889725989
 		dist2 = dist * dist
@@ -981,8 +982,8 @@ class UniversalNetwork(object):
 		coulomb_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, 19.0, self.max_num_atoms, False, False)
 		feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
 					self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs, self.num_atoms_pl:num_atoms_data}
-		energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
-		return energy, -gradients, charges
+		energy, nne, ce, gradients, charges = self.sess.run([self.total_energy, self.mol_nn_energy, self.mol_coulomb_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
+		return energy, nne, ce, -gradients, charges
 
 	def evaluate_alchem_mol(self, mols, delta):
 		try:
