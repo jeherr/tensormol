@@ -3485,6 +3485,8 @@ def tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutof
 	gauss = tf.exp(exponent)
 	cutoff = 0.5 * (tf.cos(np.pi * dist_tensor / radial_cutoff) + 1.0)
 	pair_codes = tf.gather(element_codes, pair_Zs)
+	pad_mask = tf.where(tf.equal(pair_Zs, 0), tf.zeros_like(pair_Zs, dtype=eval(PARAMS["tf_prec"])), tf.ones_like(pair_Zs, dtype=eval(PARAMS["tf_prec"])))
+	pair_codes *= tf.expand_dims(pad_mask, axis=-1)
 	radial_embed = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(tf.expand_dims(cutoff, axis=-1) * pair_codes, axis=-1)
 	return tf.reduce_sum(radial_embed, axis=1)
 
