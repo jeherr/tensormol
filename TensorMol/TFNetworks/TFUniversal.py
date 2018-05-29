@@ -484,12 +484,11 @@ class UniversalNetwork(object):
 
 		The hard cutoff is LROuter
 		"""
-		srange_inner = 6.0
-		srange_outer = 9.0
-		lrange_inner = 16.
-		lrange_outer = 19.
-		a, b, c, d, e, f, g, h = -17.8953, 11.0312, -2.72193, 0.36794, -0.0294324, 0.00139391, -0.0000362146, 3.98488e-7
-		# a, b, c, d, e, f, g, h = -7.25102, 5.35606, -1.45437, 0.213988, -0.0184294, 0.000930203, -0.0000255246, 2.94322e-7
+		srange_inner = 4.5
+		srange_outer = 7.5
+		lrange_inner = 13.
+		lrange_outer = 15.
+		a, b, c, d, e, f, g, h = -12.8001, 10.2348, -3.21999, 0.556841, -0.0571471, 0.0034799, -0.000116418, 1.65087e-6
 		dist = tf.norm(dxyzs+1.e-16, axis=-1)
 		dist *= 1.889725989
 		dist2 = dist * dist
