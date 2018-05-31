@@ -503,6 +503,8 @@ class UniversalNetwork(object):
 		a, b, c, d, e, f, g, h = -43.568, 30.0728, -8.65219, 1.37564, -0.130517, 0.00738856, -0.000231061, 3.0793e-6
 		#a, b, c, d, e, f, g, h = -12.8001, 10.2348, -3.21999, 0.556841, -0.0571471, 0.0034799, -0.000116418, 1.65087e-6
 		dist = tf.norm(dxyzs+1.e-16, axis=-1)
+		dist = tf.where(tf.less(dist, srange_inner), srange_inner, dist)
+		dist = tf.where(tf.greater(dist, lrange_outer), lrange_outer, dist)
 		dist *= 1.889725989
 		dist2 = dist * dist
 		dist3 = dist2 * dist
@@ -510,9 +512,9 @@ class UniversalNetwork(object):
 		dist5 = dist4 * dist
 		dist6 = dist5 * dist
 		dist7 = dist6 * dist
-		mrange_kern = (a + b*dist + c*dist2 + d*dist3 + e*dist4 + f*dist5 + g*dist6 + h*dist7) / dist
-		kern = tf.where(tf.less(dist, srange_inner), tf.ones_like(dist) / srange_inner, mrange_kern)
-		kern = tf.where(tf.greater(dist, lrange_outer), tf.ones_like(dist) / lrange_outer, kern)
+		kern = (a + b*dist + c*dist2 + d*dist3 + e*dist4 + f*dist5 + g*dist6 + h*dist7) / dist
+		# kern = tf.where(tf.less(dist, srange_inner), tf.ones_like(dist) / srange_inner, mrange_kern)
+		# kern = tf.where(tf.greater(dist, lrange_outer), tf.ones_like(dist) / lrange_outer, kern)
 		mrange_energy = tf.reduce_sum(kern * q1q2, axis=1)
 		lrange_energy = tf.reduce_sum(q1q2, axis=1) / lrange_outer
 		coulomb_energy = mrange_energy - lrange_energy
