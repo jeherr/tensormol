@@ -7,6 +7,7 @@ from .Neb import *
 from .Web import *
 from .SimpleMD import *
 from .MetaDynamics import *
+from .alchemical_transformation import *
 from .InfraredMD import *
 from .OptPeriodic import *
 from .PeriodicMD import *

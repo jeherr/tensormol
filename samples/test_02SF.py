@@ -51,22 +51,29 @@ def run_alchemical_trans(mols):
 	Args:
 		mols (list): a sequential list of Mols to undergo the alchemical changes
 	"""
+	PARAMS["MDdt"] = 0.5
+	PARAMS["RemoveInvariant"]=True
+	PARAMS["MDMaxStep"] = 1000
+	PARAMS["MDThermostat"] = None
+	PARAMS["MDTemp"]= 300.0
 	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
-	e, f = [], []
-	for i in range(101):
-		delta = np.array(i / 100.).reshape((1))
-		energy, forces, charges = network.evaluate_alchem_mol(mols, delta)
-		print(energy, forces, charge)
+	alchem_ef = network.evaluate_alchem_mol(mols)
+	transitions = [450,100]
+	alchemical_transformation(alchem_ef, mols, transitions)
+	# for i in range(101):
+	# 	delta = np.array(i / 100.).reshape((1))
+	# 	energy, forces = alchem_ef(mols, delta)
+	# 	print(energy, forces)
 		# e.append(energy)
 		# f.append(forces)
 	# print(e)
 
-a=MSet("water", center_=False)
-a.ReadXYZ()
-b=MSet("methanol", center_=False)
-b.ReadXYZ()
-mols = [a.mols[0], b.mols[0]]
-run_alchemical_trans(mols)
+# a=MSet("water", center_=False)
+# a.ReadXYZ()
+# b=MSet("methanol", center_=False)
+# b.ReadXYZ()
+# mols = [a.mols[0], b.mols[0]]
+# run_alchemical_trans(mols)
 
 def run_md(mol):
 	"""
@@ -179,12 +186,12 @@ def TestOpt():
 	H          8.49250       -1.93230        1.08330
 	Mg        -1.34673        0.02041       -0.06327
 	""")
-	net = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
+	net = UniversalNetwork(name="SF_Universal_master_jeherr_Wed_May_30_11.21.39_2018")
 	EF = net.GetEnergyForceRoutine(m)
 	Opt = GeomOptimizer(EF)
 	m1=Opt.Opt(m,"TEST",eff_max_step=500)
 
-# TestOpt()
+TestOpt()
 
 def TestNeb():
 	net = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")

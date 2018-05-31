@@ -972,7 +972,7 @@ class UniversalNetwork(object):
 		energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
 		return energy, -gradients, charges
 
-	def evaluate_alchem_mol(self, mols, delta):
+	def evaluate_alchem_mol(self, mols):
 		try:
 			self.sess
 		except AttributeError:
@@ -986,19 +986,22 @@ class UniversalNetwork(object):
 		xyz_data = np.zeros((len(mols), self.max_num_atoms, 3), dtype = np.float64)
 		Z_data = np.zeros((len(mols), self.max_num_atoms), dtype = np.int32)
 		num_atoms_data = np.zeros((len(mols)), dtype = np.int32)
-		for i, mol in enumerate(mols):
-			xyz_data[i][:mol.NAtoms()] = mols[i].coords
-			Z_data[i][:mol.NAtoms()] = mols[i].atoms
-			num_atoms_data[i] = mol.NAtoms()
-		nn_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, self.radial_cutoff, self.max_num_atoms, True, True)
-		nn_triples = MolEmb.Make_TLTensor(xyz_data, Z_data, self.angular_cutoff, self.max_num_atoms, False)
-		coulomb_pairs = MolEmb.Make_NLTensor(xyz_data[np.argmax(num_atoms_data):np.argmax(num_atoms_data)+1],
-						Z_data[np.argmax(num_atoms_data):np.argmax(num_atoms_data)+1], 19.0, self.max_num_atoms, False, False)
-		feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
-					self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs,
-					self.num_atoms_pl:num_atoms_data, self.delta_pl:delta}
-		energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
-		return energy[0], -gradients, charges
+		def alchem_energy_force(mols, delta, return_forces=True):
+			for i, mol in enumerate(mols):
+				xyz_data[i][:mol.NAtoms()] = mols[i].coords
+				Z_data[i][:mol.NAtoms()] = mols[i].atoms
+				num_atoms_data[i] = mol.NAtoms()
+			nn_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, self.radial_cutoff, self.max_num_atoms, True, True)
+			nn_triples = MolEmb.Make_TLTensor(xyz_data, Z_data, self.angular_cutoff, self.max_num_atoms, False)
+			coulomb_pairs = MolEmb.Make_NLTensor(xyz_data[np.argmax(num_atoms_data):np.argmax(num_atoms_data)+1],
+							Z_data[np.argmax(num_atoms_data):np.argmax(num_atoms_data)+1], 19.0, self.max_num_atoms, False, False)
+			delta = np.array(delta).reshape(1)
+			feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
+						self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs,
+						self.num_atoms_pl:num_atoms_data, self.delta_pl:delta}
+			energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
+			return energy[0], -gradients
+		return alchem_energy_force
 
 	def GetEnergyForceRoutine(self,mol):
 		try:
