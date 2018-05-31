@@ -39,7 +39,7 @@ def evaluate_mol(mol):
 	# print("Force labels: ", -mol.properties["gradients"], " Prediction: ", forces)
 	# print("Charge label: ", mol.properties["charges"], " Prediction: ", charges)
 
-# a=MSet("water")
+# a=MSet("methanol")
 # a.ReadXYZ()
 # mol=a.mols[0]
 # evaluate_mol(mol)
@@ -56,7 +56,7 @@ def run_alchemical_trans(mols):
 	for i in range(101):
 		delta = np.array(i / 100.).reshape((1))
 		energy, forces, charges = network.evaluate_alchem_mol(mols, delta)
-		print(energy, forces, charges)
+		print(energy, forces, charge)
 		# e.append(energy)
 		# f.append(forces)
 	# print(e)

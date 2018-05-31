@@ -618,3 +618,111 @@ class Annealer(IRTrajectory):
 		#self.x = self.Minx.copy()
 		print("Achieved Minimum energy ", self.MinE, " at step ", step)
 		return
+
+class AlchemicalTransformation:
+	def __init__(self, force_field, mols, name=None, cellsize=None):
+		"""
+		Alchemical transformation molecular dynamics
+
+		Args:
+			force_field: an energy-force routine
+			mols (list): set of molecules in alignment
+			PARAMS["MDMaxStep"]: Number of steps to take.
+			PARAMS["MDTemp"]: Temperature to initialize or Thermostat to.
+			PARAMS["MDdt"]: Timestep.
+			PARAMS["MDV0"]: Sort of velocity initialization (None, or "Random")
+			PARAMS["MDLogTrajectory"]: Write MD Trajectory.
+		Returns:
+			Nothing.
+		"""
+		if name is None:
+			self.name = "alchem_traj"
+		else:
+			self.name = name
+		self.traj_set = MSet(self.name)
+		self.cellsize = cellsize
+		self.maxstep = PARAMS["MDMaxStep"]
+		self.temp = PARAMS["MDTemp"]
+		self.dt = PARAMS["MDdt"]
+		self.force_field = force_field
+		self.initial_potential, self.initial_forces = self.force_field(mols)
+		self.potential = self.initial_potential
+		self.EnergyStat = OnlineEstimator(self.initial_potential)
+		self.time = 0.0
+		self.kinetic = 0.0
+		self.num_atoms = max[mol.NAtoms() for mol in mols]
+		self.atoms = [np.zeros(self.num_atoms) for mol in mols]
+		self.masses = [np.zeros(self.num_atoms) for mol in mols]
+		for i, mol in enumerate(mols):
+			self.atoms[i][:mol.NAtoms()] = mol.atoms
+			self.masses[i][:mol.NAtoms()] = np.array(list(map(lambda x: ATOMICMASSES[x-1], self.atoms[i])))
+		self.x = g0_.coords.copy()
+		self.velocity = np.zeros(self.x.shape)
+		self.acceleration = np.zeros(self.x.shape)
+		self.md_log = None
+
+		if (PARAMS["MDV0"]=="Random"):
+			np.random.seed()   # reset random seed
+			self.velocity = np.random.randn(*self.x.shape)
+			Tstat = Thermostat(self.masses, self.velocity) # Will rescale self.v appropriately.
+		elif PARAMS["MDV0"]=="Thermal":
+			self.velocity = np.random.normal(size=self.x.shape) * np.sqrt(1.38064852e-23 * self.temp / self.masses)[:,None]
+		self.Tstat = None
+		if (PARAMS["MDThermostat"]=="Rescaling"):
+			self.thermostat = Thermostat(self.masses, self.velocity)
+		elif (PARAMS["MDThermostat"]=="Nose"):
+			self.thermostat = NoseThermostat(self.masses, self.velocity)
+		elif (PARAMS["MDThermostat"]=="Andersen"):
+			self.thermostat = AndersenThermostat(self.masses, self.velocity)
+		elif (PARAMS["MDThermostat"]=="Langevin"):
+			self.thermostat = LangevinThermostat(self.masses, self.velocity)
+		elif (PARAMS["MDThermostat"]=="NoseHooverChain"):
+			self.thermostat = NoseChainThermostat(self.masses, self.velocity)
+		else:
+			pass #print("Unthermostated Velocity Verlet.")
+		return
+
+	def WriteTrajectory(self):
+		m=Mol(self.atoms,self.x)
+		m.properties["Time"]=self.time
+		m.properties["KineticEnergy"]=self.kinetic
+		m.properties["PotEnergy"]=self.potential
+		m.WriteXYZfile("./results/", "MDTrajectory"+self.name)
+		return
+
+	def Prop(self):
+		"""
+		Propagate VelocityVerlet
+		"""
+		step = 0
+		self.md_log = np.zeros((self.maxstep, 7))
+		while(step < self.maxstep):
+			t = time.time()
+			self.time = step*self.dt
+			#self.KE = KineticEnergy(self.v,self.m)
+			#Teff = (2./3.)*self.KE/IDEALGASR
+			if (PARAMS["MDThermostat"]==None):
+				self.x , self.velocity, self.acceleration, self.potential = VelocityVerletStep(self.force_field, self.acceleration, self.mols, self.velocity, self.masses, self.dt)
+			else:
+				self.x , self.velocity, self.acceleration, self.potential, self.forces = self.thermostat.step(self.force_field, self.acceleration, self.mols, self.velocity, self.masses, self.dt)
+			if self.cellsize != None:
+				self.x  = np.mod(self.x, self.cellsize)
+			self.kinetic = KineticEnergy(self.velocity, self.masses)
+			self.md_log[step,0] = self.time
+			self.md_log[step,4] = self.kinetic
+			self.md_log[step,5] = self.potential
+			self.md_log[step,6] = self.kinetic + (self.potential - self.initial_potential) * JOULEPERHARTREE
+			avE, Evar = self.EnergyStat(self.potential) # I should log these.
+			effective_temp = (2./3.) * self.kinetic / IDEALGASR
+
+			if (step%3==0 and PARAMS["MDLogTrajectory"]):
+				self.WriteTrajectory()
+			if (step%500==0):
+				np.savetxt("./results/"+"MDLog"+self.name+".txt",self.md_log)
+
+			step+=1
+			LOGGER.info("%s Step: %i time: %.1f(fs) KE(kJ): %.5f PotE(Eh): %.5f ETot(kJ/mol): %.5f Teff(K): %.5f", self.name, step, self.time, self.kinetic * len(self.m) / 1000.0, self.potential, self.kinetic * len(self.m) / 1000.0 + (self.potential) * KJPERHARTREE, effective_temp)
+			#LOGGER.info("Step: %i time: %.1f(fs) <KE>(kJ/mol): %.5f <|a|>(m/s2): %.5f <EPot>(Eh): %.5f <Etot>(kJ/mol): %.5f Teff(K): %.5f", step, self.t, self.KE/1000.0,  np.linalg.norm(self.a) , self.EPot, self.KE/1000.0+self.EPot*KJPERHARTREE, Teff)
+			print(("per step cost:", time.time() -t ))
+		np.savetxt("./results/"+"MDLog"+self.name+".txt",self.md_log)
+		return

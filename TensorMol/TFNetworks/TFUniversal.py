@@ -842,8 +842,7 @@ class UniversalNetwork(object):
 					self.mol_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2, scatter_coulomb)
 					self.total_energy += self.mol_coulomb_energy
 			with tf.name_scope('gradients'):
-				self.xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
-				self.gradients = tf.gather_nd(self.xyz_grad, self.padding_mask)
+				self.gradients = tf.reduce_sum(tf.gradients(self.total_energy, self.xyzs_pl)[0], axis=0)
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
 			if restart:
@@ -999,7 +998,7 @@ class UniversalNetwork(object):
 					self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs,
 					self.num_atoms_pl:num_atoms_data, self.delta_pl:delta}
 		energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
-		return energy, -gradients, charges
+		return energy[0], -gradients, charges
 
 	def GetEnergyForceRoutine(self,mol):
 		try:
