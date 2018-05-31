@@ -272,7 +272,7 @@ class UniversalNetwork(object):
 		batch_Zs = self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
 		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
 		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
-		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 19.0, self.max_num_atoms, False, False)
+		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 15.0, self.max_num_atoms, False, False)
 		batch_data = []
 		batch_data.append(batch_xyzs)
 		batch_data.append(batch_Zs)
@@ -293,7 +293,7 @@ class UniversalNetwork(object):
 		batch_Zs = self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
 		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
 		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
-		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 19.0, self.max_num_atoms, False, False)
+		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 15.0, self.max_num_atoms, False, False)
 		batch_data = []
 		batch_data.append(batch_xyzs)
 		batch_data.append(batch_Zs)
@@ -484,11 +484,12 @@ class UniversalNetwork(object):
 
 		The hard cutoff is LROuter
 		"""
-		srange_inner = 4.5
-		srange_outer = 7.5
-		lrange_inner = 13.
-		lrange_outer = 15.
-		a, b, c, d, e, f, g, h = -12.8001, 10.2348, -3.21999, 0.556841, -0.0571471, 0.0034799, -0.000116418, 1.65087e-6
+		srange_inner = 6.0
+		srange_outer = 9.0
+		lrange_inner = 13.0
+		lrange_outer = 15.0
+		a, b, c, d, e, f, g, h = -43.568, 30.0728, -8.65219, 1.37564, -0.130517, 0.00738856, -0.000231061, 3.0793e-6
+		#a, b, c, d, e, f, g, h = -12.8001, 10.2348, -3.21999, 0.556841, -0.0571471, 0.0034799, -0.000116418, 1.65087e-6
 		dist = tf.norm(dxyzs+1.e-16, axis=-1)
 		dist *= 1.889725989
 		dist2 = dist * dist
@@ -704,8 +705,9 @@ class UniversalNetwork(object):
 			charge_fit = tf.Variable(self.charge_fit, trainable=False, dtype=self.tf_precision)
 			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
 			energy_stddev = tf.Variable(self.energy_stddev, trainable=False, dtype = self.tf_precision)
-			charge_mean = tf.Variable(self.charge_mean, trainable=False, dtype=self.tf_precision)
-			charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
+			if self.train_charges:
+				charge_mean = tf.Variable(self.charge_mean, trainable=False, dtype=self.tf_precision)
+				charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
 
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes,
