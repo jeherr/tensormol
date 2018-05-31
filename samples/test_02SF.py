@@ -34,14 +34,39 @@ def evaluate_mol(mol):
 	"""
 	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
 	energy, forces, charges = network.evaluate_mol(mol)
-	print("Energy label: ", mol.properties["energy"], " Prediction: ", energy)
-	print("Force labels: ", -mol.properties["gradients"], " Prediction: ", forces)
-	print("Charge label: ", mol.properties["charges"], " Prediction: ", charges)
+	print(energy, forces, charges)
+	# print("Energy label: ", mol.properties["energy"], " Prediction: ", energy)
+	# print("Force labels: ", -mol.properties["gradients"], " Prediction: ", forces)
+	# print("Charge label: ", mol.properties["charges"], " Prediction: ", charges)
 
-a=MSet("kaggle_opt")
-a.Load()
-mol=a.mols[0]
-evaluate_mol(mol)
+# a=MSet("water")
+# a.ReadXYZ()
+# mol=a.mols[0]
+# evaluate_mol(mol)
+
+def run_alchemical_trans(mols):
+	"""
+	Run an alchemical transformation using the Symmetry Function Universal network.
+
+	Args:
+		mols (list): a sequential list of Mols to undergo the alchemical changes
+	"""
+	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
+	e, f = [], []
+	for i in range(101):
+		delta = np.array(i / 100.).reshape((1))
+		energy, forces, charges = network.evaluate_alchem_mol(mols, delta)
+		print(energy, forces, charges)
+		# e.append(energy)
+		# f.append(forces)
+	# print(e)
+
+a=MSet("water", center_=False)
+a.ReadXYZ()
+b=MSet("methanol", center_=False)
+b.ReadXYZ()
+mols = [a.mols[0], b.mols[0]]
+run_alchemical_trans(mols)
 
 def run_md(mol):
 	"""
@@ -68,29 +93,6 @@ def run_md(mol):
 # mol=a.mols[0]
 # run_md(mol)
 
-def run_alchemical_trans(mols):
-	"""
-	Run an alchemical transformation using the Symmetry Function Universal network.
-
-	Args:
-		mols (list): a sequential list of Mols to undergo the alchemical changes
-	"""
-	network = UniversalNetwork(name="SF_Universal_master_jeherr_Tue_May_15_10.18.25_2018")
-	e, f = [], []
-	for i in range(100):
-		delta = np.array(i / 100.).reshape((1))
-		network.evaluate_alchem_mol(mols, delta)
-		# exit(0)
-		# e.append(energy)
-		# f.append(forces)
-	# print(e)
-
-# a=MSet("water")
-# a.ReadXYZ()
-# b=MSet("methanol")
-# b.ReadXYZ()
-# mols = [a.mols[0], b.mols[0]]
-# run_alchemical_trans(mols)
 
 
 def TestKaggle():
