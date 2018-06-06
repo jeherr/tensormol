@@ -11,53 +11,52 @@ from ..ForceModels.Electrostatics import *
 from ..Math.QuasiNewtonTools import *
 from ..Math.Statistics import *
 
-def write_trajectory(mol):
-	m=Mol(atoms,self.x)
-	m.properties["Time"]=time
-	m.properties["KineticEnergy"]=kinetic
-	m.properties["PotEnergy"]=potential
-	m.WriteXYZfile("./results/", "MDTrajectory"+name)
+def write_trajectory(mol, name):
+	mol.WriteXYZfile("./results/", "MDTrajectory"+name)
 	return
 
 def initialize_velocities(coords, masses, temp):
 	if PARAMS["MDV0"]=="Random":
 		LOGGER.info("Using random initial velocities.")
 		np.random.seed()
-		velocity = np.random.randn(*coords[0].shape)
+		veloc = np.random.randn(*coords.shape)
 		# Do this elementwise otherwise H's blow off.
-		for i in range(len(masses)):
+		for i in range(len(masses[0])):
+			if masses[0,i] == 0.0:
+				atom_mass = masses[1,i]
+			else:
+				atom_mass = masses[0,i]
 			effective_temp = ((2.0 / (3.0 * IDEALGASR)) * pow(10.0,10.0) * (1./2.)
-							* masses[0,i] * np.einsum("i,i", velocity[i], velocity[i]))
-			print(effective_temp)
+							* atom_mass * np.einsum("i,i", veloc[i], veloc[i]))
 			if effective_temp != 0.0:
-				velocity[i] *= np.sqrt(temp / effective_temp)
+				veloc[i] *= np.sqrt(temp / effective_temp)
 	elif PARAMS["MDV0"]=="Thermal":
 		LOGGER.info("Using thermal initial velocities.")
-		velocity = np.random.normal(size=coords.shape[0]) * np.sqrt(1.38064852e-23 * temp / masses)[:,None]
-	return velocity
+		veloc = np.random.normal(size=coords.shape[0]) * np.sqrt(1.38064852e-23 * temp / masses)[:,None]
+	return veloc
 
-def get_thermostat(masses, velocity):
+def get_thermostat(masses, veloc):
 	if (PARAMS["MDThermostat"]=="Rescaling"):
 		LOGGER.info("Using Rescaling thermostat.")
-		thermostat = Thermostat(masses, velocity)
+		thermostat = Thermostat(masses, veloc)
 	elif (PARAMS["MDThermostat"]=="Nose"):
 		LOGGER.info("Using Nose thermostat.")
-		thermostat = NoseThermostat(masses, velocity)
+		thermostat = NoseThermostatAlchem(masses, veloc)
 	elif (PARAMS["MDThermostat"]=="Andersen"):
 		LOGGER.info("Using Andersen thermostat.")
-		thermostat = AndersenThermostat(masses, velocity)
+		thermostat = AndersenThermostatAlchem(masses, veloc)
 	elif (PARAMS["MDThermostat"]=="Langevin"):
 		LOGGER.info("Using Langevin thermostat.")
-		thermostat = LangevinThermostat(masses, velocity)
+		thermostat = LangevinThermostat(masses, veloc)
 	elif (PARAMS["MDThermostat"]=="NoseHooverChain"):
 		LOGGER.info("Using NoseHooverChain thermostat.")
-		thermostat = NoseChainThermostat(masses, velocity)
+		thermostat = NoseChainThermostat(masses, veloc)
 	else:
 		LOGGER.info("No thermostat chosen. Performing unthermostatted MD.")
 		thermostat = None
 	return thermostat
 
-def velocity_verlet_step(force_field, mols, delta, dt):
+def velocity_verlet_step(force_field, mols, coords, veloc, accel, masses, delta, dt):
 	"""
 	A velocity verlet step for an alchemical transformation MD
 
@@ -74,20 +73,83 @@ def velocity_verlet_step(force_field, mols, delta, dt):
 		a: updated accelerations
 		e: Energy at midpoint.
 	"""
-	coords = np.concatenate([mol.coords for mol in mols], axis=0)
-	veloc = np.concatenate([mol.properties["velocity"] for mol in mols], axis=0)
-	accel = np.concatenate([mol.properties["acceleration"] for mol in mols], axis=0)
 	coords = coords + veloc * dt + (1./2.) * accel * dt * dt
+	for mol in mols:
+		mol.coords = coords[:mol.NAtoms()]
 	potential, forces = force_field(mols, delta)
+	forces *= JOULEPERHARTREE
 	new_accel = pow(10.0,-10.0) * np.einsum("ax,a->ax", forces, 1.0 / masses)
 	new_veloc = veloc + (1./2.) * (accel + new_accel) * dt
-	new_mols = [mol.copy() for mol in mols]
-	for mol in new_mols:
-		mol.properties["velocity"] = new_veloc
-		mol.properties["acceleration"] = new_accel
-	return x,v,a,e
+	return mols, coords, new_veloc, new_accel, potential, forces
 
-def alchemical_transformation(force_field, mols, transitions, name=None, cellsize=None):
+class NoseThermostatAlchem(Thermostat):
+	def __init__(self, masses, init_veloc):
+		"""
+		Velocity Verlet step with a Nose-Hoover Thermostat.
+		"""
+		self.m = masses.copy()
+		self.N = len(masses)
+		self.T = PARAMS["MDTemp"]  # Length of NH chain.
+		self.eta = 0.0
+		self.name = "Nose"
+		self.Rescale(init_veloc)
+		print("Using ", self.name, " thermostat at ", self.T, " degrees Kelvin")
+		return
+
+	def step(self, force_field, mols, coords, veloc, accel, masses, delta, dt):
+		"""
+		http://www2.ph.ed.ac.uk/~dmarendu/MVP/MVP03.pdf
+		"""
+		# Recompute these stepwise in case of variable T.
+		self.kT = IDEALGASR*pow(10.0,-10.0)*self.T # energy units here are kg (A/fs)^2
+		self.tau = 20.0*PARAMS["MDdt"]*self.N
+		self.Q = self.kT*self.tau*self.tau
+		coords = coords + veloc * dt + (1./2.) * (accel - self.eta * veloc) * dt * dt
+		for mol in mols:
+			mol.coords = coords[:mol.NAtoms()]
+		vdto2 = veloc + (1./2.) * (accel - self.eta * veloc) * dt
+		potential, forces = force_field(mols, delta)
+		forces *= JOULEPERHARTREE
+		new_accel = pow(10.0,-10.0) * np.einsum("ax,a->ax", forces, 1.0 / masses) # m^2/s^2 => A^2/Fs^2
+		kinetic = (1./2.) * np.dot(np.einsum("ia,ia->i",veloc, veloc), masses)
+		etadto2 = self.eta + (dt / (2.0 * self.Q)) * (kinetic - (((3.0 * self.N + 1) / 2.0)) * self.kT)
+		kedto2 = (1./2.) * np.dot(np.einsum("ia,ia->i", vdto2, vdto2), masses)
+		self.eta = etadto2 + (dt / (2.0 * self.Q)) * (kedto2 - (((3.0 * self.N + 1) / 2.0)) * self.kT)
+		new_veloc = (vdto2 + (dt / 2.0) * new_accel) / (1.0 + (dt / 2.0) * self.eta)
+		return mols, coords, new_veloc, new_accel, potential, forces
+
+class AndersenThermostatAlchem(Thermostat):
+	def __init__(self, masses, init_veloc):
+		"""
+		Velocity Verlet step with a Langevin Thermostat
+		"""
+		self.m = masses.copy()
+		self.N = len(masses)
+		self.T = PARAMS["MDTemp"]  # Length of NH chain.
+		self.gamma = 1.0 / 2.0 # Collision frequency (fs**-1)
+		self.name = "Andersen"
+		self.Rescale(init_veloc)
+		print("Using ", self.name, " thermostat at ",self.T, " degrees Kelvin")
+		return
+
+	def step(self, force_field, mols, coords, veloc, accel, masses, delta, dt):
+		coords = coords + veloc * dt + (1./2.) * accel * dt * dt
+		for mol in mols:
+			mol.coords = coords[:mol.NAtoms()]
+		potential, forces = force_field(mols, delta)
+		forces *= JOULEPERHARTREE
+		new_accel = pow(10.0,-10.0) * np.einsum("ax,a->ax", forces, 1.0 / masses)
+		new_veloc = veloc + (1./2.) * (accel + new_accel) * dt
+
+		# Andersen velocity randomization.
+		self.kT = IDEALGASR*pow(10.0,-10.0)*self.T # energy units here are kg (A/fs)^2
+		s = np.sqrt(2.0 * self.gamma * self.kT / masses) # Mass is in kg,
+		for i in range(coords.shape[0]):
+			if (np.random.random() < self.gamma * dt):
+				new_veloc[i] = np.random.normal(0.0, s[i], size = (3))
+		return mols, coords, new_veloc, new_accel, potential, forces
+
+def alchemical_transformation(force_field, mols, coords, transitions, name=None, cellsize=None):
 	"""
 	run an alchemical transformation molecular dynamics simulation
 
@@ -118,58 +180,40 @@ def alchemical_transformation(force_field, mols, transitions, name=None, cellsiz
 	num_atoms = max([mol.NAtoms() for mol in mols])
 	atoms = np.zeros((len(mols), num_atoms), dtype=np.int32)
 	masses = np.zeros((len(mols), num_atoms))
-	coords = np.zeros((len(mols), num_atoms, 3))
 	for i, mol in enumerate(mols):
 		atoms[i,:mol.NAtoms()] = mol.atoms
-		coords[i,:mol.NAtoms()] = mol.coords
 		masses[i,:mol.NAtoms()] = np.array(list(map(lambda x: ATOMICMASSES[x-1], atoms[i,:mol.NAtoms()])))
 	md_log = None
 
-	velocity = initialize_velocities(coords, masses, temp)
-	acceleration = np.zeros(coords.shape)
-	thermostat = get_thermostat(masses, velocity)
+	veloc = initialize_velocities(coords, masses, temp)
+	accel = np.zeros(coords.shape)
+	thermostat = get_thermostat(masses[0], veloc)
 
 	step = 0
 	md_log = np.zeros((maxsteps, 7))
+	write_trajectory(mols[0], name+"0")
+	write_trajectory(mols[1], name+"1")
 	while(step < maxsteps):
 		t = time.time()
 		traj_time = step*dt
-		if step == transitions[0]:
-			for delta_step in range(transitions[1]):
-				delta = np.array(float(delta_step / transitions[1])).reshape((1))
-				if thermostat==None:
-					coords, velocity, acceleration, potential = velocity_verlet_step(force_field, acceleration, mols, velocity, masses, dt)
-				else:
-					coords, velocity, acceleration, potential, forces = thermostat.step(force_field, acceleration, mols, velocity, masses, dt)
-				if cellsize != None:
-					coords = np.mod(coords, cellsize)
-				kinetic = KineticEnergy(velocity, masses)
-				md_log[step,0] = traj_time
-				md_log[step,4] = kinetic
-				md_log[step,5] = potential
-				md_log[step,6] = kinetic + (potential - initial_potential) * JOULEPERHARTREE
-				avE, Evar = EnergyStat(potential) # I should log these.
-				effective_temp = (2./3.) * kinetic / IDEALGASR
-
-				if (step%3==0 and PARAMS["MDLogTrajectory"]):
-					WriteTrajectory()
-				if (step%500==0):
-					np.savetxt("./results/"+"MDLog"+name+".txt",md_log)
-
-				step+=1
-				LOGGER.info("%s Step: %i time: %.1f(fs) KE(kJ): %.5f PotE(Eh): %.5f ETot(kJ/mol): %.5f Teff(K): %.5f", name, step, traj_time, kinetic * len(self.m) / 1000.0, potential, kinetic * len(self.m) / 1000.0 + (potential) * KJPERHARTREE, effective_temp)
-				#LOGGER.info("Step: %i time: %.1f(fs) <KE>(kJ/mol): %.5f <|a|>(m/s2): %.5f <EPot>(Eh): %.5f <Etot>(kJ/mol): %.5f Teff(K): %.5f", step, self.t, self.KE/1000.0,  np.linalg.norm(self.a) , self.EPot, self.KE/1000.0+self.EPot*KJPERHARTREE, Teff)
-				print(("per step cost:", time.time() -t ))
-		#self.KE = KineticEnergy(self.v,self.m)
-		#Teff = (2./3.)*self.KE/IDEALGASR
-		if (PARAMS["MDThermostat"]==None):
-			coords , velocity, acceleration, potential = VelocityVerletStep(force_field, acceleration, mols, velocity, masses, dt)
+		if step in range(transitions[0], transitions[0]+transitions[1]):
+			delta = np.array(float((step - transitions[0] + 1.0) / transitions[1])).reshape((1))
+		elif step > transitions[0]+transitions[1]:
+			delta = np.array(1.0).reshape((1))
 		else:
-			coords , velocity, acceleration, potential, forces = thermostat.step(force_field, acceleration, mols, velocity, masses, dt)
+			delta = np.array(0.0).reshape((1))
+		alchem_switch = np.where(np.not_equal(masses, 0), np.stack([np.tile(1.0 - delta, [masses.shape[1]]),
+						np.tile(delta, [masses.shape[1]])]), np.zeros_like(masses))
+		alchem_masses = np.sum(masses * alchem_switch, axis=0)
+		if (PARAMS["MDThermostat"]==None):
+			mols, coords, veloc, accel, potential, forces = velocity_verlet_step(force_field, mols, coords, veloc, accel, alchem_masses, delta, dt)
+		else:
+			mols, coords, veloc, accel, potential, forces = thermostat.step(force_field, mols, coords, veloc, accel, alchem_masses, delta, dt)
 		if cellsize != None:
-			coords  = np.mod(self.x, cellsize)
-		kinetic = KineticEnergy(velocity, masses)
+			coords = np.mod(coords, cellsize)
+		kinetic = KineticEnergy(veloc, alchem_masses)
 		md_log[step,0] = traj_time
+		md_log[step,1] = delta
 		md_log[step,4] = kinetic
 		md_log[step,5] = potential
 		md_log[step,6] = kinetic + (potential - initial_potential) * JOULEPERHARTREE
@@ -177,13 +221,15 @@ def alchemical_transformation(force_field, mols, transitions, name=None, cellsiz
 		effective_temp = (2./3.) * kinetic / IDEALGASR
 
 		if (step%3==0 and PARAMS["MDLogTrajectory"]):
-			WriteTrajectory()
+			write_trajectory(mols[0], name+"0")
+			write_trajectory(mols[1], name+"1")
 		if (step%500==0):
 			np.savetxt("./results/"+"MDLog"+name+".txt",md_log)
 
 		step+=1
-		LOGGER.info("%s Step: %i time: %.1f(fs) KE(kJ): %.5f PotE(Eh): %.5f ETot(kJ/mol): %.5f Teff(K): %.5f", name, step, traj_time, kinetic * len(self.m) / 1000.0, potential, kinetic * len(self.m) / 1000.0 + (potential) * KJPERHARTREE, effective_temp)
-		#LOGGER.info("Step: %i time: %.1f(fs) <KE>(kJ/mol): %.5f <|a|>(m/s2): %.5f <EPot>(Eh): %.5f <Etot>(kJ/mol): %.5f Teff(K): %.5f", step, self.t, self.KE/1000.0,  np.linalg.norm(self.a) , self.EPot, self.KE/1000.0+self.EPot*KJPERHARTREE, Teff)
+		LOGGER.info("%s Step: %i time: %.1f(fs) KE(kJ): %.5f PotE(Eh): %.5f ETot(kJ/mol): %.5f Teff(K): %.5f",
+			name, step, traj_time, kinetic * len(alchem_masses) / 1000.0, potential,
+			kinetic * len(alchem_masses) / 1000.0 + (potential) * KJPERHARTREE, effective_temp)
 		print(("per step cost:", time.time() -t ))
 	np.savetxt("./results/"+"MDLog"+name+".txt",md_log)
 	return

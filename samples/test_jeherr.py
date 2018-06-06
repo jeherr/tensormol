@@ -857,7 +857,7 @@ def minimize_ob():
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
 # train_energy_univ("master_jeherr_rand")
-eval_test_set_univ("kaggle_opt")
+# eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
 # water_dimer_plot()
@@ -989,3 +989,57 @@ eval_test_set_univ("kaggle_opt")
 # # 	f.write(chrome_trace)
 
 # print ELEMENTCODES.shape[0]*(ELEMENTCODES.shape[0]+1)/2
+
+a=MSet("needs_meta_ca")
+a.Load()
+b=MSet("chemspider20_345_opt")
+b.Load()
+c=MSet("chemspider20_24578_opt")
+c.Load()
+# d=MSet("tmp")
+# d.mols += b.mols
+# d.mols += c.mols
+# opt_names = [mol.properties["name"] for mol in b.mols]
+# meta_names = [mol.properties["name"] for mol in c.mols]
+# for mol in c.mols:
+# 	meta_names.append(mol.properties["name"])
+# for mol in b.mols:
+# 	opt_names.append(mol.properties["name"])
+# opt_names = list(set(opt_names))
+# meta_names = list(set(meta_names))
+unique = []
+for mol in b.mols:
+	# if mol.properties["name"] not in meta_names:
+	if 20 in mol.atoms:
+		if mol.properties["name"] not in unique:
+			unique.append(mol.properties["name"])
+for name in unique:
+	eq_mol = None
+	for mol in b.mols:
+		if mol.properties["name"] == name:
+			if eq_mol == None:
+				eq_mol = mol
+			else:
+				if mol.properties["energy"] < eq_mol.properties["energy"]:
+					eq_mol = mol
+	a.mols.append(eq_mol)
+a.Save()
+
+
+
+# a=MSet("chemspider20_1_meta_2")
+# import pickle
+# data = pickle.load(open("chemspider20_1_meta_noerror_part2.dat", "rb"))
+# for i in range(len(data)):
+#     mol = Mol()
+#     mol.coords = data[i]["xyz"]
+#     mol.atoms = np.zeros(mol.coords.shape[0], dtype=np.uint8)
+#     for j in range(len(data[i]["atoms"])):
+#             mol.atoms[j] = AtomicNumber(data[i]["atoms"][j])
+#     mol.properties["energy"] = data[i]["scf_energy"]
+#     mol.properties["gradients"] = data[i]["gradients"]
+#     mol.properties["charges"] = np.array(data[i]["charges"])
+#     mol.properties["name"] = data[i]["name"][2:-4]
+#     mol.properties["dipole"] = np.array(data[i]["dipole"])
+#     a.mols.append(mol)
+# a.Save()

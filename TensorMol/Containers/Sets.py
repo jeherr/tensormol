@@ -266,6 +266,13 @@ class MSet:
 			types = np.union1d(types,m.AtomTypes())
 		return types
 
+	def element_counts(self):
+		atoms = [mol.atoms for mol in self.mols]
+		atoms = np.concatenate(atoms)
+		elements, counts = np.unique(atoms, return_counts=True)
+		print("Elements present in set: ", elements)
+		print("Amount of each element: ", counts)
+
 	def max_atomic_num(self):
 		types = np.array([],dtype=np.uint8)
 		for m in self.mols:

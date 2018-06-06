@@ -933,24 +933,31 @@ class UniversalNetwork(object):
 			batch_data.append(gradient_data[eval_pointer - self.batch_size:eval_pointer])
 			batch_data.append(charges_data[eval_pointer - self.batch_size:eval_pointer])
 			feed_dict = self.fill_feed_dict(batch_data)
-			total_energy, energy_label, gradients, gradient_labels, charges, charge_labels = self.sess.run([self.total_energy,
-				self.energy_pl, self.gradients, self.gradient_labels, self.charges, self.charge_labels], feed_dict=feed_dict)
+			if self.train_charges:
+				total_energy, energy_label, gradients, gradient_labels, charges, charge_labels = self.sess.run([self.total_energy,
+					self.energy_pl, self.gradients, self.gradient_labels, self.charges, self.charge_labels], feed_dict=feed_dict)
+				charges_true.append(charge_labels)
+				charge_preds.append(charges)
+			else:
+				total_energy, energy_label, gradients, gradient_labels = self.sess.run([self.total_energy,
+					self.energy_pl, self.gradients, self.gradient_labels], feed_dict=feed_dict)
 			energy_true.append(energy_label)
 			energy_pred.append(total_energy)
 			gradients_true.append(gradient_labels)
 			gradient_preds.append(gradients)
-			charges_true.append(charge_labels)
-			charge_preds.append(charges)
 		energy_true = np.concatenate(energy_true)
 		energy_pred = np.concatenate(energy_pred)
 		gradients_true = np.concatenate(gradients_true)
 		gradient_preds = np.concatenate(gradient_preds)
-		charges_true = np.concatenate(charges_true)
-		charge_preds = np.concatenate(charge_preds)
 		energy_errors = energy_true - energy_pred
 		gradient_errors = gradients_true - gradient_preds
-		charge_errors = charges_true - charge_preds
-		return energy_errors, gradient_errors, charge_errors
+		if self.train_charges:
+			charges_true = np.concatenate(charges_true)
+			charge_preds = np.concatenate(charge_preds)
+			charge_errors = charges_true - charge_preds
+			return energy_errors, gradient_errors, charge_errors
+		else:
+			return energy_errors, gradient_errors
 
 	def evaluate_mol(self, mol):
 		try:
@@ -974,8 +981,8 @@ class UniversalNetwork(object):
 		coulomb_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, 19.0, self.max_num_atoms, False, False)
 		feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
 					self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs, self.num_atoms_pl:num_atoms_data}
-		energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
-		return energy, -gradients, charges
+		energy, atme, nne, ce, gradients, charges = self.sess.run([self.total_energy, self.atom_nn_energy, self.mol_nn_energy, self.mol_coulomb_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
+		return energy, atme, nne, ce, -gradients, charges
 
 	def evaluate_alchem_mol(self, mols):
 		try:
@@ -1031,12 +1038,12 @@ class UniversalNetwork(object):
 			coulomb_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, 19.0, self.max_num_atoms, False, False)
 			feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
 						self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs, self.num_atoms_pl:num_atoms_data}
-			energy, gradients, charges = self.sess.run([self.total_energy, self.gradients, self.atom_nn_charges], feed_dict=feed_dict)
-			print(-JOULEPERHARTREE*gradients)
+			energy, gradients = self.sess.run([self.total_energy, self.gradients], feed_dict=feed_dict)
+			# print(-JOULEPERHARTREE*gradients)
 			if (DoForce):
-				return energy, -JOULEPERHARTREE*gradients
+				return energy[0], -JOULEPERHARTREE*gradients
 			else:
-				return energy
+				return energy[0]
 		return EF
 
 	def GetBatchedEnergyForceRoutine(self,mset):

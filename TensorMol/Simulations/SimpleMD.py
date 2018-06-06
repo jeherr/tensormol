@@ -97,7 +97,7 @@ class NoseThermostat(Thermostat):
 		self.T = PARAMS["MDTemp"]  # Length of NH chain.
 		self.eta = 0.0
 		self.name = "Nose"
-		# self.Rescale(v_)
+		self.Rescale(v_)
 		print("Using ", self.name, " thermostat at ",self.T, " degrees Kelvin")
 		return
 

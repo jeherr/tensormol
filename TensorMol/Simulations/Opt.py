@@ -221,7 +221,7 @@ class GeomOptimizer:
 			max_step = eff_max_step
 		#print "Initial force", self.tfm.evaluate(m, i), "Real Force", m.properties["forces"][i]
 		energy, old_frc  = self.WrappedEForce(m.coords)
-		while( step < self.max_opt_step and rmsgrad > thresh):
+		while( step < max_step and rmsgrad > thresh):
 			prev_m = Mol(m.atoms, m.coords)
 			if step > 0:
 				old_frc = frc
