@@ -47,14 +47,14 @@ def FdiffGradient(f_, x_, eps_=0.0001):
 	at x_ for debugging purposes.
 	"""
 	x_t = x_.copy()
-	f_x_ = f_(x_)
+	f_x_ = f_(x_, DoForce=False)
 	outshape = x_.shape+f_x_.shape
 	tore=np.zeros(outshape)
 	it = np.nditer(x_, flags=['multi_index'])
 	while not it.finished:
 		x_t = x_.copy()
 		x_t[it.multi_index] += eps_
-		tore[it.multi_index] = ((f_(x_t) - f_x_)/eps_)
+		tore[it.multi_index] = ((f_(x_t, DoForce=False) - f_x_)/eps_)
 		it.iternext()
 	return tore
 
@@ -246,16 +246,19 @@ class ConjGradient:
 		self.thresh = thresh_
 		self.alpha = PARAMS["GSSearchAlpha"]
 		return
+
 	def Reset(self,x0_):
 		self.xold = x0_.copy()
 		self.e, self.gold  = self.EForce(x0_)
 		self.s = self.gold.copy()
 		self.thresh = thresh_
 		self.alpha = PARAMS["GSSearchAlpha"]
+
 	def BetaPR(self,g):
 		betapr = np.sum((g)*(g - self.gold))/(np.sum(self.gold*self.gold))
 		self.gold = g.copy()
 		return max(0,betapr)
+
 	def __call__(self,x0,DoLS = True):
 		"""
 		Iterate Conjugate Gradient.
@@ -267,7 +270,7 @@ class ConjGradient:
 		"""
 		e,g = self.EForce(x0)
 		if (not DoLS):
-			self.xold = 0.3*g + x0
+			self.xold = 0.1*g + x0
 			return self.xold, e, g
 		beta_n = self.BetaPR(g)
 		self.s = g + beta_n*self.s

@@ -990,40 +990,40 @@ def minimize_ob():
 
 # print ELEMENTCODES.shape[0]*(ELEMENTCODES.shape[0]+1)/2
 
-a=MSet("needs_meta_ca")
-a.Load()
-b=MSet("chemspider20_345_opt")
-b.Load()
-c=MSet("chemspider20_24578_opt")
-c.Load()
-# d=MSet("tmp")
-# d.mols += b.mols
-# d.mols += c.mols
-# opt_names = [mol.properties["name"] for mol in b.mols]
-# meta_names = [mol.properties["name"] for mol in c.mols]
-# for mol in c.mols:
-# 	meta_names.append(mol.properties["name"])
+# a=MSet("needs_meta_ca")
+# a.Load()
+# b=MSet("chemspider20_345_opt")
+# b.Load()
+# c=MSet("chemspider20_24578_opt")
+# c.Load()
+# # d=MSet("tmp")
+# # d.mols += b.mols
+# # d.mols += c.mols
+# # opt_names = [mol.properties["name"] for mol in b.mols]
+# # meta_names = [mol.properties["name"] for mol in c.mols]
+# # for mol in c.mols:
+# # 	meta_names.append(mol.properties["name"])
+# # for mol in b.mols:
+# # 	opt_names.append(mol.properties["name"])
+# # opt_names = list(set(opt_names))
+# # meta_names = list(set(meta_names))
+# unique = []
 # for mol in b.mols:
-# 	opt_names.append(mol.properties["name"])
-# opt_names = list(set(opt_names))
-# meta_names = list(set(meta_names))
-unique = []
-for mol in b.mols:
-	# if mol.properties["name"] not in meta_names:
-	if 20 in mol.atoms:
-		if mol.properties["name"] not in unique:
-			unique.append(mol.properties["name"])
-for name in unique:
-	eq_mol = None
-	for mol in b.mols:
-		if mol.properties["name"] == name:
-			if eq_mol == None:
-				eq_mol = mol
-			else:
-				if mol.properties["energy"] < eq_mol.properties["energy"]:
-					eq_mol = mol
-	a.mols.append(eq_mol)
-a.Save()
+# 	# if mol.properties["name"] not in meta_names:
+# 	if 20 in mol.atoms:
+# 		if mol.properties["name"] not in unique:
+# 			unique.append(mol.properties["name"])
+# for name in unique:
+# 	eq_mol = None
+# 	for mol in b.mols:
+# 		if mol.properties["name"] == name:
+# 			if eq_mol == None:
+# 				eq_mol = mol
+# 			else:
+# 				if mol.properties["energy"] < eq_mol.properties["energy"]:
+# 					eq_mol = mol
+# 	a.mols.append(eq_mol)
+# a.Save()
 
 
 
