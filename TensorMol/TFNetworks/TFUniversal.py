@@ -25,7 +25,7 @@ class UniversalNetwork(object):
 	"""
 	The 0.2 model chemistry.
 	"""
-	def __init__(self, mol_set_name=None, name=None):
+	def __init__(self, mol_set_name=None, max_num_atoms=None, name=None):
 		"""
 		Args:
 			mol_set (TensorMol.MSet object): a class which holds the training data
@@ -65,6 +65,9 @@ class UniversalNetwork(object):
 		if name != None:
 			self.name = name
 			self.load_network()
+			self.path = PARAMS["networks_directory"]
+			self.network_directory = PARAMS["networks_directory"]+self.name
+			self.max_num_atoms = max_num_atoms if max_num_atoms else self.mol_set.MaxNAtom()
 			LOGGER.info("Reloaded network from %s", self.network_directory)
 			return
 
@@ -73,7 +76,7 @@ class UniversalNetwork(object):
 		self.mol_set = MSet(self.mol_set_name)
 		self.mol_set.Load()
 		self.elements = self.mol_set.AtomTypes()
-		self.max_num_atoms = self.mol_set.MaxNAtom()
+		self.max_num_atoms = max_num_atoms if max_num_atoms else self.mol_set.MaxNAtom()
 		self.num_molecules = len(self.mol_set.mols)
 		self.energy_fit = np.zeros((self.mol_set.max_atomic_num()+1))
 		self.charge_fit = np.zeros((self.mol_set.max_atomic_num()+1))
@@ -1108,7 +1111,7 @@ class UniversalNetwork(object):
 			self.sess = None
 		if self.sess is None:
 			self.assign_activation()
-			self.max_num_atoms = mol.NAtoms()
+			self.max_num_atoms = self.max_num_atoms if self.max_num_atoms else mol.NAtoms()
 			self.batch_size = 1
 			self.train_prepare(restart=True)
 		num_mols = 1
