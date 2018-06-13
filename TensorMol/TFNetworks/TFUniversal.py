@@ -1104,7 +1104,7 @@ class UniversalNetwork(object):
 			return energy[0], -gradients
 		return alchem_energy_force
 
-	def GetEnergyForceRoutine(self,mol):
+	def get_energy_force_function(self,mol):
 		try:
 			self.sess
 		except AttributeError:
