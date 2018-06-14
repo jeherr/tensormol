@@ -116,7 +116,6 @@ class NoseThermostatAlchem(Thermostat):
 		kedto2 = (1./2.) * np.dot(np.einsum("ia,ia->i", vdto2, vdto2), masses)
 		self.eta = etadto2 + (dt / (2.0 * self.Q)) * (kedto2 - (((3.0 * self.N + 1) / 2.0)) * self.kT)
 		new_veloc = (vdto2 + (dt / 2.0) * new_accel) / (1.0 + (dt / 2.0) * self.eta)
-		new_veloc[:6722] = np.zeros_like(new_veloc[:6722])
 		return mols, coords, new_veloc, new_accel, potential, forces
 
 class AndersenThermostatAlchem(Thermostat):
@@ -187,7 +186,6 @@ def alchemical_transformation(force_field, mols, coords, transitions, name=None,
 	md_log = None
 
 	veloc = initialize_velocities(coords, masses, temp)
-	veloc[:6722] = np.zeros_like(veloc[:6722])
 	accel = np.zeros(coords.shape)
 	thermostat = get_thermostat(masses[0], veloc)
 

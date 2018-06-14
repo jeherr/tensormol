@@ -3554,14 +3554,17 @@ def tf_sym_func_element_codes_v2(xyzs, Zs, pairs, triples, element_codes, elemen
 		Digested Mol. In the shape nmol X maxnatom X (Dimension of radius part + Dimension of angular part)
 	"""
 	dxyzs, pair_Zs = sparse_pairs(xyzs, Zs, pairs)
-	radial_embed = tf_radial_sym_func_v2(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta)
+	replace_mask = tf.equal(pairs, replace_idx[1])
+	radial_embed = tf_radial_sym_func_v2(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff,
+					eta, replace_codes, replace_mask)
 	dtxyzs, triples_Zs, scatter_idx = sparse_triples(xyzs, Zs, triples)
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
-	angular_embed = tf_angular_sym_func_v2(dtxyzs, triples_Zs, scatter_idx, element_codepairs, codepair_idx, angular_gauss, thetas, angular_cutoff, zeta, eta, padding_mask)
+	angular_embed = tf_angular_sym_func_v2(dtxyzs, triples_Zs, scatter_idx, element_codepairs, codepair_idx,
+					angular_gauss, thetas, angular_cutoff, zeta, eta, padding_mask, replace_idx, replace_codepairs)
 	embed = tf.concat([radial_embed, angular_embed], axis=-1)
 	return embed
 
-def tf_radial_sym_func_v2(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta):
+def tf_radial_sym_func_v2(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta, replace_codes, replace_mask):
 	"""
 	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
 	Here j,k are all other atoms, but implicitly the output
@@ -3586,6 +3589,8 @@ def tf_radial_sym_func_v2(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cu
 	gauss = tf.exp(exponent)
 	cutoff = 0.5 * (tf.cos(np.pi * dist_tensor / radial_cutoff) + 1.0)
 	pair_codes = tf.gather(element_codes, pair_Zs)
+	pair_codes = tf.where(replace_mask[0,...], replace_codes, pair_codes)
+	return pair_codes
 	pad_mask = tf.where(tf.equal(pair_Zs, 0), tf.zeros_like(pair_Zs, dtype=eval(PARAMS["tf_prec"])), tf.ones_like(pair_Zs, dtype=eval(PARAMS["tf_prec"])))
 	pair_codes *= tf.expand_dims(pad_mask, axis=-1)
 	radial_embed = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(tf.expand_dims(cutoff, axis=-1) * pair_codes, axis=-1)

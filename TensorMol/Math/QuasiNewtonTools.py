@@ -6,6 +6,7 @@ from __future__ import print_function
 from ..PhysicalData import *
 from ..Util import *
 from .LinearOperations import *
+from ..Containers.Mol import *
 
 def RmsForce(f_):
 	return np.mean(np.linalg.norm(f_,axis=1))
@@ -348,6 +349,119 @@ class ConjGradient:
 				fa = fc
 				fc = self.Energy(c)
 				fd = self.Energy(d)
+			rmsdist = np.sum(np.linalg.norm(a-b,axis=1))/a.shape[0]
+			k+=1
+		return (b + a) / 2
+
+class AlchemConjGradient(ConjGradient):
+	def __init__(self, f_, mols, delta, thresh_=0.0001):
+		"""
+		Args:
+			f_ : an energy, force routine.
+			x0_: initial point.
+			p_: initial search direction.
+		"""
+		self.delta = delta
+		self.EForce = lambda mols: f_(mols, self.delta)
+		self.Energy = lambda mols: f_(mols, self.delta, False)
+		# self.x0 = x0_.copy()
+		# self.xold = x0_.copy()
+		self.e, self.gold  = self.EForce(mols)
+		self.s = self.gold.copy()
+		self.thresh = thresh_
+		self.alpha = PARAMS["GSSearchAlpha"]
+		return
+
+	def __call__(self, mols, DoLS = True):
+		"""
+		Iterate Conjugate Gradient.
+
+		Args:
+			x0: Point at which to minimize gradients
+		Returns:
+			Next point, energy, and gradient.
+		"""
+		e,g = self.EForce(mols)
+		# if (not DoLS):
+		# 	self.xold = 0.05*g + mols[0].coords
+		# 	return self.xold, e, g
+		beta_n = self.BetaPR(g)
+		self.s = g + beta_n*self.s
+		self.xold = self.LineSearch(mols, self.s, self.thresh)
+		return self.xold, e, g
+
+	def LineSearch(self, mols, p_, thresh = 0.0001):
+		'''
+		golden section search to find the minimum of f on [a,b]
+
+		Args:
+			f_: a function which returns energy.
+			x0_: Origin of the search.
+			p_: search direction.
+
+		Returns:
+			x: coordinates which minimize along this search direction.
+		'''
+		from ..Containers.Mol import Mol
+		k=0
+		rmsdist = 10.0
+		a = mols[0].coords
+		b = a + self.alpha*p_
+		c = b - (b - a) / GOLDENRATIO
+		d = a + (b - a) / GOLDENRATIO
+		fa = self.Energy(mols)
+		fb = self.Energy([Mol(mol.atoms, b) for mol in mols])
+		fc = self.Energy([Mol(mol.atoms, c) for mol in mols])
+		fd = self.Energy([Mol(mol.atoms, d) for mol in mols])
+		while (rmsdist > thresh):
+			if (fa < fc and fa < fd and fa < fb):
+				#print fa,fc,fd,fb
+				#print RmsForce(fpa), RmsForce(fpc), RmsForce(fpd), RmsForce(fpb)
+				print("Line Search: Overstep alpha=",self.alpha)
+				if (self.alpha > 0.00001):
+					self.alpha /= 1.8001
+				elif self.alpha < 0.0001:
+					print("ARE YOU SURE FORCE MATCHES ENERGY??? ")
+				else:
+					print("Keeping step")
+					return a
+				a = mols[0].coords
+				b = a + self.alpha*p_
+				c = b - (b - a) / GOLDENRATIO
+				d = a + (b - a) / GOLDENRATIO
+				fa = self.Energy(mols)
+				fb = self.Energy([Mol(mol.atoms, b) for mol in mols])
+				fc = self.Energy([Mol(mol.atoms, c) for mol in mols])
+				fd = self.Energy([Mol(mol.atoms, d) for mol in mols])
+			elif (fb < fc and fb < fd and fb < fa):
+				#print fa,fc,fd,fb
+				#print RmsForce(fpa), RmsForce(fpc), RmsForce(fpd), RmsForce(fpb)
+				print("Line Search: Understep alpha=",self.alpha)
+				if (self.alpha < 100.0):
+					self.alpha *= 1.8
+				a = mols[0].coords
+				b = a + self.alpha*p_
+				return (b + a) / 2 # It's okay to return understeps, the force evals arent worth it.
+				c = b - (b - a) / GOLDENRATIO
+				d = a + (b - a) / GOLDENRATIO
+				fa = self.Energy(a)
+				fb = self.Energy(b)
+				fc = self.Energy(c)
+				fd = self.Energy(d)
+			elif fc < fd:
+				b = d
+				c = b - (b - a) / GOLDENRATIO
+				d = a + (b - a) / GOLDENRATIO
+				fb = fd
+				fc = self.Energy([Mol(mol.atoms, c) for mol in mols])
+				fd = self.Energy([Mol(mol.atoms, d) for mol in mols])
+			else:
+				a = c
+				c = b - (b - a) / GOLDENRATIO
+				d = a + (b - a) / GOLDENRATIO
+				fa = fc
+				fc = self.Energy([Mol(mol.atoms, c) for mol in mols])
+				fd = self.Energy([Mol(mol.atoms, d) for mol in mols])
 			rmsdist = np.sum(np.linalg.norm(a-b,axis=1))/a.shape[0]
 			k+=1
 		return (b + a) / 2

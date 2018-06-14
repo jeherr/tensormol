@@ -874,7 +874,7 @@ def minimize_ob():
 # metaopt_chemsp()
 # water_web()
 
-#
+
 PARAMS["tf_prec"] = "tf.float32"
 PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
 PARAMS["SH_NRAD"] = 16
@@ -982,9 +982,12 @@ tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 3.1, maxnatoms, False)
 nlt_tf = tf.constant(nlt, dtype=tf.int32)
 tlt_tf = tf.constant(tlt, dtype=tf.int32)
 replace_idx = tf.constant([0, 8], dtype=tf.int32)
-replace_codes = tf.Variable([ELEMENTCODES[14], trainable=False, dtype=tf.float32)
-
-tmp = tf_sym_func_element_codes_v2(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, element_codepairs_tf, codepair_idx_tf, radial_rs_tf, radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf)
+replace_codes = tf.Variable(ELEMENTCODES[15], trainable=False, dtype=tf.float32)
+gather_replace_codepairs = codepair_idx_tf[15]
+replace_codepairs = tf.gather(element_codepairs_tf, gather_replace_codepairs)
+tmp = tf_sym_func_element_codes_v2(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, element_codepairs_tf,
+		codepair_idx_tf, radial_rs_tf, radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf,
+		zeta_tf, eta_tf, replace_idx, replace_codes, replace_codepairs)
 
 sess = tf.Session()
 sess.run(tf.global_variables_initializer())
@@ -997,7 +1000,7 @@ def get_pairs():
 tmp5 = get_pairs()
 print(tmp5)
 print(tmp5.shape)
-# fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-# chrome_trace = fetched_timeline.generate_chrome_trace_format()
-# with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
-# 	f.write(chrome_trace)
+fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+chrome_trace = fetched_timeline.generate_chrome_trace_format()
+with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
+	f.write(chrome_trace)

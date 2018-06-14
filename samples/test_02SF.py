@@ -48,14 +48,15 @@ def run_alchemical_trans(mols):
 	Args:
 		mols (list): a sequential list of Mols to undergo the alchemical changes
 	"""
+	PARAMS["MetaBowlK"] = 0.05
 	PARAMS["MDdt"] = 0.5
 	PARAMS["RemoveInvariant"]=True
-	PARAMS["MDMaxStep"] = 5000
-	PARAMS["MDThermostat"] = "Nose"
+	PARAMS["MDMaxStep"] = 10000
+	PARAMS["MDThermostat"] = None
 	PARAMS["MDTemp"]= 300.0
 	network = UniversalNetwork(name="SF_Universal_master_jeherr_Thu_May_31_16.20.05_2018")
 	alchem_ef = network.evaluate_alchem_mol(mols)
-	transitions = [2000,1000]
+	transitions = [1,1000]
 	alchemical_transformation(alchem_ef, mols, mols[0].coords, transitions)
 	# for i in range(101):
 	# 	delta = np.array(i / 100.).reshape((1))
@@ -65,12 +66,27 @@ def run_alchemical_trans(mols):
 		# f.append(forces)
 	# print(e)
 
-a=MSet("diazepam_GABA", center_=False)
+a=MSet("diazepam", center_=False)
 a.ReadXYZ()
-b=MSet("water_GABA", center_=False)
+b=MSet("water_diazepam", center_=False)
 b.ReadXYZ()
 mols = [a.mols[0], b.mols[0]]
 run_alchemical_trans(mols)
+
+def alchem_chain_opt(mols):
+	network = UniversalNetwork(name="SF_Universal_master_jeherr_Thu_May_31_16.20.05_2018")
+	alchem_ef = network.evaluate_alchem_mol(mols)
+	Opt = AlchemGeomOptimizer(alchem_ef)
+	for i in range(21):
+		mols=Opt.Opt(mols, i*0.05, "alchem_opt", eff_max_step=10000)
+
+# a=MSet("etoh_dimer", center_=False)
+# a.ReadXYZ()
+# b=MSet("etoh_dimer_to_water", center_=False)
+# b.ReadXYZ()
+# mols = [a.mols[0], b.mols[0]]
+# alchem_chain_opt(mols)
+
 
 def run_md(mol):
 	"""

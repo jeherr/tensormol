@@ -67,7 +67,7 @@ class UniversalNetwork(object):
 			self.load_network()
 			self.path = PARAMS["networks_directory"]
 			self.network_directory = PARAMS["networks_directory"]+self.name
-			self.max_num_atoms = max_num_atoms if max_num_atoms else self.mol_set.MaxNAtom()
+			#self.max_num_atoms = max_num_atoms if max_num_atoms else self.mol_set.MaxNAtom()
 			LOGGER.info("Reloaded network from %s", self.network_directory)
 			return
 
@@ -874,6 +874,7 @@ class UniversalNetwork(object):
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
 			self.atom_codes_pl = tf.placeholder(self.tf_precision, shape=[None, 4])
 			self.atom_codepairs_pl = tf.placeholder(self.tf_precision, shape=[None, 55, 4])
+			self.replace_atom_idx = tf.placeholder(tf.int32, shape=[None, 2])
 
 			radial_gauss = tf.Variable(self.radial_rs, trainable=False, dtype = self.tf_precision)
 			angular_gauss = tf.Variable(self.angular_rs, trainable=False, dtype = self.tf_precision)
@@ -913,37 +914,14 @@ class UniversalNetwork(object):
 					self.mol_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2, scatter_coulomb)
 					self.total_energy += self.mol_coulomb_energy
 					self.charges = tf.gather_nd(self.atom_nn_charges, padding_mask)
-					self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
-					self.charge_loss = 0.1 * self.loss_op(self.charges - self.charge_labels) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
-					tf.summary.scalar("charge_loss", self.charge_loss)
-					tf.add_to_collection('total_loss', self.charge_loss)
-			self.energy_loss = 100 * self.loss_op(self.total_energy - self.energy_pl) / tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision)
-			tf.summary.scalar("energy_loss", self.energy_loss)
-			tf.add_to_collection('total_loss', self.energy_loss)
 			with tf.name_scope('gradients'):
-				self.xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
+				self.xyz_grad, atom_codes_grad, atom_codepairs_grad = tf.gradients(self.total_energy,
+										[self.xyzs_pl, self.atom_codes_pl, self.atom_codepairs_pl])[0]
 				self.gradients = tf.gather_nd(self.xyz_grad, padding_mask)
-				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
-				self.gradient_loss = 0.1 * self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
-				if self.train_gradients:
-					tf.add_to_collection('total_loss', self.gradient_loss)
-					tf.summary.scalar("gradient_loss", self.gradient_loss)
-			self.total_loss = tf.add_n(tf.get_collection('total_loss'))
-			tf.summary.scalar('total_loss', self.total_loss)
 
-			self.train_op = self.optimizer(self.total_loss, self.learning_rate, self.momentum)
-			self.summary_op = tf.summary.merge_all()
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
-			self.summary_writer = tf.summary.FileWriter(self.network_directory, self.sess.graph)
-			if restart:
-				self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
-			else:
-				init = tf.global_variables_initializer()
-				self.sess.run(init)
-			if self.profiling:
-				self.options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-				self.run_metadata = tf.RunMetadata()
+			self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
 		return
 
 	def print_epoch(self, step, duration, loss, energy_loss, gradient_loss, charge_loss, testing=False):
