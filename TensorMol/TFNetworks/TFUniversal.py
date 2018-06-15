@@ -897,7 +897,9 @@ class UniversalNetwork(object):
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes,
 					self.element_codepairs, self.codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
-			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
+			atom_codes = tf.gather(self.element_codes, self.Zs_pl)
+			atom_codes = tf.scatter_update(atom_codes, self.replace_atom_idx, self.atom_codes_pl)
+			atom_codes = tf.gather(atom_codes, padding_mask)
 			with tf.name_scope('energy_inference'):
 				self.atom_nn_energy, variables = self.energy_inference(embed, atom_codes, padding_mask)
 				self.mol_nn_energy = tf.reduce_sum(self.atom_nn_energy, axis=1) * energy_stddev

@@ -878,7 +878,7 @@ def minimize_ob():
 PARAMS["tf_prec"] = "tf.float32"
 PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
 PARAMS["SH_NRAD"] = 16
-a = MSet("master_jeherr_rand")
+a = MSet("SmallMols_rand")
 a.Load()
 # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
 # # # Tesselate that water to create a box
@@ -981,7 +981,7 @@ nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 6.5, maxnatoms, True, True)
 tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 3.1, maxnatoms, False)
 nlt_tf = tf.constant(nlt, dtype=tf.int32)
 tlt_tf = tf.constant(tlt, dtype=tf.int32)
-replace_idx = tf.constant([0, 8], dtype=tf.int32)
+replace_idx = tf.constant([0, 2], dtype=tf.int32)
 replace_codes = tf.Variable(ELEMENTCODES[15], trainable=False, dtype=tf.float32)
 gather_replace_codepairs = codepair_idx_tf[15]
 replace_codepairs = tf.gather(element_codepairs_tf, gather_replace_codepairs)
