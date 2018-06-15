@@ -3537,7 +3537,8 @@ def tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codepairs, code
 	angular_embed *= tf.pow(tf.cast(2.0, eval(PARAMS["tf_prec"])), 1.0 - zeta)
 	return tf.reshape(angular_embed, [tf.shape(angular_embed)[0], tf.shape(element_codepairs)[1], -1])
 
-def tf_sym_func_element_codes_v2(xyzs, Zs, pairs, triples, element_codes, element_codepairs, codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta, replace_idx, replace_codes, replace_codepairs):
+def tf_sym_func_element_codes_v2(xyzs, Zs, pairs, triples, element_codes, element_codepairs, codepair_idx, radial_gauss,
+		radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta, replace_idx, replace_codes, replace_codepairs):
 	"""
 	A tensorflow implementation of the AN1 symmetry function for a set of molecule.
 	Args:
@@ -3554,15 +3555,15 @@ def tf_sym_func_element_codes_v2(xyzs, Zs, pairs, triples, element_codes, elemen
 		Digested Mol. In the shape nmol X maxnatom X (Dimension of radius part + Dimension of angular part)
 	"""
 	dxyzs, pair_Zs = sparse_pairs(xyzs, Zs, pairs)
-	pairs_replace_mask = tf.equal(pairs, replace_idx[1])
+	pairs_replace_mask = tf.equal(pairs, replace_idx[:,1])
 	radial_embed = tf_radial_sym_func_v2(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff,
 					eta, replace_codes, pairs_replace_mask)
 	dtxyzs, triples_Zs, scatter_idx = sparse_triples(xyzs, Zs, triples)
-	triples_replace_mask = tf.gather_nd(tf.reduce_any(tf.equal(triples, replace_idx[1]), axis=-1)[0,...], scatter_idx)
+	triples_replace_mask = tf.gather_nd(tf.reduce_any(tf.equal(triples, replace_idx[:,1]), axis=-1)[0,...], scatter_idx)
 	replace_Z = tf.gather_nd(Zs, replace_idx)
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 	angular_embed = tf_angular_sym_func_v2(dtxyzs, triples_Zs, scatter_idx, element_codepairs, codepair_idx, angular_gauss,
-					thetas, angular_cutoff, zeta, eta, padding_mask, replace_codepairs, triples_replace_mask, replace_Z)
+					thetas, angular_cutoff, zeta, eta, padding_mask, replace_idx, replace_codepairs, triples_replace_mask, replace_Z)
 	embed = tf.concat([radial_embed, angular_embed], axis=-1)
 	return embed
 
@@ -3599,7 +3600,7 @@ def tf_radial_sym_func_v2(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cu
 	return tf.reduce_sum(radial_embed, axis=1)
 
 def tf_angular_sym_func_v2(dtxyzs, triples_Zs, scatter_idx, element_codepairs, codepair_idx, angular_gauss, thetas,
-							angular_cutoff, zeta, eta, padding_mask, replace_codepairs, replace_mask, replace_Z):
+							angular_cutoff, zeta, eta, padding_mask, replace_idx, replace_codepairs, replace_mask, replace_Z):
 	"""
 	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
 	Here j,k are all other atoms, but implicitly the output
@@ -3641,7 +3642,8 @@ def tf_angular_sym_func_v2(dtxyzs, triples_Zs, scatter_idx, element_codepairs, c
 	codepair_gather = tf.gather_nd(codepair_idx, triples_Zs)
 	codepairs = tf.gather(element_codepairs, codepair_gather)
 	other_triples = tf.where(tf.equal(triples_Zs[:,0], replace_Z), triples_Zs[:,1], triples_Zs[:,0])
-	replace_codes = tf.gather(replace_codepairs, other_triples)
+	gather_replace = tf.stack([tf.tile(tf.range(tf.shape(replace_idx)[0], dtype=tf.int32), [tf.shape(other_triples)[0]]), other_triples], axis=-1)
+	replace_codes = tf.gather_nd(replace_codepairs, gather_replace)
 	codepairs = tf.where(replace_mask, replace_codes, codepairs)
 	angular_embed = tf.expand_dims(angular_embed, axis=-3) * tf.expand_dims(tf.expand_dims(codepairs, axis=-1), axis=-1)
 	scatter_shape = [tf.shape(padding_mask)[0], tf.reduce_max(scatter_idx[:,1]) + 1, tf.shape(element_codepairs)[1], 8, 8]

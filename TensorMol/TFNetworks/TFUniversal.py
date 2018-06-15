@@ -780,7 +780,7 @@ class UniversalNetwork(object):
 				self.run_metadata = tf.RunMetadata()
 		return
 
-	def alchem_prepare(self, restart=False):
+	def alchem_prepare(self):
 		"""
 		Get placeholders, graph and losses in order to begin training.
 		Also assigns the desired padding.
@@ -857,7 +857,7 @@ class UniversalNetwork(object):
 			self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
 		return
 
-	def element_opt_prepare(self, restart=False):
+	def element_opt_prepare(self):
 		"""
 		Get placeholders, graph and losses in order to begin training.
 		Also assigns the desired padding.
@@ -874,8 +874,8 @@ class UniversalNetwork(object):
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
 			self.atom_codes_pl = tf.placeholder(self.tf_precision, shape=[None, 4])
 			self.atom_codepairs_pl = tf.placeholder(self.tf_precision, shape=[None, 55, 4])
-			self.replace_atom_idx = tf.placeholder(tf.int32, shape=[None, 2])
-
+			self.replace_bool_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
+			self.replace_atom_idx = tf.cast(tf.where(tf.equal(self.replace_bool_pl, 1)), tf.int32)
 			radial_gauss = tf.Variable(self.radial_rs, trainable=False, dtype = self.tf_precision)
 			angular_gauss = tf.Variable(self.angular_rs, trainable=False, dtype = self.tf_precision)
 			thetas = tf.Variable(self.theta_s, trainable=False, dtype = self.tf_precision)
@@ -895,11 +895,14 @@ class UniversalNetwork(object):
 				charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
 
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
-			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes,
-					self.element_codepairs, self.codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
+			embed = tf_sym_func_element_codes_v2(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl,
+					self.nn_triples_pl, self.element_codes, self.element_codepairs, self.codepair_idx,
+					radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta,
+					self.replace_atom_idx, self.atom_codes_pl, self.atom_codepairs_pl)
 			atom_codes = tf.gather(self.element_codes, self.Zs_pl)
-			atom_codes = tf.scatter_update(atom_codes, self.replace_atom_idx, self.atom_codes_pl)
-			atom_codes = tf.gather(atom_codes, padding_mask)
+			atom_codes = tf.where(tf.equal(tf.tile(tf.expand_dims(self.replace_bool_pl, axis=-1), [1, 1, 4]), 1),
+				tf.tile(tf.reshape(self.atom_codes_pl, [1, 1, 4]), [1, self.max_num_atoms, 1]), atom_codes)
+			atom_codes = tf.gather_nd(atom_codes, padding_mask)
 			with tf.name_scope('energy_inference'):
 				self.atom_nn_energy, variables = self.energy_inference(embed, atom_codes, padding_mask)
 				self.mol_nn_energy = tf.reduce_sum(self.atom_nn_energy, axis=1) * energy_stddev
@@ -917,8 +920,8 @@ class UniversalNetwork(object):
 					self.total_energy += self.mol_coulomb_energy
 					self.charges = tf.gather_nd(self.atom_nn_charges, padding_mask)
 			with tf.name_scope('gradients'):
-				self.xyz_grad, atom_codes_grad, atom_codepairs_grad = tf.gradients(self.total_energy,
-										[self.xyzs_pl, self.atom_codes_pl, self.atom_codepairs_pl])[0]
+				self.xyz_grad, self.atom_codes_grad, self.atom_codepairs_grad = tf.gradients(self.total_energy,
+										[self.xyzs_pl, self.atom_codes_pl, self.atom_codepairs_pl])
 				self.gradients = tf.gather_nd(self.xyz_grad, padding_mask)
 
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
@@ -1083,6 +1086,52 @@ class UniversalNetwork(object):
 			energy, gradients = self.sess.run([self.total_energy, self.gradients], feed_dict=feed_dict)
 			return energy[0], -gradients
 		return alchem_energy_force
+
+	def get_element_opt_function(self, mol, replace_idxs):
+		try:
+			self.sess
+		except AttributeError:
+			self.sess = None
+		if self.sess is None:
+			self.assign_activation()
+			self.max_num_atoms = mol.NAtoms()
+			self.batch_size = 1
+			self.element_opt_prepare()
+		num_mols = 1
+		xyz_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype = np.float64)
+		Z_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.int32)
+		num_atoms_data = np.zeros((num_mols), dtype = np.int32)
+		replace_idx_data = np.zeros((num_mols, self.max_num_atoms), dtype=np.int32)
+		atom_codes_data = np.zeros((len(replace_idxs), 4), dtype=np.float64)
+		atom_codepairs_data = np.zeros((len(replace_idxs), 55, 4), dtype=np.float64)
+		num_atoms_data[0] = mol.NAtoms()
+		Z_data[0][:mol.NAtoms()] = mol.atoms
+		for i in range(len(replace_idxs)):
+			replace_idx_data[replace_idxs[i][0], replace_idxs[i][1]] = 1
+		atom_codes = self.sess.run(self.element_codes)
+		print(atom_codes)
+		exit(0)
+		def EF(xyz, atom_codes, atom_codepairs, DoForce=True):
+			xyz_data[0][:mol.NAtoms()] = xyz
+			atom_codes_data[0] = atom_codes
+			atom_codepairs_data[0] = atom_codepairs
+			nn_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, self.radial_cutoff, self.max_num_atoms, True, True)
+			nn_triples = MolEmb.Make_TLTensor(xyz_data, Z_data, self.angular_cutoff, self.max_num_atoms, False)
+			# coulomb_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, 19.0, self.max_num_atoms, False, False)
+			feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
+						self.nn_triples_pl:nn_triples, self.num_atoms_pl:num_atoms_data,
+						self.replace_bool_pl:replace_idx_data, self.atom_codes_pl:atom_codes_data,
+						self.atom_codepairs_pl:atom_codepairs_data}
+
+			energy, gradients, codes_gradient, codepairs_gradient = self.sess.run([self.total_energy,
+					self.gradients, self.atom_codes_grad, self.atom_codepairs_grad], feed_dict=feed_dict)
+			return energy[0], -gradients, -codes_gradient, -codepairs_gradient
+		element_codes, element_codepairs, codepair_idx = self.sess.run([self.element_codes, self.element_codepairs, self.codepair_idx])
+		original_codes = element_codes[mol.atoms[replace_idx_data[:,1]]]
+		original_codepair_gather = codepair_idx[mol.atoms[replace_idx_data[:,1]]]
+		original_codepairs = element_codepairs[original_codepair_gather]
+		return EF, original_codes, original_codepairs
+
 
 	def get_energy_force_function(self,mol):
 		try:
