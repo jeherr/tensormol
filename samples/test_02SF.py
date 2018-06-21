@@ -75,10 +75,10 @@ def run_element_opt(mol):
 	energy, forces, codes_force, codepairs_force = EF(mol.coords, original_codes, original_codepairs)
 	atom_codes = original_codes + codes_force
 	atom_codepairs = original_codepairs + codepairs_force
-	for i in range(5000):
+	for i in range(20000):
 		energy, forces, codes_force, codepairs_force = EF(mol.coords, atom_codes, atom_codepairs)
-		atom_codes += codes_force
-		atom_codepairs += codepairs_force
+		atom_codes += np.linalg.norm(codes_force) * codes_force
+		atom_codepairs += np.linalg.norm(codepairs_force, axis=1) * codepairs_force
 		rms_codeforce = np.sqrt(np.mean(np.square(codes_force)))
 		rms_codepairforce = np.sqrt(np.mean(np.square(codepairs_force)))
 		print(energy, rms_codeforce, rms_codepairforce)
