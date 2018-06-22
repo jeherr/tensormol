@@ -58,20 +58,36 @@ def run_alchemical_trans(mols):
 	alchem_ef = network.evaluate_alchem_mol(mols)
 	transitions = [1,1000]
 	alchemical_transformation(alchem_ef, mols, mols[0].coords, transitions)
-	# for i in range(101):
-	# 	delta = np.array(i / 100.).reshape((1))
-	# 	energy, forces = alchem_ef(mols, delta)
-	# 	print(energy, forces)
-		# e.append(energy)
-		# f.append(forces)
-	# print(e)
 
-a=MSet("diazepam", center_=False)
+# a=MSet("diazepam", center_=False)
+# a.ReadXYZ()
+# b=MSet("water_diazepam", center_=False)
+# b.ReadXYZ()
+# mols = [a.mols[0], b.mols[0]]
+# run_alchemical_trans(mols)
+
+def run_element_opt(mol):
+	mol.atoms[18] = 7
+	network = UniversalNetwork(name="SF_Universal_master_jeherr_Thu_May_31_16.20.05_2018")
+	replace_idxs = [[0,18]]
+	# network.get_element_opt_function(mol, replace_idxs)
+	EF, original_codes, original_codepairs = network.get_element_opt_function(mol, replace_idxs)
+	energy, forces, codes_force, codepairs_force = EF(mol.coords, original_codes, original_codepairs)
+	atom_codes = original_codes + codes_force
+	atom_codepairs = original_codepairs + codepairs_force
+	for i in range(20000):
+		energy, forces, codes_force, codepairs_force = EF(mol.coords, atom_codes, atom_codepairs)
+		atom_codes += np.linalg.norm(codes_force) * codes_force
+		atom_codepairs += np.linalg.norm(codepairs_force, axis=1) * codepairs_force
+		rms_codeforce = np.sqrt(np.mean(np.square(codes_force)))
+		rms_codepairforce = np.sqrt(np.mean(np.square(codepairs_force)))
+		print(energy, rms_codeforce, rms_codepairforce)
+	print(atom_codes)
+
+
+a=MSet("diazepam")
 a.ReadXYZ()
-b=MSet("water_diazepam", center_=False)
-b.ReadXYZ()
-mols = [a.mols[0], b.mols[0]]
-run_alchemical_trans(mols)
+run_element_opt(a.mols[0])
 
 def alchem_chain_opt(mols):
 	network = UniversalNetwork(name="SF_Universal_master_jeherr_Thu_May_31_16.20.05_2018")

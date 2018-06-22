@@ -316,16 +316,16 @@ def train_energy_GauSHv2(mset):
 
 def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
-	PARAMS["train_charges"] = True
+	PARAMS["train_charges"] = False
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
-	PARAMS["learning_rate"] = 0.0001
+	PARAMS["HiddenLayers"] = [512, 512, 512]
+	PARAMS["learning_rate"] = 0.00005
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 100
+	PARAMS["batch_size"] = 32
 	PARAMS["Profiling"] = False
 	PARAMS["NeuronType"] = "shifted_softplus"
-	PARAMS["tf_prec"] = "tf.float64"
+	PARAMS["tf_prec"] = "tf.float32"
 	network = UniversalNetwork(mset)
 	network.start_training()
 
@@ -856,7 +856,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-# train_energy_univ("master_jeherr_rand")
+# train_energy_univ("master_jeherr2")
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
@@ -1033,3 +1033,207 @@ print(len(a.mols))
 mols = random.sample(range(len(a.mols)), 22)
 for i in range(len(mols)):
 	write_md_input("/media/sdb1/jeherr/chemspider40/as/aimd/"+a.mols[i].properties["name"]+".in", a.mols[i])
+
+
+# def gather_coul(xyzs, Zs, atom_charges, pairs):
+# 	padding_mask = tf.where(tf.logical_and(tf.not_equal(Zs, 0), tf.reduce_any(tf.not_equal(pairs, -1), axis=-1)))
+# 	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
+# 	central_atom_charge = tf.gather_nd(atom_charges, padding_mask)
+# 	pairs = tf.gather_nd(pairs, padding_mask)
+# 	padded_pairs = tf.equal(pairs, -1)
+# 	tmp_pairs = tf.where(padded_pairs, tf.zeros_like(pairs), pairs)
+# 	gather_pairs = tf.stack([tf.cast(tf.tile(padding_mask[:,:1], [1, tf.shape(pairs)[1]]), tf.int32), tmp_pairs], axis=-1)
+# 	pair_coords = tf.gather_nd(xyzs, gather_pairs)
+# 	dxyzs = tf.expand_dims(central_atom_coords, axis=1) - pair_coords
+# 	pair_mask = tf.where(padded_pairs, tf.zeros_like(pairs), tf.ones_like(pairs))
+# 	dxyzs *= tf.cast(tf.expand_dims(pair_mask, axis=-1), eval(PARAMS["tf_prec"]))
+# 	pair_charges = tf.gather_nd(atom_charges, gather_pairs)
+# 	pair_charges *= tf.cast(pair_mask, eval(PARAMS["tf_prec"]))
+# 	q1q2 = tf.expand_dims(central_atom_charge, axis=-1) * pair_charges
+# 	return dxyzs, q1q2, padding_mask
+#
+# def calculate_coul_energy(dxyzs, q1q2, scatter_idx, max_num_atoms):
+# 	"""
+# 	Polynomial cutoff 1/r (in BOHR) obeying:
+# 	kern = 1/r at SROuter and LRInner
+# 	d(kern) = d(1/r) (true force) at SROuter,LRInner
+# 	d**2(kern) = d**2(1/r) at SROuter and LRInner.
+# 	d(kern) = 0 (no force) at/beyond SRInner and LROuter
+#
+# 	The hard cutoff is LROuter
+# 	"""
+# 	srange_inner = tf.constant(6.0*1.889725989, dtype=tf.float64)
+# 	srange_outer = tf.constant(9.0*1.889725989, dtype=tf.float64)
+# 	lrange_inner = tf.constant(13.0*1.889725989, dtype=tf.float64)
+# 	lrange_outer = tf.constant(15.0*1.889725989, dtype=tf.float64)
+# 	a, b, c, d, e, f, g, h = -43.568, 15.9138, -2.42286, 0.203849, -0.0102346, 0.000306595, -5.0738e-6, 3.57816e-8
+# 	# a, b, c, d, e, f, g, h = -43.568, 30.0728, -8.65219, 1.37564, -0.130517, 0.00738856, -0.000231061, 3.0793e-6
+# 	#a, b, c, d, e, f, g, h = -12.8001, 10.2348, -3.21999, 0.556841, -0.0571471, 0.0034799, -0.000116418, 1.65087e-6
+# 	dist = tf.norm(dxyzs+1.e-16, axis=-1)
+# 	dist *= 1.889725989
+# 	dist = tf.where(tf.less(dist, srange_inner), tf.ones_like(dist) * srange_inner, dist)
+# 	dist = tf.where(tf.greater(dist, lrange_outer), tf.ones_like(dist) * lrange_outer, dist)
+# 	dist2 = dist * dist
+# 	dist3 = dist2 * dist
+# 	dist4 = dist3 * dist
+# 	dist5 = dist4 * dist
+# 	dist6 = dist5 * dist
+# 	dist7 = dist6 * dist
+# 	kern = (a + b*dist + c*dist2 + d*dist3 + e*dist4 + f*dist5 + g*dist6 + h*dist7) / dist
+# 	# kern = tf.where(tf.less(dist, srange_inner), tf.ones_like(dist) / srange_inner, mrange_kern)
+# 	# kern = tf.where(tf.greater(dist, lrange_outer), tf.ones_like(dist) / lrange_outer, kern)
+# 	mrange_energy = tf.reduce_sum(kern * q1q2, axis=1)
+# 	lrange_energy = tf.reduce_sum(q1q2, axis=1) / lrange_outer
+# 	coulomb_energy = mrange_energy - lrange_energy
+# 	return tf.reduce_sum(tf.scatter_nd(scatter_idx, coulomb_energy, [1000, max_num_atoms]), axis=-1) / 2.0
+#
+# def wrapper(xyzs, Zs, atom_charges, pairs, maxnatoms):
+# 	dxyzs, q1q2, scatter_idx = gather_coul(xyzs, Zs, atom_charges, pairs)
+# 	coul_e = calculate_coul_energy(dxyzs, q1q2, scatter_idx, maxnatoms)
+# 	return q1q2
+#
+#
+#
+# ms = MSet("kaggle_opt")
+# ms.Load()
+# maxnatoms = ms.MaxNAtom()
+#
+# zlist = []
+# xyzlist = []
+# gradlist = []
+# nnlist = []
+# chargeslist = []
+# energylist = []
+# # n_atoms_list = []
+# for i, mol in enumerate(ms.mols):
+# 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float64)
+# 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
+# 	paddedz = np.zeros((maxnatoms), dtype=np.int32)
+# 	paddedz[:mol.atoms.shape[0]] = mol.atoms
+# 	paddedcharges = np.zeros((maxnatoms), dtype=np.float64)
+# 	paddedcharges[:mol.atoms.shape[0]] = mol.properties["charges"]
+# 	# paddedgrad = np.zeros((maxnatoms,3), dtype=np.float32)
+# 	# paddedgrad[:mol.atoms.shape[0]] = mol.properties["gradients"]
+# 	# paddednn = np.zeros((maxnatoms, 2), dtype=np.int32)
+# 	# paddednn[:mol.atoms.shape[0]] = mol.nearest_ns
+# 	# for j, atom_pairs in enumerate(mol.neighbor_list):
+# 	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]), mol.atoms[atom_pairs]], axis=-1)
+# 	# 	paddedpairs[j,:len(atom_pairs)] = molpair
+# 	xyzlist.append(paddedxyz)
+# 	zlist.append(paddedz)
+# 	chargeslist.append(paddedcharges)
+# 	energylist.append(mol.properties["energy"])
+# 	# gradlist.append(paddedgrad)
+# 	# nnlist.append(paddednn)
+# 	# n_atoms_list.append(mol.NAtoms())
+# 	# if i == 1:
+# 	# 	break
+# xyzs_np = np.stack(xyzlist).astype(np.float64)
+# zs_np = np.stack(zlist).astype(np.int32)
+# charges_np = np.stack(chargeslist).astype(np.float64)
+# energy_np = np.stack(energylist).astype(np.float64)
+
+# xyzs_pl = tf.placeholder(tf.float64, shape=[1000, maxnatoms, 3])
+# Zs_pl = tf.placeholder(tf.int32, shape=[1000, maxnatoms])
+# charges_pl = tf.placeholder(tf.float64, shape=[1000, maxnatoms])
+# coulomb_pairs_pl = tf.placeholder(tf.int32, shape=[1000, maxnatoms, None])
+#
+# coulomb_e = wrapper(xyzs_pl, Zs_pl, charges_pl, coulomb_pairs_pl, maxnatoms)
+#
+# sess = tf.Session()
+# sess.run(tf.global_variables_initializer())
+#
+# for i in range(int(len(zs_np) / 1000.)):
+# 	coulomb_pairs = MolEmb.Make_NLTensor(xyzs_np[i*1000:(i+1)*1000], zs_np[i*1000:(i+1)*1000], 19.0, maxnatoms, True, False)
+# 	feed_dict = {xyzs_pl:xyzs_np[i*1000:(i+1)*1000], Zs_pl:zs_np[i*1000:(i+1)*1000], charges_pl:charges_np[i*1000:(i+1)*1000],
+# 				coulomb_pairs_pl:coulomb_pairs}
+# 	ce = sess.run(coulomb_e, feed_dict=feed_dict)
+# 	print(ce[0])
+# 	exit(0)
+# 	for j in range(1000):
+# 		a.mols[(i*1000)+j].properties["coulomb_kern_energy"] = ce[j]
+# a.Save("kaggle_opt_tmp")
+#
+# ms.mols[0].BuildDistanceMatrix()
+# ms.mols[0].coulomb_matrix = ms.mols[0].properties["charges"] * np.expand_dims(ms.mols[0].properties["charges"], axis=-1)
+# for i in range(len(ms.mols[0].coulomb_matrix)):
+# 	ms.mols[0].coulomb_matrix[i,i] = 0.0
+# srange_inner = 6.0*1.889725989
+# srange_outer = 9.0*1.889725989
+# lrange_inner = 13.0*1.889725989
+# lrange_outer = 15.0*1.889725989
+# a, b, c, d, e, f, g, h = -43.568, 15.9138, -2.42286, 0.203849, -0.0102346, 0.000306595, -5.0738e-6, 3.57816e-8
+#
+# dist = ms.mols[0].DistMatrix * 1.889725989
+# dist = np.where(np.less(dist, srange_inner), np.ones_like(dist) * srange_inner, dist)
+# dist = np.where(np.greater(dist, lrange_outer), np.ones_like(dist) * lrange_outer, dist)
+# dist2 = dist * dist
+# dist3 = dist2 * dist
+# dist4 = dist3 * dist
+# dist5 = dist4 * dist
+# dist6 = dist5 * dist
+# dist7 = dist6 * dist
+# kern = (a + b*dist + c*dist2 + d*dist3 + e*dist4 + f*dist5 + g*dist6 + h*dist7) / dist
+# # kern = tf.where(tf.less(dist, srange_inner), tf.ones_like(dist) / srange_inner, mrange_kern)
+# # kern = tf.where(tf.greater(dist, lrange_outer), tf.ones_like(dist) / lrange_outer, kern)
+# mrange_energy = np.sum(kern * ms.mols[0].coulomb_matrix, axis=1)
+# lrange_energy = np.sum(ms.mols[0].coulomb_matrix, axis=1) / lrange_outer
+# coulomb_energy = mrange_energy - lrange_energy
+# print(np.sum(coulomb_energy) / 2.0)
+
+
+
+
+# a=MSet("cs40_p_opt")
+# b=MSet("cs40_p_new_opt")
+# c=MSet("cs40_k_new_opt")
+# d=MSet("cs40_si_opt")
+# e=MSet("cs40_br_opt")
+# f=MSet("cs40_i_opt")
+# g=MSet("cs40_ca_opt")
+# h=MSet("cs40_na_opt")
+# i=MSet("master_jeherr2")
+# a.Load()
+# b.Load()
+# c.Load()
+# d.Load()
+# e.Load()
+# f.Load()
+# g.Load()
+# h.Load()
+# i.Load()
+# i.mols+=a.mols
+# i.mols+=b.mols
+# i.mols+=c.mols
+# i.mols+=d.mols
+# i.mols+=e.mols
+# i.mols+=f.mols
+# i.mols+=g.mols
+# i.mols+=h.mols
+# print(len(i.mols))
+# i.Save()
+
+a=MSet("cs40_b_opt")
+a.Load()
+b=MSet("cs40_b_opt_eq")
+names = []
+for mol in a.mols:
+	if "name" in mol.properties:
+		names.append(mol.properties["name"])
+names = list(set(names))
+for name in names:
+	eq_mol = Mol()
+	eq_mol.properties["energy"] = 0.0
+	for mol in a.mols:
+		if "name" in mol.properties:
+			if mol.properties["name"] == name:
+				if mol.properties["energy"] < eq_mol.properties["energy"]:
+					eq_mol = mol
+	b.mols.append(eq_mol)
+print(len(b.mols))
+b.Save()
+
+#a=MSet("cs40_li_opt")
+#a.read_xyz_set_with_properties(path="/media/sdb2/jeherr/tensormol_dev/datasets/chemspider40/uncharged/opt/li/data/", properties=["name", "energy", "gradients", "dipole", "charges"])
+#print(len(a.mols), " Molecules")
+#a.Save()
