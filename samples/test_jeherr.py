@@ -318,7 +318,7 @@ def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
 	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [512, 512, 512]
+	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
 	PARAMS["learning_rate"] = 0.00005
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
@@ -844,7 +844,7 @@ def minimize_ob():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("master_jeherr", 10000)
+# RandomSmallSet("master_jeherr2", 500000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -856,7 +856,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("kaggle_opt")
+# train_energy_univ("master_jeherr2_rand")
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
@@ -875,9 +875,9 @@ train_energy_univ("kaggle_opt")
 # water_web()
 
 
-# PARAMS["tf_prec"] = "tf.float32"
-# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
-# PARAMS["SH_NRAD"] = 16
+# PARAMS["tf_prec"] = "tf.float64"
+# # PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
+# # PARAMS["SH_NRAD"] = 16
 # a = MSet("SmallMols_rand")
 # a.Load()
 # # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
@@ -890,7 +890,7 @@ train_energy_univ("kaggle_opt")
 # # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
 # # # # mt.WriteXYZfile()
 # b=MSet()
-# for i in range(1):
+# for i in range(100):
 # 	b.mols.append(a.mols[i])
 # 	# print(b.mols[i].NAtoms())
 # maxnatoms = b.MaxNAtom()
@@ -900,9 +900,9 @@ train_energy_univ("kaggle_opt")
 #
 # zlist = []
 # xyzlist = []
-# gradlist = []
-# nnlist = []
-# chargeslist = []
+# # gradlist = []
+# # nnlist = []
+# # chargeslist = []
 # # n_atoms_list = []
 # for i, mol in enumerate(b.mols):
 # 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float64)
@@ -926,7 +926,7 @@ train_energy_univ("kaggle_opt")
 # 	# n_atoms_list.append(mol.NAtoms())
 # 	# if i == 1:
 # 	# 	break
-# xyzs_tf = tf.cast(tf.stack(xyzlist), tf.float32)
+# xyzs_tf = tf.cast(tf.stack(xyzlist), tf.float64)
 # zs_tf = tf.cast(tf.stack(zlist), tf.int32)
 # # charges_tf = tf.cast(tf.stack(chargeslist), tf.float32)
 # xyzs_np = np.stack(xyzlist).astype(np.float64)
@@ -936,23 +936,23 @@ train_energy_univ("kaggle_opt")
 # # natomsstack = tf.stack(n_atoms_list)
 # # r_cutoff = 6.5
 # # gauss_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
-# elements = [1, 6, 7, 8]
-# elements_tf = tf.constant([1, 6, 7, 8], dtype=tf.int32)
-# element_pairs = np.array([[elements[i], elements[j]] for i in range(len(elements)) for j in range(i, len(elements))])
-# element_pairs_tf = tf.constant(element_pairs, dtype=tf.int32)
+# # elements = [1, 6, 7, 8]
+# # elements_tf = tf.constant([1, 6, 7, 8], dtype=tf.int32)
+# # element_pairs = np.array([[elements[i], elements[j]] for i in range(len(elements)) for j in range(i, len(elements))])
+# # element_pairs_tf = tf.constant(element_pairs, dtype=tf.int32)
 #
-# element_codes = tf.Variable(ELEMENTCODES, trainable=False, dtype=tf.float32)
-# element_codepairs = np.zeros((int(ELEMENTCODES.shape[0]*(ELEMENTCODES.shape[0]+1)/2), ELEMENTCODES.shape[1]))
-# codepair_idx = np.zeros((ELEMENTCODES.shape[0], ELEMENTCODES.shape[0]), dtype=np.int32)
-# counter = 0
-# for i in range(len(ELEMENTCODES)):
-# 	for j in range(i, len(ELEMENTCODES)):
-# 		codepair_idx[i,j] = counter
-# 		codepair_idx[j,i] = counter
-# 		element_codepairs[counter] = ELEMENTCODES[i] * ELEMENTCODES[j]
-# 		counter += 1
-# element_codepairs_tf = tf.Variable(element_codepairs, trainable=False, dtype=tf.float32)
-# codepair_idx_tf = tf.Variable(codepair_idx, trainable=False, dtype=tf.int32)
+# element_codes = tf.Variable(ELEMENTCODES, trainable=False, dtype=tf.float64)
+# # element_codepairs = np.zeros((int(ELEMENTCODES.shape[0]*(ELEMENTCODES.shape[0]+1)/2), ELEMENTCODES.shape[1]))
+# # codepair_idx = np.zeros((ELEMENTCODES.shape[0], ELEMENTCODES.shape[0]), dtype=np.int32)
+# # counter = 0
+# # for i in range(len(ELEMENTCODES)):
+# # 	for j in range(i, len(ELEMENTCODES)):
+# # 		codepair_idx[i,j] = counter
+# # 		codepair_idx[j,i] = counter
+# # 		element_codepairs[counter] = ELEMENTCODES[i] * ELEMENTCODES[j]
+# # 		counter += 1
+# # element_codepairs_tf = tf.Variable(element_codepairs, trainable=False, dtype=tf.float32)
+# # codepair_idx_tf = tf.Variable(codepair_idx, trainable=False, dtype=tf.int32)
 #
 # eta = PARAMS["AN1_eta"]
 # zeta = PARAMS["AN1_zeta"]
@@ -969,25 +969,26 @@ train_energy_univ("kaggle_opt")
 # theta_s = np.pi * np.linspace(0, (num_angular_theta_s - 1.0) / num_angular_theta_s, num_angular_theta_s)
 # angular_rs = angular_cutoff * np.linspace(0, (num_angular_rs - 1.0) / num_angular_rs, num_angular_rs)
 #
-# radial_rs_tf = tf.Variable(radial_rs, trainable=False, dtype = tf.float32)
-# angular_rs_tf = tf.Variable(angular_rs, trainable=False, dtype = tf.float32)
-# theta_s_tf = tf.Variable(theta_s, trainable=False, dtype = tf.float32)
-# radial_cutoff_tf = tf.Variable(radial_cutoff, trainable=False, dtype = tf.float32)
-# angular_cutoff_tf = tf.Variable(angular_cutoff, trainable=False, dtype = tf.float32)
-# zeta_tf = tf.Variable(zeta, trainable=False, dtype = tf.float32)
-# eta_tf = tf.Variable(eta, trainable=False, dtype = tf.float32)
+# radial_rs_tf = tf.Variable(radial_rs, trainable=False, dtype = tf.float64)
+# angular_rs_tf = tf.Variable(angular_rs, trainable=False, dtype = tf.float64)
+# theta_s_tf = tf.Variable(theta_s, trainable=False, dtype = tf.float64)
+# radial_cutoff_tf = tf.Variable(radial_cutoff, trainable=False, dtype = tf.float64)
+# angular_cutoff_tf = tf.Variable(angular_cutoff, trainable=False, dtype = tf.float64)
+# zeta_tf = tf.Variable(zeta, trainable=False, dtype = tf.float64)
+# eta_tf = tf.Variable(eta, trainable=False, dtype = tf.float64)
 #
-# nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 6.5, maxnatoms, True, True)
-# tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 3.1, maxnatoms, False)
+# nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, radial_cutoff, maxnatoms, True, True)
+# tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, angular_cutoff, maxnatoms, False)
 # nlt_tf = tf.constant(nlt, dtype=tf.int32)
 # tlt_tf = tf.constant(tlt, dtype=tf.int32)
-# replace_idx = tf.constant([0, 2], dtype=tf.int32)
-# replace_codes = tf.Variable(ELEMENTCODES[15], trainable=False, dtype=tf.float32)
-# gather_replace_codepairs = codepair_idx_tf[15]
-# replace_codepairs = tf.gather(element_codepairs_tf, gather_replace_codepairs)
-# tmp = tf_sym_func_element_codes_v2(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, element_codepairs_tf,
-# 		codepair_idx_tf, radial_rs_tf, radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf,
-# 		zeta_tf, eta_tf, replace_idx, replace_codes, replace_codepairs)
+# # replace_idx = tf.constant([0, 2], dtype=tf.int32)
+# # replace_codes = tf.Variable(ELEMENTCODES[15], trainable=False, dtype=tf.float32)
+# # gather_replace_codepairs = codepair_idx_tf[15]
+# # replace_codepairs = tf.gather(element_codepairs_tf, gather_replace_codepairs)
+# tmp = tf_sym_func_element_codes_v5(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
+# 		radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf)
+# tmp2 = tf_sym_func_element_codes_v3(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
+# 		radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf)
 #
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
@@ -995,11 +996,11 @@ train_energy_univ("kaggle_opt")
 # run_metadata = tf.RunMetadata()
 # @TMTiming("test")
 # def get_pairs():
-# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
-# 	return tmp3
-# tmp5 = get_pairs()
-# print(tmp5)
-# print(tmp5.shape)
+# 	tmp3, tmp4 = sess.run([tmp, tmp2], options=options, run_metadata=run_metadata)
+# 	return tmp3, tmp4
+# tmp5, tmp6 = get_pairs()
+# print(np.amax(np.abs(tmp5 - tmp6)))
+# # print(tmp5.shape)
 # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 # chrome_trace = fetched_timeline.generate_chrome_trace_format()
 # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
