@@ -316,17 +316,17 @@ def train_energy_GauSHv2(mset):
 
 def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
-	PARAMS["train_charges"] = False
+	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.00005
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 32
+	PARAMS["batch_size"] = 100
 	PARAMS["Profiling"] = False
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
-	network = UniversalNetwork(mset)
+	network = UniversalNetwork_v2(mset)
 	network.start_training()
 
 def eval_test_set_univ(mset):
@@ -856,7 +856,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-# train_energy_univ("master_jeherr2")
+train_energy_univ("kaggle_opt")
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
@@ -1005,34 +1005,34 @@ def minimize_ob():
 # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
 # 	f.write(chrome_trace)
 
-def write_md_input(file, mol):
-	with open(file, "w") as f:
-		f.write("$molecule\n")
-		f.write("0 1\n")
-		for i in range(mol.NAtoms()):
-			f.write(str(AtomicSymbol(mol.atoms[i]))+"  "+str(mol.coords[i,0])+"  "+str(mol.coords[i,1])+"  "+str(mol.coords[i,2])+"\n")
-		f.write("$end\n\n")
-		f.write("$rem\n")
-		f.write("jobtype aimd\n")
-		f.write("basis 6-311g**\n")
-		f.write("method wb97x-d\n")
-		f.write("time_step  40\n")
-		f.write("aimd_steps  100\n")
-		f.write("aimd_init_veloc  thermal\n")
-		f.write("aimd_temp  600\n")
-		f.write("thresh 11\n")
-		f.write("UNRESTRICTED   true\n")
-		f.write("symmetry false\n")
-		f.write("sym_ignore true\n")
-		f.write("$end")
-
-a=MSet("cs40_as_opt_eq")
-a.Load()
-a.cut_max_num_atoms(40)
-print(len(a.mols))
-mols = random.sample(range(len(a.mols)), 22)
-for i in range(len(mols)):
-	write_md_input("/media/sdb1/jeherr/chemspider40/as/aimd/"+a.mols[i].properties["name"]+".in", a.mols[i])
+# def write_md_input(file, mol):
+# 	with open(file, "w") as f:
+# 		f.write("$molecule\n")
+# 		f.write("0 1\n")
+# 		for i in range(mol.NAtoms()):
+# 			f.write(str(AtomicSymbol(mol.atoms[i]))+"  "+str(mol.coords[i,0])+"  "+str(mol.coords[i,1])+"  "+str(mol.coords[i,2])+"\n")
+# 		f.write("$end\n\n")
+# 		f.write("$rem\n")
+# 		f.write("jobtype aimd\n")
+# 		f.write("basis 6-311g**\n")
+# 		f.write("method wb97x-d\n")
+# 		f.write("time_step  40\n")
+# 		f.write("aimd_steps  100\n")
+# 		f.write("aimd_init_veloc  thermal\n")
+# 		f.write("aimd_temp  600\n")
+# 		f.write("thresh 11\n")
+# 		f.write("UNRESTRICTED   true\n")
+# 		f.write("symmetry false\n")
+# 		f.write("sym_ignore true\n")
+# 		f.write("$end")
+#
+# a=MSet("cs40_as_opt_eq")
+# a.Load()
+# a.cut_max_num_atoms(40)
+# print(len(a.mols))
+# mols = random.sample(range(len(a.mols)), 22)
+# for i in range(len(mols)):
+# 	write_md_input("/media/sdb1/jeherr/chemspider40/as/aimd/"+a.mols[i].properties["name"]+".in", a.mols[i])
 
 
 # def gather_coul(xyzs, Zs, atom_charges, pairs):
@@ -1213,25 +1213,25 @@ for i in range(len(mols)):
 # print(len(i.mols))
 # i.Save()
 
-a=MSet("cs40_b_opt")
-a.Load()
-b=MSet("cs40_b_opt_eq")
-names = []
-for mol in a.mols:
-	if "name" in mol.properties:
-		names.append(mol.properties["name"])
-names = list(set(names))
-for name in names:
-	eq_mol = Mol()
-	eq_mol.properties["energy"] = 0.0
-	for mol in a.mols:
-		if "name" in mol.properties:
-			if mol.properties["name"] == name:
-				if mol.properties["energy"] < eq_mol.properties["energy"]:
-					eq_mol = mol
-	b.mols.append(eq_mol)
-print(len(b.mols))
-b.Save()
+# a=MSet("cs40_b_opt")
+# a.Load()
+# b=MSet("cs40_b_opt_eq")
+# names = []
+# for mol in a.mols:
+# 	if "name" in mol.properties:
+# 		names.append(mol.properties["name"])
+# names = list(set(names))
+# for name in names:
+# 	eq_mol = Mol()
+# 	eq_mol.properties["energy"] = 0.0
+# 	for mol in a.mols:
+# 		if "name" in mol.properties:
+# 			if mol.properties["name"] == name:
+# 				if mol.properties["energy"] < eq_mol.properties["energy"]:
+# 					eq_mol = mol
+# 	b.mols.append(eq_mol)
+# print(len(b.mols))
+# b.Save()
 
 #a=MSet("cs40_li_opt")
 #a.read_xyz_set_with_properties(path="/media/sdb2/jeherr/tensormol_dev/datasets/chemspider40/uncharged/opt/li/data/", properties=["name", "energy", "gradients", "dipole", "charges"])
