@@ -3,7 +3,7 @@ import time
 import random
 import itertools as it
 PARAMS["max_checkpoints"] = 3
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]=""
 
 # Takes two nearly identical crystal lattices and interpolates a core/shell structure, must be oriented identically and stoichiometric
 def InterpolateGeometries():
@@ -856,12 +856,15 @@ def run_qchem_meta():
 		a.cut_max_num_atoms(30)
 	mols = random.sample(range(len(a.mols)), min(len(a.mols), 100))
 	for i in range(len(mols)):
-		mol = a.mols[i]
-		ForceField = lambda x: QchemDFT(Mol(mol.atoms,x),basis_ = '6-311g**',xc_='wB97X-D', jobtype_='force', filename_=mol.properties["name"], path_='./qchem/', threads=8)
-		masses = np.array(list(map(lambda x: ATOMICMASSESAMU[x-1],mol.atoms)))
-		print("Masses:", masses)
-		meta = MetaDynamics(ForceField, mol, EandF_=ForceField)
-		meta.Prop()
+		try:
+			mol = a.mols[i]
+			ForceField = lambda x: QchemDFT(Mol(mol.atoms,x),basis_ = '6-311g**',xc_='wB97X-D', jobtype_='force', filename_=mol.properties["name"], path_='./qchem/', threads=8)
+			masses = np.array(list(map(lambda x: ATOMICMASSESAMU[x-1],mol.atoms)))
+			print("Masses:", masses)
+			meta = MetaDynamics(ForceField, mol, EandF_=ForceField)
+			meta.Prop()
+		except:
+			continue
 
 run_qchem_meta()
 
