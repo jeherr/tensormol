@@ -839,6 +839,32 @@ def minimize_ob():
 		except:
 			pass
 
+def run_qchem_meta():
+	PARAMS["MDdt"] = 2.0
+	PARAMS["RemoveInvariant"]=True
+	PARAMS["MDMaxStep"] = 200
+	PARAMS["MDThermostat"] = "Andersen"
+	PARAMS["MDTemp"]= 600.0
+	PARAMS["MDV0"] = "Thermal"
+	PARAMS["MetaMDBumpHeight"] = 1.00
+	PARAMS["MetaMDBumpWidth"] = 2.00
+	PARAMS["MetaBumpTime"] = 8.0
+	PARAMS["MetaMaxBumps"] = 50
+	a = MSet("cs40_be_opt_eq")
+	a.Load()
+	if len(a.mols) > 100:
+		a.cut_max_num_atoms(30)
+	mols = random.sample(range(len(a.mols)), min(len(a.mols), 100))
+	for i in range(len(mols)):
+		mol = a.mols[i]
+		ForceField = lambda x: QchemDFT(Mol(mol.atoms,x),basis_ = '6-311g**',xc_='wB97X-D', jobtype_='force', filename_=mol.properties["name"], path_='./qchem/', threads=8)
+		masses = np.array(list(map(lambda x: ATOMICMASSESAMU[x-1],mol.atoms)))
+		print("Masses:", masses)
+		meta = MetaDynamics(ForceField, mol, EandF_=ForceField)
+		meta.Prop()
+
+run_qchem_meta()
+
 
 # minimize_ob()
 # InterpoleGeometries()
@@ -1181,38 +1207,6 @@ def minimize_ob():
 # lrange_energy = np.sum(ms.mols[0].coulomb_matrix, axis=1) / lrange_outer
 # coulomb_energy = mrange_energy - lrange_energy
 # print(np.sum(coulomb_energy) / 2.0)
-
-
-
-
-# a=MSet("cs40_p_opt")
-# b=MSet("cs40_p_new_opt")
-# c=MSet("cs40_k_new_opt")
-# d=MSet("cs40_si_opt")
-# e=MSet("cs40_br_opt")
-# f=MSet("cs40_i_opt")
-# g=MSet("cs40_ca_opt")
-# h=MSet("cs40_na_opt")
-# i=MSet("master_jeherr2")
-# a.Load()
-# b.Load()
-# c.Load()
-# d.Load()
-# e.Load()
-# f.Load()
-# g.Load()
-# h.Load()
-# i.Load()
-# i.mols+=a.mols
-# i.mols+=b.mols
-# i.mols+=c.mols
-# i.mols+=d.mols
-# i.mols+=e.mols
-# i.mols+=f.mols
-# i.mols+=g.mols
-# i.mols+=h.mols
-# print(len(i.mols))
-# i.Save()
 
 # a=MSet("cs40_b_opt")
 # a.Load()
