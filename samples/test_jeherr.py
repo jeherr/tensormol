@@ -3,7 +3,7 @@ import time
 import random
 import itertools as it
 PARAMS["max_checkpoints"] = 3
-os.environ["CUDA_VISIBLE_DEVICES"]=""
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 # Takes two nearly identical crystal lattices and interpolates a core/shell structure, must be oriented identically and stoichiometric
 def InterpolateGeometries():
@@ -318,7 +318,7 @@ def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
 	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
+	PARAMS["HiddenLayers"] = [1536, 1536, 1536]
 	PARAMS["learning_rate"] = 0.00005
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
@@ -850,7 +850,7 @@ def run_qchem_meta():
 	PARAMS["MetaMDBumpWidth"] = 2.00
 	PARAMS["MetaBumpTime"] = 8.0
 	PARAMS["MetaMaxBumps"] = 50
-	a = MSet("cs40_be_opt_eq")
+	a = MSet("cs40_li_opt_eq")
 	a.Load()
 	if len(a.mols) > 100:
 		a.cut_max_num_atoms(30)
@@ -866,14 +866,14 @@ def run_qchem_meta():
 		except:
 			continue
 
-run_qchem_meta()
+# run_qchem_meta()
 
 
 # minimize_ob()
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("master_jeherr2", 500000)
+# RandomSmallSet("master_jeherr2", 1000000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -885,7 +885,7 @@ run_qchem_meta()
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-# train_energy_univ("master_jeherr2_rand")
+train_energy_univ("master_jeherr2_rand")
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")

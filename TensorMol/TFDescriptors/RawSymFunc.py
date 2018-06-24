@@ -3454,10 +3454,10 @@ def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, radial_ga
 		Digested Mol. In the shape nmol X maxnatom X (Dimension of radius part + Dimension of angular part)
 	"""
 	dxyzs, pair_Zs = sparse_pairs(xyzs, Zs, pairs)
-	radial_embed = tf_radial_sym_func_v5(dxyzs, radial_gauss, radial_cutoff, eta)
+	radial_embed = tf_radial_sym_func(dxyzs, radial_gauss, radial_cutoff, eta)
 	coded_radial_embed = tf_radial_code_channel_sym_func(radial_embed, pair_Zs, element_codes)
 	dtxyzs, triples_Zs, scatter_idx = sparse_triples(xyzs, Zs, triples)
-	angular_embed = tf_angular_sym_func_v5(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta)
+	angular_embed = tf_angular_sym_func(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta)
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 	coded_angular_embed = tf_angular_code_channel_sym_func(angular_embed, triples_Zs, element_codes, padding_mask, scatter_idx)
 	embed = tf.concat([radial_embed, angular_embed], axis=-1)

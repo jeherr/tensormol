@@ -690,7 +690,7 @@ class UniversalNetwork(object):
 		self.energy_mean = np.mean(energies)
 		self.energy_stddev = np.std(energies)
 		self.embed_shape = self.element_codes.shape[1] * (self.radial_rs.shape[0] + self.angular_rs.shape[0] * self.theta_s.shape[0])
-		self.label_shape = self.energy_mean.shape 
+		self.label_shape = self.energy_mean.shape
 		return
 
 	def train_prepare(self, restart=False):
@@ -1296,8 +1296,8 @@ class UniversalNetwork_v2(UniversalNetwork):
 				charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
 
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
-			embed = tf_sym_func_element_codes_v3(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl, self.element_codes,
-					radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
+			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl,
+					self.element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
 			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			with tf.name_scope('energy_inference'):
 				self.atom_nn_energy, variables = self.energy_inference(embed, atom_codes, padding_mask)
@@ -1452,4 +1452,3 @@ class UniversalNetwork_v2(UniversalNetwork):
 		lrange_energy = tf.reduce_sum(q1q2, axis=1) / lrange_outer
 		coulomb_energy = (mrange_energy - lrange_energy) / 2.0
 		return tf.reduce_sum(tf.scatter_nd(scatter_idx, coulomb_energy, [self.batch_size, self.max_num_atoms]), axis=-1)
-
