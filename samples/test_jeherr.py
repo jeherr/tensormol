@@ -318,7 +318,7 @@ def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
 	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [1536, 1536, 1536]
+	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.00005
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
@@ -1014,10 +1014,10 @@ train_energy_univ("master_jeherr2_rand")
 # # replace_codes = tf.Variable(ELEMENTCODES[15], trainable=False, dtype=tf.float32)
 # # gather_replace_codepairs = codepair_idx_tf[15]
 # # replace_codepairs = tf.gather(element_codepairs_tf, gather_replace_codepairs)
-# tmp = tf_sym_func_element_codes_v5(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
+# tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
 # 		radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf)
-# tmp2 = tf_sym_func_element_codes_v3(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
-# 		radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf)
+# # tmp2 = tf_sym_func_element_codes_v3(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
+# # 		radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf)
 #
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
@@ -1025,45 +1025,15 @@ train_energy_univ("master_jeherr2_rand")
 # run_metadata = tf.RunMetadata()
 # @TMTiming("test")
 # def get_pairs():
-# 	tmp3, tmp4 = sess.run([tmp, tmp2], options=options, run_metadata=run_metadata)
-# 	return tmp3, tmp4
-# tmp5, tmp6 = get_pairs()
-# print(np.amax(np.abs(tmp5 - tmp6)))
-# # print(tmp5.shape)
+# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
+# 	return tmp3
+# tmp5 = get_pairs()
+# print(tmp5)
+# print(tmp5.shape)
 # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
 # chrome_trace = fetched_timeline.generate_chrome_trace_format()
 # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
 # 	f.write(chrome_trace)
-
-# def write_md_input(file, mol):
-# 	with open(file, "w") as f:
-# 		f.write("$molecule\n")
-# 		f.write("0 1\n")
-# 		for i in range(mol.NAtoms()):
-# 			f.write(str(AtomicSymbol(mol.atoms[i]))+"  "+str(mol.coords[i,0])+"  "+str(mol.coords[i,1])+"  "+str(mol.coords[i,2])+"\n")
-# 		f.write("$end\n\n")
-# 		f.write("$rem\n")
-# 		f.write("jobtype aimd\n")
-# 		f.write("basis 6-311g**\n")
-# 		f.write("method wb97x-d\n")
-# 		f.write("time_step  40\n")
-# 		f.write("aimd_steps  100\n")
-# 		f.write("aimd_init_veloc  thermal\n")
-# 		f.write("aimd_temp  600\n")
-# 		f.write("thresh 11\n")
-# 		f.write("UNRESTRICTED   true\n")
-# 		f.write("symmetry false\n")
-# 		f.write("sym_ignore true\n")
-# 		f.write("$end")
-#
-# a=MSet("cs40_as_opt_eq")
-# a.Load()
-# a.cut_max_num_atoms(40)
-# print(len(a.mols))
-# mols = random.sample(range(len(a.mols)), 22)
-# for i in range(len(mols)):
-# 	write_md_input("/media/sdb1/jeherr/chemspider40/as/aimd/"+a.mols[i].properties["name"]+".in", a.mols[i])
-
 
 # def gather_coul(xyzs, Zs, atom_charges, pairs):
 # 	padding_mask = tf.where(tf.logical_and(tf.not_equal(Zs, 0), tf.reduce_any(tf.not_equal(pairs, -1), axis=-1)))
