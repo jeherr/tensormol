@@ -4,6 +4,8 @@ This Routine Requires PYSCF at Minimum
 import os
 import subprocess
 from pyscf import gto, dft, grad
+from ..ElementData import *
+from ..Containers.Sets import *
 
 str0 = "$molecule\n0 1\n"
 str1 = "$end\n\n$rem\njobtype force"
@@ -12,7 +14,7 @@ str2 = "\nbasis 6-311g**\nexchange omegaB97X-D\nthresh 11\nsymmetry false\nsym_i
 MAX_ATOMIC_NUMBER = 55
 
 class MLMM:
-	def __init__(self,nn,molAB,Nenv, mm = "OB")):
+	def __init__(self,nn,molAB,Nenv, mm = "OB"):
 		"""
 		Assuming John's OpenBabel routine works
 		"""
@@ -22,9 +24,9 @@ class MLMM:
 		return
 
 	def SeparateA(self,mol,a):
-                """
-                Make Mole A from Whole Molecule set knowing where the environment starts
-                """
+		"""
+		Make Mole A from Whole Molecule set knowing where the environment starts
+		"""
 		self.na = a
 		self.nb = len(mol.atoms) - a
 		self.natoms = len(mol.atoms)
