@@ -198,7 +198,7 @@ class SparseCodedChargedGauSHNetwork:
 			raise Ex
 		return
 
-	def GetEnergyForceRoutine(self,m,Debug=False):
+	def get_energy_force_function(self,m,Debug=False):
 		MustPrepare = False
 		if (self.batch_size>10):
 			self.batch_size=1

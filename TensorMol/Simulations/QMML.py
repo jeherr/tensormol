@@ -37,8 +37,8 @@ class MLMM:
 		m.FromXYZString(geom)
 		return m
 
-	def GetEnergyForceRoutine(self, m):
-		self.MLA = self.NN.GetEnergyForceRoutine(self.molA)
+	def get_energy_force_function(self, m):
+		self.MLA = self.NN.get_energy_force_function(self.molA)
 		def EF(xyz_,DoForce = True, Debug = False):
 			# MM
 			e, f = ob_singlepoint(self.molAB, forcefield = "MMFF94", forces = True)
@@ -165,9 +165,9 @@ class QMML:
 				return energy, force
 		return EF
 
-	def GetEnergyForceRoutine(self, m):
-		self.ML = self.NN.GetEnergyForceRoutine(self.molAB)
-		self.MLA = self.NN.GetEnergyForceRoutine(self.molA)
+	def get_energy_force_function(self, m):
+		self.ML = self.NN.get_energy_force_function(self.molAB)
+		self.MLA = self.NN.get_energy_force_function(self.molA)
 
 		def EF(xyz_,DoForce = True, Debug = False):
 			# ML AB

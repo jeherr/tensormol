@@ -158,7 +158,7 @@ def Element_EF(MName_):
 	a.Load()
 	net = SparseCodedChargedGauSHNetwork(aset=a,load=True,load_averages=True,mode='eval')
 	for mol in a.mols:
-		net.GetEnergyForceRoutine(mol)
+		net.get_energy_force_function(mol)
 
 
 

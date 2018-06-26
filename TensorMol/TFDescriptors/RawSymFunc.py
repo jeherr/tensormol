@@ -3436,7 +3436,8 @@ def NNInterface(R, Zs, eles_, GM):
 		IndexList.append(tf.reshape(tf.slice(GatherList[-1],[0,0],[NAtomOfEle,1]),[NAtomOfEle]))
 	return SymList, IndexList
 
-def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, element_codepairs, codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta):
+def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, radial_gauss, radial_cutoff,
+		angular_gauss, thetas, angular_cutoff, zeta, eta):
 	"""
 	A tensorflow implementation of the AN1 symmetry function for a set of molecule.
 	Args:
@@ -3453,21 +3454,79 @@ def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, element_c
 		Digested Mol. In the shape nmol X maxnatom X (Dimension of radius part + Dimension of angular part)
 	"""
 	dxyzs, pair_Zs = sparse_pairs(xyzs, Zs, pairs)
-	radial_embed = tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta)
+	radial_embed = tf_radial_sym_func(dxyzs, radial_gauss, radial_cutoff, eta)
+	coded_radial_embed = tf_radial_code_channel_sym_func(radial_embed, pair_Zs, element_codes)
 	dtxyzs, triples_Zs, scatter_idx = sparse_triples(xyzs, Zs, triples)
+	angular_embed = tf_angular_sym_func(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta)
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
-	angular_embed = tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codepairs, codepair_idx, angular_gauss, thetas, angular_cutoff, zeta, eta, padding_mask)
+	coded_angular_embed = tf_angular_code_channel_sym_func(angular_embed, triples_Zs, element_codes, padding_mask, scatter_idx)
+	embed = tf.concat([coded_radial_embed, coded_angular_embed], axis=-1)
+	return embed
+
+def tf_sym_func_element_codepairs(xyzs, Zs, pairs, triples, element_codes, element_codepairs,
+		codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta):
+	"""
+	A tensorflow implementation of the AN1 symmetry function for a set of molecule.
+	Args:
+		xyzs: nmol X maxnatom X 3 tensor of coordinates.
+		Zs: nmol X max_n_atom tensor of atomic numbers.
+		elements: a neles X 1 tensor of elements present in the data.
+		element_pairs: a nelepairs X 2 X 12tensor of elements pairs present in the data.
+		element_codes: n_elements x 4 tensor of codes for embedding elements
+		radial_gauss: A symmetry function parameter of radius part
+		radial_cutoff: Radial Cutoff of radius part
+		angular_gauss: A symmetry function parameter of angular part
+		angular_cutoff: Radial Cutoff of angular part
+	Returns:
+		Digested Mol. In the shape nmol X maxnatom X (Dimension of radius part + Dimension of angular part)
+	"""
+	dxyzs, pair_Zs = sparse_pairs(xyzs, Zs, pairs)
+	radial_embed = tf_radial_sym_func_v5(dxyzs, radial_gauss, radial_cutoff, eta)
+	coded_radial_embed = tf_radial_code_channel_sym_func(radial_embed, pair_Zs, element_codes)
+	dtxyzs, triples_Zs, scatter_idx = sparse_triples(xyzs, Zs, triples)
+	angular_embed = tf_angular_sym_func_v5(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta)
+	padding_mask = tf.where(tf.not_equal(Zs, 0))
+	coded_angular_embed = tf_angular_codepair_channel_sym_func(angular_embed, triples_Zs, element_codes,
+							padding_mask, scatter_idx)
+	embed = tf.concat([coded_radial_embed, coded_angular_embed], axis=-1)
+	return embed
+
+def tf_sym_func_element_codepairs_replace(xyzs, Zs, pairs, triples, element_codes, element_codepairs,
+		codepair_idx, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta,
+		replace_idx, replace_codes, replace_codepairs):
+	"""
+	A tensorflow implementation of the AN1 symmetry function for a set of molecule.
+	Args:
+		xyzs: nmol X maxnatom X 3 tensor of coordinates.
+		Zs: nmol X max_n_atom tensor of atomic numbers.
+		elements: a neles X 1 tensor of elements present in the data.
+		element_pairs: a nelepairs X 2 X 12tensor of elements pairs present in the data.
+		element_codes: n_elements x 4 tensor of codes for embedding elements
+		radial_gauss: A symmetry function parameter of radius part
+		radial_cutoff: Radial Cutoff of radius part
+		angular_gauss: A symmetry function parameter of angular part
+		angular_cutoff: Radial Cutoff of angular part
+	Returns:
+		Digested Mol. In the shape nmol X maxnatom X (Dimension of radius part + Dimension of angular part)
+	"""
+	dxyzs, pair_Zs = sparse_pairs(xyzs, Zs, pairs)
+	radial_embed = tf_radial_sym_func(dxyzs, radial_gauss, radial_cutoff, eta)
+	pairs_replace_mask = tf.equal(pairs, replace_idx[:,1])
+	coded_radial_embed = tf_radial_code_channel_sym_func_replace(radial_embed, pair_Zs, element_codes,
+						replace_codes, pairs_replace_mask)
+	dtxyzs, triples_Zs, scatter_idx = sparse_triples(xyzs, Zs, triples)
+	angular_embed = tf_angular_sym_func_v5(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta)
+	triples_replace_mask = tf.gather_nd(tf.reduce_any(tf.equal(triples, replace_idx[:,1]), axis=-1)[0,...], scatter_idx)
+	replace_Z = tf.gather_nd(Zs, replace_idx)
+	padding_mask = tf.where(tf.not_equal(Zs, 0))
+	coded_angular_embed = tf_angular_codepair_channel_sym_func_replace(angular_embed, triples_Zs, element_codes,
+							padding_mask, scatter_idx)
 	embed = tf.concat([radial_embed, angular_embed], axis=-1)
 	return embed
 
-def tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutoff, eta):
+def tf_radial_sym_func(dxyzs, radial_gauss, radial_cutoff, eta):
 	"""
-	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
-	Here j,k are all other atoms, but implicitly the output
-	is separated across elements as well. eleps_ is a list of element pairs
-	G = 2**(1-zeta) \sum_{j,k \neq i} (Angular triple) (radial triple) f_c(R_{ij}) f_c(R_{ik})
-	a-la MolEmb.cpp. Also depends on PARAMS for zeta, eta, theta_s r_s
-	This version appends the element type (by its index in eles_) in RadpairEle, and it is sorted by m,i,l,j
+	Tensorflow implementation of the ANI-1 radial symmetry functions.
 
 	Args:
 		dxyzs: n_case X max_neighbors X 3 tensor of coordinates.
@@ -3484,21 +3543,12 @@ def tf_radial_sym_func(dxyzs, pair_Zs, element_codes, radial_gauss, radial_cutof
 	exponent *= -1.0 * eta
 	gauss = tf.exp(exponent)
 	cutoff = 0.5 * (tf.cos(np.pi * dist_tensor / radial_cutoff) + 1.0)
-	pair_codes = tf.gather(element_codes, pair_Zs)
-	pad_mask = tf.where(tf.equal(pair_Zs, 0), tf.zeros_like(pair_Zs, dtype=eval(PARAMS["tf_prec"])), tf.ones_like(pair_Zs, dtype=eval(PARAMS["tf_prec"])))
-	pair_codes *= tf.expand_dims(pad_mask, axis=-1)
-	radial_embed = tf.expand_dims(gauss, axis=-2) * tf.expand_dims(tf.expand_dims(cutoff, axis=-1) * pair_codes, axis=-1)
-	return tf.reduce_sum(radial_embed, axis=1)
+	radial_embed = gauss * tf.expand_dims(cutoff, axis=-1)
+	return radial_embed
 
-def tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codepairs, codepair_idx, angular_gauss, thetas, angular_cutoff, zeta, eta, padding_mask):
+def tf_angular_sym_func(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta):
 	"""
-	A tensorflow implementation of the angular AN1 symmetry function for a single input molecule.
-	Here j,k are all other atoms, but implicitly the output
-	is separated across elements as well. eleps_ is a list of element pairs
-	G = 2**(1-zeta) \sum_{j,k \neq i} (Angular triple) (radial triple) f_c(R_{ij}) f_c(R_{ik})
-	a-la MolEmb.cpp. Also depends on PARAMS for zeta, eta, theta_s r_s
-	This version improves append ele pair index at the end of triples with
-	sorted order: m, i, l, j, k
+	Tensorflow implementation of the ANI-1 angular symmetry functions.
 
 	Args:
 		R: a nmol X maxnatom X 3 tensor of coordinates.
@@ -3517,8 +3567,8 @@ def tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codepairs, code
 	dij_dik = dist_jk_tensor[...,0] * dist_jk_tensor[...,1]
 	ij_dot_ik = tf.reduce_sum(dtxyzs[...,0,:] * dtxyzs[...,1,:], axis=-1)
 	cos_angle = ij_dot_ik / dij_dik
-	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle) - 1.e-16, cos_angle)
-	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle) + 1.e-16, cos_angle)
+	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle) - 1.e-6, cos_angle)
+	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle) + 1.e-6, cos_angle)
 	theta_ijk = tf.acos(cos_angle)
 	dtheta = tf.expand_dims(theta_ijk, axis=-1) - thetas
 	cos_factor = tf.cos(2 * dtheta)
@@ -3528,14 +3578,107 @@ def tf_angular_sym_func(dtxyzs, triples_Zs, scatter_idx, element_codepairs, code
 	cutoffk = 0.5 * (tf.cos(np.pi * dist_jk_tensor[...,1] / angular_cutoff) + 1.0)
 	cutoff = cutoffj * cutoffk
 	angular_embed = tf.expand_dims(tf.pow(1.0 + cos_factor, zeta), axis=-1) * tf.expand_dims(dist_factor, axis=-2)
+	angular_embed *= tf.pow(tf.cast(2.0, eval(PARAMS["tf_prec"])), 1.0 - zeta)
 	angular_embed *= tf.expand_dims(tf.expand_dims(cutoff, axis=-1), axis=-1)
+	return angular_embed
+
+def tf_angular_sym_func_v2(dtxyzs, triples_Zs, scatter_idx, element_codes, angular_gauss, thetas, angular_cutoff, zeta, eta, padding_mask):
+	"""
+	Tensorflow implementation of the ANI-1 angular symmetry functions. Uses trigonometric
+	identities to avoid taking the ArcCos, which has asymptotic second derivatives.
+	May be more stable when training with atomic force gradients.
+
+	Args:
+		R: a nmol X maxnatom X 3 tensor of coordinates.
+		Zs : nmol X maxnatom X 1 tensor of atomic numbers.
+		eleps_: a nelepairs X 2 tensor of element pairs present in the data.
+		SFP: A symmetry function parameter tensor having the number of elements
+		as the SF output. 4 X nzeta X neta X thetas X nRs. For example, SFPs_[0,0,0,0,0]
+		is the first zeta parameter. SFPs_[3,0,0,0,1] is the second R parameter.
+		R_cut: Radial Cutoff
+		AngtriEle: angular triples within the cutoff. m, i, j, k, l
+		prec: a precision.
+	Returns:
+		Digested Mol. In the shape nmol X maxnatom X nelepairs X nZeta X nEta X nThetas X nRs
+	"""
+	dist_jk_tensor = tf.norm(dtxyzs+1.e-16, axis=-1)
+	dij_dik = dist_jk_tensor[...,0] * dist_jk_tensor[...,1]
+	ij_dot_ik = tf.reduce_sum(dtxyzs[...,0,:] * dtxyzs[...,1,:], axis=-1)
+	ij_cross_ik = tf.cross(dtxyzs[...,0,:], dtxyzs[...,1,:])
+	cos_angle = ij_dot_ik / dij_dik
+	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle) - 1.e-6, cos_angle)
+	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle) + 1.e-6, cos_angle)
+	sin_angle = tf.norm(ij_cross_ik+1.e-16, axis=-1) / dij_dik
+	sin_angle = tf.where(tf.greater_equal(sin_angle, 1.0), tf.ones_like(sin_angle) - 1.e-6, sin_angle)
+	sin_angle = tf.where(tf.less_equal(sin_angle, -1.0), -1.0 * tf.ones_like(sin_angle) + 1.e-6, sin_angle)
+	cos_thetas = tf.cos(thetas)
+	sin_thetas = tf.sin(thetas)
+	cos_factor = 2.0 * tf.square(tf.expand_dims(cos_angle, axis=-1) * cos_thetas
+				+ tf.expand_dims(sin_angle, axis=-1) * sin_thetas)
+	exponent = tf.expand_dims(tf.reduce_sum(dist_jk_tensor, axis=-1) / 2.0, axis=-1) - angular_gauss
+	dist_factor = tf.exp(-eta * tf.square(exponent))
+	cutoffj = 0.5 * (tf.cos(np.pi * dist_jk_tensor[...,0] / angular_cutoff) + 1.0)
+	cutoffk = 0.5 * (tf.cos(np.pi * dist_jk_tensor[...,1] / angular_cutoff) + 1.0)
+	cutoff = cutoffj * cutoffk
+	angular_embed = tf.expand_dims(tf.pow(cos_factor, zeta), axis=-1) * tf.expand_dims(dist_factor, axis=-2)
+	angular_embed *= tf.pow(tf.cast(2.0, eval(PARAMS["tf_prec"])), 1.0 - zeta)
+	angular_embed *= tf.expand_dims(tf.expand_dims(cutoff, axis=-1), axis=-1)
+	return angular_embed
+
+def tf_radial_code_channel_sym_func(radial_embed, pair_Zs, element_codes):
+	pair_codes = tf.gather(element_codes, pair_Zs)
+	pad_mask = tf.where(tf.equal(pair_Zs, 0), tf.zeros_like(pair_Zs, dtype=eval(PARAMS["tf_prec"])),
+				tf.ones_like(pair_Zs, dtype=eval(PARAMS["tf_prec"])))
+	pair_codes *= tf.expand_dims(pad_mask, axis=-1)
+	radial_embed = tf.expand_dims(radial_embed, axis=-2) * tf.expand_dims(pair_codes, axis=-1)
+	radial_embed = tf.reduce_sum(radial_embed, axis=1)
+	return radial_embed
+
+def tf_radial_code_channel_sym_func_replace(radial_embed, pair_Zs, element_codes, replace_codes, replace_mask):
+	pair_codes = tf.gather(element_codes, pair_Zs)
+	pair_codes = tf.where(tf.tile(tf.expand_dims(replace_mask[0,...], axis=-1), [1, 1, 4]),
+			tf.tile(tf.reshape(replace_codes, [1, 1, -1]),
+			[tf.shape(pair_codes)[0], tf.shape(pair_codes)[1], 1]), pair_codes)
+	pad_mask = tf.where(tf.equal(pair_Zs, 0), tf.zeros_like(pair_Zs, dtype=eval(PARAMS["tf_prec"])),
+				tf.ones_like(pair_Zs, dtype=eval(PARAMS["tf_prec"])))
+	pair_codes *= tf.expand_dims(pad_mask, axis=-1)
+	radial_embed = tf.expand_dims(radial_embed, axis=-2) * tf.expand_dims(pair_codes, axis=-1)
+	radial_embed = tf.reduce_sum(radial_embed, axis=1)
+	return radial_embed
+
+def tf_angular_code_channel_sym_func(angular_embed, triples_Zs, element_codes, padding_mask, triples_scatter):
+	angular_embed = (tf.expand_dims(angular_embed, axis=-3)
+						* tf.expand_dims(tf.expand_dims(tf.reduce_prod(tf.gather(element_codes,
+						triples_Zs), axis=-2), axis=-1), axis=-1))
+	scatter_shape = [tf.shape(padding_mask)[0], tf.reduce_max(triples_scatter[:,1]) + 1, tf.shape(element_codes)[1], 8, 8]
+	angular_embed = tf.reduce_sum(tf.scatter_nd(triples_scatter, angular_embed, scatter_shape), axis=1)
+	angular_embed = tf.reshape(angular_embed, [tf.shape(angular_embed)[0], tf.shape(element_codes)[1], -1])
+	return angular_embed
+
+def tf_angular_codepair_channel_sym_func(angular_embed, triples_Zs, element_codepairs, codepair_idx,
+		padding_mask, triples_scatter):
 	codepair_gather = tf.gather_nd(codepair_idx, triples_Zs)
 	codepairs = tf.gather(element_codepairs, codepair_gather)
 	angular_embed = tf.expand_dims(angular_embed, axis=-3) * tf.expand_dims(tf.expand_dims(codepairs, axis=-1), axis=-1)
-	scatter_shape = [tf.shape(padding_mask)[0], tf.reduce_max(scatter_idx[:,1]) + 1, tf.shape(element_codepairs)[1], 8, 8]
-	angular_embed = tf.reduce_sum(tf.scatter_nd(scatter_idx, angular_embed, scatter_shape), axis=1)
-	angular_embed *= tf.pow(tf.cast(2.0, eval(PARAMS["tf_prec"])), 1.0 - zeta)
-	return tf.reshape(angular_embed, [tf.shape(angular_embed)[0], tf.shape(element_codepairs)[1], -1])
+	scatter_shape = [tf.shape(padding_mask)[0], tf.reduce_max(triples_scatter[:,1]) + 1, tf.shape(element_codes)[1], 8, 8]
+	angular_embed = tf.reduce_sum(tf.scatter_nd(triples_scatter, angular_embed, scatter_shape), axis=1)
+	angular_embed = tf.reshape(angular_embed, [tf.shape(angular_embed)[0], tf.shape(element_codes)[1], -1])
+	return angular_embed
+
+def tf_angular_codepair_channel_sym_func_replace(angular_embed, triples_Zs, element_codepairs, codepair_idx,
+		padding_mask, triples_scatter, replace_idx, replace_codepairs, replace_mask, replace_Z):
+	codepair_gather = tf.gather_nd(codepair_idx, triples_Zs)
+	codepairs = tf.gather(element_codepairs, codepair_gather)
+	other_triples = tf.where(tf.equal(triples_Zs[:,0], replace_Z), triples_Zs[:,1], triples_Zs[:,0])
+	gather_replace = tf.stack([tf.tile(tf.range(tf.shape(replace_idx)[0], dtype=tf.int32),
+					[tf.shape(other_triples)[0]]), other_triples], axis=-1)
+	replace_codes = tf.gather_nd(replace_codepairs, gather_replace)
+	codepairs = tf.where(replace_mask, replace_codes, codepairs)
+	angular_embed = tf.expand_dims(angular_embed, axis=-3) * tf.expand_dims(tf.expand_dims(codepairs, axis=-1), axis=-1)
+	scatter_shape = [tf.shape(padding_mask)[0], tf.reduce_max(triples_scatter[:,1]) + 1, tf.shape(element_codes)[1], 8, 8]
+	angular_embed = tf.reduce_sum(tf.scatter_nd(triples_scatter, angular_embed, scatter_shape), axis=1)
+	angular_embed = tf.reshape(angular_embed, [tf.shape(angular_embed)[0], tf.shape(element_codes)[1], -1])
+	return angular_embed
 
 def sparse_pairs(xyzs, Zs, pairs):
 	padding_mask = tf.where(tf.not_equal(Zs, 0))

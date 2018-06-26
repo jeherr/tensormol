@@ -318,15 +318,15 @@ def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
 	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
-	PARAMS["learning_rate"] = 0.0001
+	PARAMS["HiddenLayers"] = [512, 512, 512]
+	PARAMS["learning_rate"] = 0.00005
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
 	PARAMS["batch_size"] = 100
 	PARAMS["Profiling"] = False
 	PARAMS["NeuronType"] = "shifted_softplus"
-	PARAMS["tf_prec"] = "tf.float64"
-	network = UniversalNetwork(mset)
+	PARAMS["tf_prec"] = "tf.float32"
+	network = UniversalNetwork_v2(mset)
 	network.start_training()
 
 def eval_test_set_univ(mset):
@@ -839,12 +839,41 @@ def minimize_ob():
 		except:
 			pass
 
+def run_qchem_meta():
+	PARAMS["MDdt"] = 2.0
+	PARAMS["RemoveInvariant"]=True
+	PARAMS["MDMaxStep"] = 200
+	PARAMS["MDThermostat"] = "Andersen"
+	PARAMS["MDTemp"]= 600.0
+	PARAMS["MDV0"] = "Thermal"
+	PARAMS["MetaMDBumpHeight"] = 1.00
+	PARAMS["MetaMDBumpWidth"] = 2.00
+	PARAMS["MetaBumpTime"] = 8.0
+	PARAMS["MetaMaxBumps"] = 50
+	a = MSet("cs40_li_opt_eq")
+	a.Load()
+	if len(a.mols) > 100:
+		a.cut_max_num_atoms(30)
+	mols = random.sample(range(len(a.mols)), min(len(a.mols), 100))
+	for i in range(len(mols)):
+		try:
+			mol = a.mols[i]
+			ForceField = lambda x: QchemDFT(Mol(mol.atoms,x),basis_ = '6-311g**',xc_='wB97X-D', jobtype_='force', filename_=mol.properties["name"], path_='./qchem/', threads=8)
+			masses = np.array(list(map(lambda x: ATOMICMASSESAMU[x-1],mol.atoms)))
+			print("Masses:", masses)
+			meta = MetaDynamics(ForceField, mol, EandF_=ForceField)
+			meta.Prop()
+		except:
+			continue
+
+# run_qchem_meta()
+
 
 # minimize_ob()
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("master_jeherr", 10000)
+# RandomSmallSet("master_jeherr2", 1000000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -856,7 +885,7 @@ def minimize_ob():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-# train_energy_univ("master_jeherr_rand")
+train_energy_univ("master_jeherr2_rand")
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
@@ -874,11 +903,11 @@ def minimize_ob():
 # metaopt_chemsp()
 # water_web()
 
-#
-# PARAMS["tf_prec"] = "tf.float32"
-# PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
-# PARAMS["SH_NRAD"] = 16
-# a = MSet("master_jeherr_rand")
+
+# PARAMS["tf_prec"] = "tf.float64"
+# # PARAMS["RBFS"] = np.stack((np.linspace(0.1, 6.0, 12), np.repeat(0.30, 12)), axis=1)
+# # PARAMS["SH_NRAD"] = 16
+# a = MSet("SmallMols_rand")
 # a.Load()
 # # a.mols.append(Mol(np.array([1,1,8]),np.array([[0.9,0.1,0.1],[1.,0.9,1.],[0.1,0.1,0.1]])))
 # # # # Tesselate that water to create a box
@@ -900,11 +929,183 @@ def minimize_ob():
 #
 # zlist = []
 # xyzlist = []
+# # gradlist = []
+# # nnlist = []
+# # chargeslist = []
+# # n_atoms_list = []
+# for i, mol in enumerate(b.mols):
+# 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float64)
+# 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
+# 	paddedz = np.zeros((maxnatoms), dtype=np.int32)
+# 	paddedz[:mol.atoms.shape[0]] = mol.atoms
+# 	# paddedcharges = np.zeros((maxnatoms), dtype=np.float64)
+# 	# paddedcharges[:mol.atoms.shape[0]] = mol.properties["charges"]
+# 	# paddedgrad = np.zeros((maxnatoms,3), dtype=np.float32)
+# 	# paddedgrad[:mol.atoms.shape[0]] = mol.properties["gradients"]
+# 	# paddednn = np.zeros((maxnatoms, 2), dtype=np.int32)
+# 	# paddednn[:mol.atoms.shape[0]] = mol.nearest_ns
+# 	# for j, atom_pairs in enumerate(mol.neighbor_list):
+# 	# 	molpair = np.stack([np.array([i for _ in range(len(mol.neighbor_list[j]))]), np.array(mol.neighbor_list[j]), mol.atoms[atom_pairs]], axis=-1)
+# 	# 	paddedpairs[j,:len(atom_pairs)] = molpair
+# 	xyzlist.append(paddedxyz)
+# 	zlist.append(paddedz)
+# 	# chargeslist.append(paddedcharges)
+# 	# gradlist.append(paddedgrad)
+# 	# nnlist.append(paddednn)
+# 	# n_atoms_list.append(mol.NAtoms())
+# 	# if i == 1:
+# 	# 	break
+# xyzs_tf = tf.cast(tf.stack(xyzlist), tf.float64)
+# zs_tf = tf.cast(tf.stack(zlist), tf.int32)
+# # charges_tf = tf.cast(tf.stack(chargeslist), tf.float32)
+# xyzs_np = np.stack(xyzlist).astype(np.float64)
+# zs_np = np.stack(zlist).astype(np.int32)
+# # gradstack = tf.stack(gradlist)
+# # nnstack = tf.stack(nnlist)
+# # natomsstack = tf.stack(n_atoms_list)
+# # r_cutoff = 6.5
+# # gauss_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
+# # elements = [1, 6, 7, 8]
+# # elements_tf = tf.constant([1, 6, 7, 8], dtype=tf.int32)
+# # element_pairs = np.array([[elements[i], elements[j]] for i in range(len(elements)) for j in range(i, len(elements))])
+# # element_pairs_tf = tf.constant(element_pairs, dtype=tf.int32)
+#
+# element_codes = tf.Variable(ELEMENTCODES, trainable=False, dtype=tf.float64)
+# # element_codepairs = np.zeros((int(ELEMENTCODES.shape[0]*(ELEMENTCODES.shape[0]+1)/2), ELEMENTCODES.shape[1]))
+# # codepair_idx = np.zeros((ELEMENTCODES.shape[0], ELEMENTCODES.shape[0]), dtype=np.int32)
+# # counter = 0
+# # for i in range(len(ELEMENTCODES)):
+# # 	for j in range(i, len(ELEMENTCODES)):
+# # 		codepair_idx[i,j] = counter
+# # 		codepair_idx[j,i] = counter
+# # 		element_codepairs[counter] = ELEMENTCODES[i] * ELEMENTCODES[j]
+# # 		counter += 1
+# # element_codepairs_tf = tf.Variable(element_codepairs, trainable=False, dtype=tf.float32)
+# # codepair_idx_tf = tf.Variable(codepair_idx, trainable=False, dtype=tf.int32)
+#
+# eta = PARAMS["AN1_eta"]
+# zeta = PARAMS["AN1_zeta"]
+#
+# #Define radial grid parameters
+# num_radial_rs = PARAMS["AN1_num_r_Rs"]
+# radial_cutoff = PARAMS["AN1_r_Rc"]
+# radial_rs = radial_cutoff * np.linspace(0, (num_radial_rs - 1.0) / num_radial_rs, num_radial_rs)
+#
+# #Define angular grid parameters
+# num_angular_rs = PARAMS["AN1_num_a_Rs"]
+# num_angular_theta_s = PARAMS["AN1_num_a_As"]
+# angular_cutoff = PARAMS["AN1_a_Rc"]
+# theta_s = np.pi * np.linspace(0, (num_angular_theta_s - 1.0) / num_angular_theta_s, num_angular_theta_s)
+# angular_rs = angular_cutoff * np.linspace(0, (num_angular_rs - 1.0) / num_angular_rs, num_angular_rs)
+#
+# radial_rs_tf = tf.Variable(radial_rs, trainable=False, dtype = tf.float64)
+# angular_rs_tf = tf.Variable(angular_rs, trainable=False, dtype = tf.float64)
+# theta_s_tf = tf.Variable(theta_s, trainable=False, dtype = tf.float64)
+# radial_cutoff_tf = tf.Variable(radial_cutoff, trainable=False, dtype = tf.float64)
+# angular_cutoff_tf = tf.Variable(angular_cutoff, trainable=False, dtype = tf.float64)
+# zeta_tf = tf.Variable(zeta, trainable=False, dtype = tf.float64)
+# eta_tf = tf.Variable(eta, trainable=False, dtype = tf.float64)
+#
+# nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, radial_cutoff, maxnatoms, True, True)
+# tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, angular_cutoff, maxnatoms, False)
+# nlt_tf = tf.constant(nlt, dtype=tf.int32)
+# tlt_tf = tf.constant(tlt, dtype=tf.int32)
+# # replace_idx = tf.constant([0, 2], dtype=tf.int32)
+# # replace_codes = tf.Variable(ELEMENTCODES[15], trainable=False, dtype=tf.float32)
+# # gather_replace_codepairs = codepair_idx_tf[15]
+# # replace_codepairs = tf.gather(element_codepairs_tf, gather_replace_codepairs)
+# tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
+# 		radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf)
+# # tmp2 = tf_sym_func_element_codes_v3(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
+# # 		radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf)
+#
+# sess = tf.Session()
+# sess.run(tf.global_variables_initializer())
+# options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+# run_metadata = tf.RunMetadata()
+# @TMTiming("test")
+# def get_pairs():
+# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
+# 	return tmp3
+# tmp5 = get_pairs()
+# print(tmp5)
+# print(tmp5.shape)
+# fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+# chrome_trace = fetched_timeline.generate_chrome_trace_format()
+# with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
+# 	f.write(chrome_trace)
+
+# def gather_coul(xyzs, Zs, atom_charges, pairs):
+# 	padding_mask = tf.where(tf.logical_and(tf.not_equal(Zs, 0), tf.reduce_any(tf.not_equal(pairs, -1), axis=-1)))
+# 	central_atom_coords = tf.gather_nd(xyzs, padding_mask)
+# 	central_atom_charge = tf.gather_nd(atom_charges, padding_mask)
+# 	pairs = tf.gather_nd(pairs, padding_mask)
+# 	padded_pairs = tf.equal(pairs, -1)
+# 	tmp_pairs = tf.where(padded_pairs, tf.zeros_like(pairs), pairs)
+# 	gather_pairs = tf.stack([tf.cast(tf.tile(padding_mask[:,:1], [1, tf.shape(pairs)[1]]), tf.int32), tmp_pairs], axis=-1)
+# 	pair_coords = tf.gather_nd(xyzs, gather_pairs)
+# 	dxyzs = tf.expand_dims(central_atom_coords, axis=1) - pair_coords
+# 	pair_mask = tf.where(padded_pairs, tf.zeros_like(pairs), tf.ones_like(pairs))
+# 	dxyzs *= tf.cast(tf.expand_dims(pair_mask, axis=-1), eval(PARAMS["tf_prec"]))
+# 	pair_charges = tf.gather_nd(atom_charges, gather_pairs)
+# 	pair_charges *= tf.cast(pair_mask, eval(PARAMS["tf_prec"]))
+# 	q1q2 = tf.expand_dims(central_atom_charge, axis=-1) * pair_charges
+# 	return dxyzs, q1q2, padding_mask
+#
+# def calculate_coul_energy(dxyzs, q1q2, scatter_idx, max_num_atoms):
+# 	"""
+# 	Polynomial cutoff 1/r (in BOHR) obeying:
+# 	kern = 1/r at SROuter and LRInner
+# 	d(kern) = d(1/r) (true force) at SROuter,LRInner
+# 	d**2(kern) = d**2(1/r) at SROuter and LRInner.
+# 	d(kern) = 0 (no force) at/beyond SRInner and LROuter
+#
+# 	The hard cutoff is LROuter
+# 	"""
+# 	srange_inner = tf.constant(6.0*1.889725989, dtype=tf.float64)
+# 	srange_outer = tf.constant(9.0*1.889725989, dtype=tf.float64)
+# 	lrange_inner = tf.constant(13.0*1.889725989, dtype=tf.float64)
+# 	lrange_outer = tf.constant(15.0*1.889725989, dtype=tf.float64)
+# 	a, b, c, d, e, f, g, h = -43.568, 15.9138, -2.42286, 0.203849, -0.0102346, 0.000306595, -5.0738e-6, 3.57816e-8
+# 	# a, b, c, d, e, f, g, h = -43.568, 30.0728, -8.65219, 1.37564, -0.130517, 0.00738856, -0.000231061, 3.0793e-6
+# 	#a, b, c, d, e, f, g, h = -12.8001, 10.2348, -3.21999, 0.556841, -0.0571471, 0.0034799, -0.000116418, 1.65087e-6
+# 	dist = tf.norm(dxyzs+1.e-16, axis=-1)
+# 	dist *= 1.889725989
+# 	dist = tf.where(tf.less(dist, srange_inner), tf.ones_like(dist) * srange_inner, dist)
+# 	dist = tf.where(tf.greater(dist, lrange_outer), tf.ones_like(dist) * lrange_outer, dist)
+# 	dist2 = dist * dist
+# 	dist3 = dist2 * dist
+# 	dist4 = dist3 * dist
+# 	dist5 = dist4 * dist
+# 	dist6 = dist5 * dist
+# 	dist7 = dist6 * dist
+# 	kern = (a + b*dist + c*dist2 + d*dist3 + e*dist4 + f*dist5 + g*dist6 + h*dist7) / dist
+# 	# kern = tf.where(tf.less(dist, srange_inner), tf.ones_like(dist) / srange_inner, mrange_kern)
+# 	# kern = tf.where(tf.greater(dist, lrange_outer), tf.ones_like(dist) / lrange_outer, kern)
+# 	mrange_energy = tf.reduce_sum(kern * q1q2, axis=1)
+# 	lrange_energy = tf.reduce_sum(q1q2, axis=1) / lrange_outer
+# 	coulomb_energy = mrange_energy - lrange_energy
+# 	return tf.reduce_sum(tf.scatter_nd(scatter_idx, coulomb_energy, [1000, max_num_atoms]), axis=-1) / 2.0
+#
+# def wrapper(xyzs, Zs, atom_charges, pairs, maxnatoms):
+# 	dxyzs, q1q2, scatter_idx = gather_coul(xyzs, Zs, atom_charges, pairs)
+# 	coul_e = calculate_coul_energy(dxyzs, q1q2, scatter_idx, maxnatoms)
+# 	return q1q2
+#
+#
+#
+# ms = MSet("kaggle_opt")
+# ms.Load()
+# maxnatoms = ms.MaxNAtom()
+#
+# zlist = []
+# xyzlist = []
 # gradlist = []
 # nnlist = []
 # chargeslist = []
+# energylist = []
 # # n_atoms_list = []
-# for i, mol in enumerate(b.mols):
+# for i, mol in enumerate(ms.mols):
 # 	paddedxyz = np.zeros((maxnatoms,3), dtype=np.float64)
 # 	paddedxyz[:mol.atoms.shape[0]] = mol.coords
 # 	paddedz = np.zeros((maxnatoms), dtype=np.int32)
@@ -921,125 +1122,86 @@ def minimize_ob():
 # 	xyzlist.append(paddedxyz)
 # 	zlist.append(paddedz)
 # 	chargeslist.append(paddedcharges)
+# 	energylist.append(mol.properties["energy"])
 # 	# gradlist.append(paddedgrad)
 # 	# nnlist.append(paddednn)
 # 	# n_atoms_list.append(mol.NAtoms())
 # 	# if i == 1:
 # 	# 	break
-# xyzs_tf = tf.cast(tf.stack(xyzlist), tf.float32)
-# zs_tf = tf.cast(tf.stack(zlist), tf.int32)
-# charges_tf = tf.cast(tf.stack(chargeslist), tf.float32)
 # xyzs_np = np.stack(xyzlist).astype(np.float64)
 # zs_np = np.stack(zlist).astype(np.int32)
-# # gradstack = tf.stack(gradlist)
-# # nnstack = tf.stack(nnlist)
-# # natomsstack = tf.stack(n_atoms_list)
-# # r_cutoff = 6.5
-# # gauss_params = tf.Variable(PARAMS["RBFS"], trainable=True, dtype=tf.float32)
-# elements = [1, 6, 7, 8]
-# elements_tf = tf.constant([1, 6, 7, 8], dtype=tf.int32)
-# element_pairs = np.array([[elements[i], elements[j]] for i in range(len(elements)) for j in range(i, len(elements))])
-# element_pairs_tf = tf.constant(element_pairs, dtype=tf.int32)
-# element_codes = tf.Variable(ELEMENTCODES, trainable=False, dtype=tf.float32)
+# charges_np = np.stack(chargeslist).astype(np.float64)
+# energy_np = np.stack(energylist).astype(np.float64)
+
+# xyzs_pl = tf.placeholder(tf.float64, shape=[1000, maxnatoms, 3])
+# Zs_pl = tf.placeholder(tf.int32, shape=[1000, maxnatoms])
+# charges_pl = tf.placeholder(tf.float64, shape=[1000, maxnatoms])
+# coulomb_pairs_pl = tf.placeholder(tf.int32, shape=[1000, maxnatoms, None])
 #
-# AN1_r_Rs = PARAMS["AN1_r_Rs"]
-# AN1_a_Rs = PARAMS["AN1_a_Rs"]
-# AN1_a_As = PARAMS["AN1_a_As"]
-# AN1_r_Rc = PARAMS["AN1_r_Rc"]
-# AN1_a_Rc = PARAMS["AN1_a_Rc"]
-# AN1_eta = PARAMS["AN1_eta"]
-# AN1_zeta = PARAMS["AN1_zeta"]
+# coulomb_e = wrapper(xyzs_pl, Zs_pl, charges_pl, coulomb_pairs_pl, maxnatoms)
 #
-# radial_rs = tf.Variable(AN1_r_Rs, trainable=False, dtype = tf.float32)
-# angular_rs = tf.Variable(AN1_a_Rs, trainable=False, dtype = tf.float32)
-# theta_s = tf.Variable(AN1_a_As, trainable=False, dtype = tf.float32)
-# radial_cut = tf.Variable(AN1_r_Rc, trainable=False, dtype = tf.float32)
-# angular_cut = tf.Variable(AN1_a_Rc, trainable=False, dtype = tf.float32)
-# zeta = tf.Variable(AN1_zeta, trainable=False, dtype = tf.float32)
-# eta = tf.Variable(AN1_eta, trainable=False, dtype = tf.float32)
-#
-# nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 19.0, maxnatoms, False, False)
-# nlt_tf = tf.constant(nlt, dtype=tf.int32)
-#
-# dxyzs, q1q2, scatter_idx = gather_coulomb(xyzs_tf, zs_tf, charges_tf, nlt_tf)
-# tmp = calculate_coulomb_energy(dxyzs, q1q2, scatter_idx)
-#
-#
-# # nlt = MolEmb.Make_NLTensor(xyzs_np, zs_np, 4.6, maxnatoms, True, True)
-# # tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, 4.0, maxnatoms, False)
-# # nlt_tf = tf.constant(nlt, dtype=tf.int32)
-# # tlt_tf = tf.constant(tlt, dtype=tf.int32)
-# # # tmp = sparse_pairs(xyzs_tf, zs_tf, nlt_tf)
-# # # tmp = sparse_triples(xyzs_tf, zs_tf, tlt_tf)
-# # tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs, radial_cut, angular_rs, theta_s, angular_cut, zeta, eta)
 # sess = tf.Session()
 # sess.run(tf.global_variables_initializer())
-# options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-# run_metadata = tf.RunMetadata()
-# @TMTiming("test")
-# def get_pairs():
-# 	tmp3 = sess.run(tmp, options=options, run_metadata=run_metadata)
-# 	return tmp3
-# tmp5 = get_pairs()
-# print(tmp5)
-# print(tmp5.shape)
-# # fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-# # chrome_trace = fetched_timeline.generate_chrome_trace_format()
-# # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
-# # 	f.write(chrome_trace)
+#
+# for i in range(int(len(zs_np) / 1000.)):
+# 	coulomb_pairs = MolEmb.Make_NLTensor(xyzs_np[i*1000:(i+1)*1000], zs_np[i*1000:(i+1)*1000], 19.0, maxnatoms, True, False)
+# 	feed_dict = {xyzs_pl:xyzs_np[i*1000:(i+1)*1000], Zs_pl:zs_np[i*1000:(i+1)*1000], charges_pl:charges_np[i*1000:(i+1)*1000],
+# 				coulomb_pairs_pl:coulomb_pairs}
+# 	ce = sess.run(coulomb_e, feed_dict=feed_dict)
+# 	print(ce[0])
+# 	exit(0)
+# 	for j in range(1000):
+# 		a.mols[(i*1000)+j].properties["coulomb_kern_energy"] = ce[j]
+# a.Save("kaggle_opt_tmp")
+#
+# ms.mols[0].BuildDistanceMatrix()
+# ms.mols[0].coulomb_matrix = ms.mols[0].properties["charges"] * np.expand_dims(ms.mols[0].properties["charges"], axis=-1)
+# for i in range(len(ms.mols[0].coulomb_matrix)):
+# 	ms.mols[0].coulomb_matrix[i,i] = 0.0
+# srange_inner = 6.0*1.889725989
+# srange_outer = 9.0*1.889725989
+# lrange_inner = 13.0*1.889725989
+# lrange_outer = 15.0*1.889725989
+# a, b, c, d, e, f, g, h = -43.568, 15.9138, -2.42286, 0.203849, -0.0102346, 0.000306595, -5.0738e-6, 3.57816e-8
+#
+# dist = ms.mols[0].DistMatrix * 1.889725989
+# dist = np.where(np.less(dist, srange_inner), np.ones_like(dist) * srange_inner, dist)
+# dist = np.where(np.greater(dist, lrange_outer), np.ones_like(dist) * lrange_outer, dist)
+# dist2 = dist * dist
+# dist3 = dist2 * dist
+# dist4 = dist3 * dist
+# dist5 = dist4 * dist
+# dist6 = dist5 * dist
+# dist7 = dist6 * dist
+# kern = (a + b*dist + c*dist2 + d*dist3 + e*dist4 + f*dist5 + g*dist6 + h*dist7) / dist
+# # kern = tf.where(tf.less(dist, srange_inner), tf.ones_like(dist) / srange_inner, mrange_kern)
+# # kern = tf.where(tf.greater(dist, lrange_outer), tf.ones_like(dist) / lrange_outer, kern)
+# mrange_energy = np.sum(kern * ms.mols[0].coulomb_matrix, axis=1)
+# lrange_energy = np.sum(ms.mols[0].coulomb_matrix, axis=1) / lrange_outer
+# coulomb_energy = mrange_energy - lrange_energy
+# print(np.sum(coulomb_energy) / 2.0)
 
-# print ELEMENTCODES.shape[0]*(ELEMENTCODES.shape[0]+1)/2
+# a=MSet("cs40_b_opt")
+# a.Load()
+# b=MSet("cs40_b_opt_eq")
+# names = []
+# for mol in a.mols:
+# 	if "name" in mol.properties:
+# 		names.append(mol.properties["name"])
+# names = list(set(names))
+# for name in names:
+# 	eq_mol = Mol()
+# 	eq_mol.properties["energy"] = 0.0
+# 	for mol in a.mols:
+# 		if "name" in mol.properties:
+# 			if mol.properties["name"] == name:
+# 				if mol.properties["energy"] < eq_mol.properties["energy"]:
+# 					eq_mol = mol
+# 	b.mols.append(eq_mol)
+# print(len(b.mols))
+# b.Save()
 
-a=MSet("needs_meta_ca")
-a.Load()
-b=MSet("chemspider20_345_opt")
-b.Load()
-c=MSet("chemspider20_24578_opt")
-c.Load()
-# d=MSet("tmp")
-# d.mols += b.mols
-# d.mols += c.mols
-# opt_names = [mol.properties["name"] for mol in b.mols]
-# meta_names = [mol.properties["name"] for mol in c.mols]
-# for mol in c.mols:
-# 	meta_names.append(mol.properties["name"])
-# for mol in b.mols:
-# 	opt_names.append(mol.properties["name"])
-# opt_names = list(set(opt_names))
-# meta_names = list(set(meta_names))
-unique = []
-for mol in b.mols:
-	# if mol.properties["name"] not in meta_names:
-	if 20 in mol.atoms:
-		if mol.properties["name"] not in unique:
-			unique.append(mol.properties["name"])
-for name in unique:
-	eq_mol = None
-	for mol in b.mols:
-		if mol.properties["name"] == name:
-			if eq_mol == None:
-				eq_mol = mol
-			else:
-				if mol.properties["energy"] < eq_mol.properties["energy"]:
-					eq_mol = mol
-	a.mols.append(eq_mol)
-a.Save()
-
-
-
-# a=MSet("chemspider20_1_meta_2")
-# import pickle
-# data = pickle.load(open("chemspider20_1_meta_noerror_part2.dat", "rb"))
-# for i in range(len(data)):
-#     mol = Mol()
-#     mol.coords = data[i]["xyz"]
-#     mol.atoms = np.zeros(mol.coords.shape[0], dtype=np.uint8)
-#     for j in range(len(data[i]["atoms"])):
-#             mol.atoms[j] = AtomicNumber(data[i]["atoms"][j])
-#     mol.properties["energy"] = data[i]["scf_energy"]
-#     mol.properties["gradients"] = data[i]["gradients"]
-#     mol.properties["charges"] = np.array(data[i]["charges"])
-#     mol.properties["name"] = data[i]["name"][2:-4]
-#     mol.properties["dipole"] = np.array(data[i]["dipole"])
-#     a.mols.append(mol)
-# a.Save()
+#a=MSet("cs40_li_opt")
+#a.read_xyz_set_with_properties(path="/media/sdb2/jeherr/tensormol_dev/datasets/chemspider40/uncharged/opt/li/data/", properties=["name", "energy", "gradients", "dipole", "charges"])
+#print(len(a.mols), " Molecules")
+#a.Save()

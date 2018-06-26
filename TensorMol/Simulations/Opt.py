@@ -924,3 +924,79 @@ class TopologyMetaOpt(GeomOptimizer):
 			print("Overlaps", overlaps)
 			return False
 		return
+
+class AlchemGeomOptimizer(GeomOptimizer):
+	def __init__(self,f_, efh_= None):
+		"""
+		Geometry optimizations based on NN-PES's etc.
+
+		Args:
+			f_: An EnergyForce routine
+			efh_: An EnergyForceHessian routine
+		"""
+		GeomOptimizer.__init__(self,f_)
+		return
+
+	def WrappedEForce(self, mols, delta, DoForce=True):
+		if (DoForce):
+			energy, frc = self.EnergyAndForce(mols, delta, DoForce)
+			frc = RemoveInvariantForce(mols[0].coords, frc, self.alchem_masses)
+			frc /= JOULEPERHARTREE
+			return energy, frc
+		else:
+			energy = self.EnergyAndForce(mols, delta, False)
+			return energy
+
+	def Opt(self, mols, delta, filename="OptLog", Debug=False, FileOutput=True, eff_thresh=None, eff_max_step=None, callback=None):
+		"""
+		Optimize using An EnergyAndForce Function with conjugate gradients.
+
+		Args:
+			m: A distorted molecule to optimize
+		"""
+		if (eff_thresh == None):
+			thresh = self.thresh
+		else:
+			thresh = eff_thresh
+		if (eff_max_step == None):
+			max_step = self.max_opt_step
+		else:
+			max_step = eff_max_step
+		rmsdisp = 10.0
+		rmsgrad = 10.0
+		step=0
+		mol_hist = []
+		prev_mols = mols
+		mol_hist.append(prev_mols)
+		num_atoms = max([mol.NAtoms() for mol in mols])
+		atoms = np.zeros((len(mols), num_atoms), dtype=np.int32)
+		masses = np.zeros((len(mols), num_atoms))
+		for i, mol in enumerate(mols):
+			atoms[i,:mol.NAtoms()] = mol.atoms
+			masses[i,:mol.NAtoms()] = np.array(list(map(lambda x: ATOMICMASSES[x-1], atoms[i,:mol.NAtoms()])))
+		alchem_switch = np.where(np.not_equal(masses, 0), np.stack([np.tile(1.0 - delta, [masses.shape[1]]),
+						np.tile(delta, [masses.shape[1]])]), np.zeros_like(masses))
+		self.alchem_masses = np.sum(masses * alchem_switch, axis=0)
+
+		CG = AlchemConjGradient(self.WrappedEForce, mols, delta)
+		while( step < max_step and rmsgrad > thresh and (rmsdisp > 0.00000001 or step<5) ):
+			coords, energy, frc = CG(prev_mols, rmsgrad<0.003)
+			rmsgrad = np.sum(np.linalg.norm(frc,axis=1))/coords.shape[0]
+			rmsdisp = np.sum(np.linalg.norm(coords-prev_mols[0].coords,axis=1))/coords.shape[0]
+			LOGGER.info(filename+" step: %i energy: %0.5f rmsgrad: %0.5f rmsdisp: %0.5f ", step , energy, rmsgrad, rmsdisp)
+			# prev_m.properties["OptStep"] = step
+			# prev_m.properties["energy"] = energy
+			# prev_m.properties["rmsgrad"] = rmsgrad
+			prev_mols = [Mol(mol.atoms, coords) for mol in mols]
+			mol_hist.append(prev_mols)
+			if (callback != None):
+				callback(mol_hist)
+			if (FileOutput):
+				for i, mol in enumerate(prev_mols):
+					mol.WriteXYZfile("./results/", filename+"_"+str(i),'a',True)
+			step+=1
+			#print(thresh,rmsgrad,rmsdisp)
+		FinalE = self.EnergyAndForce(prev_mols, delta, False)
+		print("Final Energy:", FinalE)
+		# prev_m.properties['energy']=FinalE
+		return prev_mols

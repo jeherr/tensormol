@@ -97,8 +97,8 @@ def QchemDFT(m_,basis_ = '6-31g*',xc_='b3lyp', jobtype_='force', filename_='tmp'
 		else:
 			proc = subprocess.Popen(['qchem', path_+filename_+'.in'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=False)
 		out, err = proc.communicate()
-		fout.write(out)
-	lines = out.split('\n')
+		fout.write(out.decode('utf-8'))
+	lines = out.decode('utf-8').split('\n')
 	if jobtype_ == 'force':
 		Forces = np.zeros((m_.atoms.shape[0],3))
 		for i, line in enumerate(lines):

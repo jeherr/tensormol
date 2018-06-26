@@ -171,7 +171,7 @@ def TestOpt():
 	Mg        -1.34673        0.02041       -0.06327
 	""")
 	net = TensorMol.TFNetworks.SparseCodedChargedGauSHNetwork(aset=None,load=True,load_averages=True,mode='eval')
-	EF = net.GetEnergyForceRoutine(m)
+	EF = net.get_energy_force_function(m)
 	Opt = TensorMol.Simulations.GeomOptimizer(EF)
 	m.Distort(0.25)
 	m1=Opt.Opt(m,"TEST",eff_max_step=500)
@@ -346,7 +346,7 @@ if 0:
 	net.Load()
 	net.Train()
 
-	EF = net.GetEnergyForceRoutine(b.mols[-1])
+	EF = net.get_energy_force_function(b.mols[-1])
 	for i,d in enumerate(np.linspace(-.3,.3,npts)):
 		print(d,EF(b.mols[i].coords)[0][0])
 	print("------------------------")
@@ -358,7 +358,7 @@ if 0:
 		mi = np.random.randint(len(b.mols))
 		m = copy.deepcopy(b.mols[mi])
 		print(m.atoms, m.coords)
-		EF = net.GetEnergyForceRoutine(m)
+		EF = net.get_energy_force_function(m)
 		print(EF(m.coords))
 		Opt = GeomOptimizer(EF)
 		m1=Opt.Opt(m,"TEST"+str(i),eff_max_step=100)
@@ -450,7 +450,7 @@ if 0:
 	import matplotlib.cm as cm
 	m = Mol()
 	m.FromXYZString(MethCoords(1.,1.,1.))
-	EF = net.GetEnergyForceRoutine(m)
+	EF = net.get_energy_force_function(m)
 
 	Opt = GeomOptimizer(EF)
 	m=Opt.OptGD(m,"YYY")
@@ -558,7 +558,7 @@ Ti        0.120990   -0.060138    0.681291
  H         4.846701    0.135097   -3.954237
  C         2.800449   -0.073173   -3.318151
  H         2.528822   -0.772568   -4.103764""")
-EF = net.GetEnergyForceRoutine(m)
+EF = net.get_energy_force_function(m)
 print(EF(m.coords))
 Opt = GeomOptimizer(EF)
 m=Opt.OptGD(m)
