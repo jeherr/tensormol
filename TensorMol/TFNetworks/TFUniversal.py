@@ -367,8 +367,8 @@ class UniversalNetwork(object):
 		"""
 		variables=[]
 		with tf.variable_scope("energy_network", reuse=tf.AUTO_REUSE):
-			code_kernel1 = tf.get_variable(name="CodeKernel1", shape=(4, 4), dtype=self.tf_precision)
-			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(4, 4), dtype=self.tf_precision)
+			code_kernel1 = tf.get_variable(name="CodeKernel1", shape=(6, 6), dtype=self.tf_precision)
+			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(6, 6), dtype=self.tf_precision)
 			variables.append(code_kernel1)
 			variables.append(code_kernel2)
 			coded_weights = tf.matmul(atom_codes, code_kernel1)
@@ -413,8 +413,8 @@ class UniversalNetwork(object):
 		"""
 		variables=[]
 		with tf.variable_scope("charge_network", reuse=tf.AUTO_REUSE):
-			code_kernel1 = tf.get_variable(name="CodeKernel", shape=(4, 4),dtype=self.tf_precision)
-			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(4, 4),dtype=self.tf_precision)
+			code_kernel1 = tf.get_variable(name="CodeKernel", shape=(6, 6),dtype=self.tf_precision)
+			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(6, 6),dtype=self.tf_precision)
 			variables.append(code_kernel1)
 			variables.append(code_kernel2)
 			coded_weights = tf.matmul(atom_codes, code_kernel1)
@@ -1231,7 +1231,7 @@ class UniversalNetwork_v2(UniversalNetwork):
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.test_ratio = PARAMS["TestRatio"]
 		self.alchem_transform = False
-		self.element_codes = ELEMENTCODES
+		self.element_codes = ELEMENTCODES6
 		self.assign_activation()
 
 		#Reloads a previous network if name variable is not None
@@ -1326,7 +1326,7 @@ class UniversalNetwork_v2(UniversalNetwork):
 				self.xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 				self.gradients = tf.gather_nd(self.xyz_grad, padding_mask)
 				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
-				self.gradient_loss = 10.0 * self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
+				self.gradient_loss = self.loss_op(self.gradients - self.gradient_labels) / (3 * tf.cast(tf.reduce_sum(self.num_atoms_pl), self.tf_precision))
 				if self.train_gradients:
 					tf.add_to_collection('total_loss', self.gradient_loss)
 					tf.summary.scalar("gradient_loss", self.gradient_loss)

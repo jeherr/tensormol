@@ -318,11 +318,11 @@ def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
 	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [512, 512, 512]
-	PARAMS["learning_rate"] = 0.00005
+	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
+	PARAMS["learning_rate"] = 0.0001
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 100
+	PARAMS["batch_size"] = 32
 	PARAMS["Profiling"] = False
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
