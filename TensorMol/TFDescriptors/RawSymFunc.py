@@ -3460,7 +3460,7 @@ def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, radial_ga
 	angular_embed = tf_angular_sym_func(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta)
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 	coded_angular_embed = tf_angular_code_channel_sym_func(angular_embed, triples_Zs, element_codes, padding_mask, scatter_idx)
-	embed = tf.concat([coded_radial_embed, coded_angular_embed], axis=-1)
+	embed = tf.concat([radial_embed, angular_embed], axis=-1)
 	return embed
 
 def tf_sym_func_element_codepairs(xyzs, Zs, pairs, triples, element_codes, element_codepairs,
@@ -3481,13 +3481,13 @@ def tf_sym_func_element_codepairs(xyzs, Zs, pairs, triples, element_codes, eleme
 		Digested Mol. In the shape nmol X maxnatom X (Dimension of radius part + Dimension of angular part)
 	"""
 	dxyzs, pair_Zs = sparse_pairs(xyzs, Zs, pairs)
-	radial_embed = tf_radial_sym_func_v5(dxyzs, radial_gauss, radial_cutoff, eta)
+	radial_embed = tf_radial_sym_func(dxyzs, radial_gauss, radial_cutoff, eta)
 	coded_radial_embed = tf_radial_code_channel_sym_func(radial_embed, pair_Zs, element_codes)
 	dtxyzs, triples_Zs, scatter_idx = sparse_triples(xyzs, Zs, triples)
-	angular_embed = tf_angular_sym_func_v5(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta)
+	angular_embed = tf_angular_sym_func(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta)
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
-	coded_angular_embed = tf_angular_codepair_channel_sym_func(angular_embed, triples_Zs, element_codes,
-							padding_mask, scatter_idx)
+	coded_angular_embed = tf_angular_codepair_channel_sym_func(angular_embed, triples_Zs, element_codepairs,
+							codepair_idx, padding_mask, scatter_idx)
 	embed = tf.concat([coded_radial_embed, coded_angular_embed], axis=-1)
 	return embed
 
@@ -3660,9 +3660,9 @@ def tf_angular_codepair_channel_sym_func(angular_embed, triples_Zs, element_code
 	codepair_gather = tf.gather_nd(codepair_idx, triples_Zs)
 	codepairs = tf.gather(element_codepairs, codepair_gather)
 	angular_embed = tf.expand_dims(angular_embed, axis=-3) * tf.expand_dims(tf.expand_dims(codepairs, axis=-1), axis=-1)
-	scatter_shape = [tf.shape(padding_mask)[0], tf.reduce_max(triples_scatter[:,1]) + 1, tf.shape(element_codes)[1], 8, 8]
+	scatter_shape = [tf.shape(padding_mask)[0], tf.reduce_max(triples_scatter[:,1]) + 1, tf.shape(element_codepairs)[1], 8, 8]
 	angular_embed = tf.reduce_sum(tf.scatter_nd(triples_scatter, angular_embed, scatter_shape), axis=1)
-	angular_embed = tf.reshape(angular_embed, [tf.shape(angular_embed)[0], tf.shape(element_codes)[1], -1])
+	angular_embed = tf.reshape(angular_embed, [tf.shape(angular_embed)[0], tf.shape(element_codepairs)[1], -1])
 	return angular_embed
 
 def tf_angular_codepair_channel_sym_func_replace(angular_embed, triples_Zs, element_codepairs, codepair_idx,
