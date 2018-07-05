@@ -1483,7 +1483,7 @@ class UniversalNetwork_v2(UniversalNetwork):
 				element_charges = self.charges_data[element_idxs]
 				self.charge_mean[element] = np.mean(element_charges)
 				self.charge_std[element] = np.std(element_charges)
-		self.embed_shape = self.element_codes.shape[1] * (self.radial_rs.shape[0] + self.angular_rs.shape[0] * self.theta_s.shape[0])
+		self.embed_shape = self.codes_shape * (self.radial_rs.shape[0] + self.angular_rs.shape[0] * self.theta_s.shape[0])
 		self.label_shape = 1
 		return
 

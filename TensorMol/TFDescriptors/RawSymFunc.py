@@ -3460,7 +3460,7 @@ def tf_sym_func_element_codes(xyzs, Zs, pairs, triples, element_codes, radial_ga
 	angular_embed = tf_angular_sym_func(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta)
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 	coded_angular_embed = tf_angular_code_channel_sym_func(angular_embed, triples_Zs, element_codes, padding_mask, scatter_idx)
-	embed = tf.concat([radial_embed, angular_embed], axis=-1)
+	embed = tf.concat([coded_radial_embed, coded_angular_embed], axis=-1)
 	return embed
 
 def tf_sym_func_element_codepairs(xyzs, Zs, pairs, triples, element_codes, element_codepairs,
@@ -3521,7 +3521,7 @@ def tf_sym_func_element_codepairs_replace(xyzs, Zs, pairs, triples, element_code
 	padding_mask = tf.where(tf.not_equal(Zs, 0))
 	coded_angular_embed = tf_angular_codepair_channel_sym_func_replace(angular_embed, triples_Zs, element_codes,
 							padding_mask, scatter_idx)
-	embed = tf.concat([radial_embed, angular_embed], axis=-1)
+	embed = tf.concat([coded_radial_embed, coded_angular_embed], axis=-1)
 	return embed
 
 def tf_radial_sym_func(dxyzs, radial_gauss, radial_cutoff, eta):

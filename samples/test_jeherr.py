@@ -885,7 +885,7 @@ def run_qchem_meta():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-# train_energy_univ("master_jeherr2_rand")
+train_energy_univ("master_jeherr2_rand")
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
