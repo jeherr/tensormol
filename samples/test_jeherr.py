@@ -873,7 +873,7 @@ def run_qchem_meta():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("master_jeherr2", 1000000)
+# RandomSmallSet("master_jeherr2", 500000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -885,7 +885,7 @@ def run_qchem_meta():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("master_jeherr2_rand")
+# train_energy_univ("master_jeherr2_rand")
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
@@ -1201,7 +1201,109 @@ train_energy_univ("master_jeherr2_rand")
 # print(len(b.mols))
 # b.Save()
 
-#a=MSet("cs40_li_opt")
-#a.read_xyz_set_with_properties(path="/media/sdb2/jeherr/tensormol_dev/datasets/chemspider40/uncharged/opt/li/data/", properties=["name", "energy", "gradients", "dipole", "charges"])
-#print(len(a.mols), " Molecules")
-#a.Save()
+# a=MSet("cs40_crc_meta")
+# a.read_xyz_set_with_properties(path="/media/sdb2/jeherr/tensormol_dev/datasets/chemspider40/uncharged/meta/crc/data/", properties=["name", "energy", "gradients", "dipole", "charges"])
+# print(len(a.mols), " Molecules")
+# a.Save()
+
+# a=MSet("chemspider20_345_opt")
+# b=MSet("chemspider20_24578_opt")
+# c=MSet("chemspider20_1_opt")
+# d=MSet("chemspider20_1_meta")
+# e=MSet("cs40_se_opt")
+# f=MSet("cs40_k_opt")
+# g=MSet("cs40_mg_opt")
+# h=MSet("cs40_p_opt")
+# i=MSet("cs40_p_new_opt")
+# j=MSet("cs40_k_new_opt")
+# k=MSet("cs40_si_opt")
+# l=MSet("cs40_br_opt")
+# m=MSet("cs40_ca_opt")
+# n=MSet("cs40_na_opt")
+# o=MSet("cs40_i_opt")
+# p=MSet("cs40_be_opt")
+# q=MSet("cs40_b_opt")
+# r=MSet("cs40_li_opt")
+# s=MSet("cs40_gigan_meta")
+# t=MSet("cs40_zerg_meta")
+# u=MSet("cs40_crc_meta")
+# v=MSet("master_jeherr2")
+# a.Load()
+# b.Load()
+# c.Load()
+# d.Load()
+# e.Load()
+# f.Load()
+# g.Load()
+# h.Load()
+# i.Load()
+# j.Load()
+# k.Load()
+# l.Load()
+# m.Load()
+# n.Load()
+# o.Load()
+# p.Load()
+# q.Load()
+# r.Load()
+# s.Load()
+# t.Load()
+# u.Load()
+# v.mols += a.mols
+# v.mols += b.mols
+# v.mols += c.mols
+# v.mols += d.mols
+# v.mols += e.mols
+# v.mols += f.mols
+# v.mols += g.mols
+# v.mols += h.mols
+# v.mols += i.mols
+# v.mols += j.mols
+# v.mols += k.mols
+# v.mols += l.mols
+# v.mols += m.mols
+# v.mols += n.mols
+# v.mols += o.mols
+# v.mols += p.mols
+# v.mols += q.mols
+# v.mols += r.mols
+# v.mols += s.mols
+# v.mols += t.mols
+# v.mols += u.mols
+# print(len(v.mols))
+# v.Save()
+
+# a=MSet("H2O_kyao")
+# b=MSet("chemspider12_wb97xd_6311gss_rand")
+# c=MSet("master_jeherr2")
+# a.Load()
+# b.Load()
+# c.Load()
+#
+# mols = random.sample(range(len(a.mols)), 50000)
+# for i in mols:
+# 	c.mols.append(a.mols[i])
+#
+# mols = random.sample(range(len(b.mols)), 100000)
+# for i in mols:
+# 	c.mols.append(b.mols[i])
+# print(len(c.mols))
+# c.Save()
+
+PARAMS["tf_prec"] = "tf.float32"
+network = UniversalNetwork_v2(name="SF_Universal_master_jeherr2_Thu_Jun_28_15.12.22_2018")
+molset = MSet("master_jeherr2")
+molset.Load()
+energy_errors, gradient_errors, charge_errors = network.evaluate_set(molset)
+mae_e = np.mean(np.abs(energy_errors))
+mse_e = np.mean(energy_errors)
+rmse_e = np.sqrt(np.mean(np.square(energy_errors)))
+mae_g = np.mean(np.abs(gradient_errors))
+mse_g = np.mean(gradient_errors)
+rmse_g = np.sqrt(np.mean(np.square(gradient_errors)))
+mae_c = np.mean(np.abs(charge_errors))
+mse_c = np.mean(charge_errors)
+rmse_c = np.sqrt(np.mean(np.square(charge_errors)))
+print("MAE  Energy: ", mae_e, " Gradients: ", mae_g, " Charges: ", mae_c)
+print("MSE  Energy: ", mse_e, " Gradients: ", mse_g, " Charges: ", mse_c)
+print("RMSE  Energy: ", rmse_e, " Gradients: ", rmse_g, " Charges: ", rmse_c)
