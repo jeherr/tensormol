@@ -1154,13 +1154,13 @@ class UniversalNetwork(object):
 			xyz_data[0][:mol.NAtoms()] = xyz_
 			nn_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, self.radial_cutoff, self.max_num_atoms, True, True)
 			nn_triples = MolEmb.Make_TLTensor(xyz_data, Z_data, self.angular_cutoff, self.max_num_atoms, False)
-			coulomb_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, 19.0, self.max_num_atoms, False, False)
+			coulomb_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, 15.0, self.max_num_atoms, True, False)
 			feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
 						self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs, self.num_atoms_pl:num_atoms_data}
 			energy, gradients = self.sess.run([self.total_energy, self.gradients], feed_dict=feed_dict)
 			# print(-JOULEPERHARTREE*gradients)
 			if (DoForce):
-				return energy[0], -JOULEPERHARTREE*gradients
+				return energy[0], -gradients
 			else:
 				return energy[0]
 		return EF
@@ -1231,9 +1231,9 @@ class UniversalNetwork_v2(UniversalNetwork):
 		self.profiling = PARAMS["Profiling"]
 		self.activation_function_type = PARAMS["NeuronType"]
 		self.test_ratio = PARAMS["TestRatio"]
-		self.alchem_transform = False
-		self.element_codes = ELEMENTCODES6
+		self.element_codes = ELEMENTCODES
 		self.codes_shape = self.element_codes.shape[1]
+		self.alchem_transform = False
 		self.assign_activation()
 
 		#Reloads a previous network if name variable is not None
@@ -1303,7 +1303,7 @@ class UniversalNetwork_v2(UniversalNetwork):
 			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			with tf.name_scope('energy_inference'):
 				self.atom_nn_energy, variables = self.energy_inference(embed, atom_codes, padding_mask)
-				self.mol_nn_energy = (tf.reduce_sum(self.atom_nn_energy, axis=1) * energy_std) + energy_mean
+				self.mol_nn_energy = (tf.reduce_sum(self.atom_nn_energy, axis=1) * energy_std)
 				mol_energy_fit = tf.reduce_sum(tf.gather(energy_fit, self.Zs_pl), axis=1)
 				self.mol_nn_energy += mol_energy_fit
 				self.total_energy = self.mol_nn_energy
@@ -1422,11 +1422,11 @@ class UniversalNetwork_v2(UniversalNetwork):
 		# Use dense zero-padded arrays to avoid index logic.
 		stoichs = np.zeros((self.num_molecules, num_elements_dense))
 
-		srange_inner = 4.0*1.889725989
-		srange_outer = 6.5*1.889725989
+		srange_inner = 5.5*1.889725989
+		srange_outer = 7.5*1.889725989
 		lrange_inner = 13.0*1.889725989
 		lrange_outer = 15.0*1.889725989
-		a, b, c, d, e, f, g, h = -9.83315, 4.49307, -0.784438, 0.0747019, -0.00419095, 0.000138593, -2.50374e-6, 1.90818e-8
+		a, b, c, d, e, f, g, h = -39.1852, 15.1212, -2.40872, 0.210542, -0.0109077, 0.000335079, -5.65448e-6, 4.04621e-8
 
 		for i, mol in enumerate(self.mol_set.mols):
 			unique, counts = np.unique(mol.atoms, return_counts=True)
@@ -1497,11 +1497,11 @@ class UniversalNetwork_v2(UniversalNetwork):
 
 		The hard cutoff is LROuter
 		"""
-		srange_inner = tf.constant(4.0*1.889725989, dtype=self.tf_precision)
-		srange_outer = tf.constant(6.5*1.889725989, dtype=self.tf_precision)
+		srange_inner = tf.constant(5.5*1.889725989, dtype=self.tf_precision)
+		srange_outer = tf.constant(7.5*1.889725989, dtype=self.tf_precision)
 		lrange_inner = tf.constant(13.0*1.889725989, dtype=self.tf_precision)
 		lrange_outer = tf.constant(15.0*1.889725989, dtype=self.tf_precision)
-		a, b, c, d, e, f, g, h = -9.83315, 4.49307, -0.784438, 0.0747019, -0.00419095, 0.000138593, -2.50374e-6, 1.90818e-8
+		a, b, c, d, e, f, g, h = -39.1852, 15.1212, -2.40872, 0.210542, -0.0109077, 0.000335079, -5.65448e-6, 4.04621e-8
 		dist = tf.norm(dxyzs+1.e-16, axis=-1)
 		dist *= 1.889725989
 		dist = tf.where(tf.less(dist, srange_inner), tf.ones_like(dist) * srange_inner, dist)
@@ -1527,11 +1527,15 @@ class UniversalNetwork_v2(UniversalNetwork):
 			xyzs (np.float): numpy array of atomic coordinates
 			Zs (np.int32): numpy array of atomic numbers
 		"""
-		import random
-		random.shuffle(mset.mols)
-		self.assign_activation()
-		self.max_num_atoms = mset.MaxNAtom()
-		self.batch_size = 500
+		try:
+			self.sess
+		except AttributeError:
+			self.sess = None
+		if self.sess is None:
+			self.assign_activation()
+			self.max_num_atoms = mset.MaxNAtom()
+			self.batch_size = 100
+			self.eval_prepare()
 		num_mols = len(mset.mols)
 		xyz_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype = np.float64)
 		Z_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.int32)
@@ -1547,7 +1551,6 @@ class UniversalNetwork_v2(UniversalNetwork):
 			gradient_data[i][:mol.NAtoms()] = mol.properties["gradients"]
 			num_atoms_data[i] = mol.NAtoms()
 		eval_pointer = 0
-		self.eval_prepare()
 		energy_true, energy_pred = [], []
 		gradients_true, gradient_preds = [], []
 		charges_true, charge_preds = [], []
@@ -1581,20 +1584,12 @@ class UniversalNetwork_v2(UniversalNetwork):
 			energy_pred.append(total_energy)
 			gradients_true.append(gradient_labels)
 			gradient_preds.append(gradients)
-			if ministep == int((0.25 * num_mols) / self.batch_size):
-				break
 		energy_true = np.concatenate(energy_true)
 		energy_pred = np.concatenate(energy_pred)
 		gradients_true = np.concatenate(gradients_true)
 		gradient_preds = np.concatenate(gradient_preds)
 		energy_errors = energy_true - energy_pred
 		gradient_errors = gradients_true - gradient_preds
-		worst_idx = np.where(np.greater(np.abs(energy_errors), 0.05))
-		b=MSet("master_jeherr2_worst")
-		for i in worst_idx[0].tolist():
-			b.mols.append(mset.mols[i])
-			b.mols[-1].properties["energy_error"] = energy_errors[i]
-		b.Save()
 		if self.train_charges:
 			charges_true = np.concatenate(charges_true)
 			charge_preds = np.concatenate(charge_preds)
