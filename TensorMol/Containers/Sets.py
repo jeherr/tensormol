@@ -29,6 +29,8 @@ class MSet:
 			mol.Clean()
 		if filename == None:
 			filename = self.name
+		elif filename != None:
+			self.name = filename
 		LOGGER.info("Saving set to: %s ", self.path+filename+self.suffix)
 		f=open(self.path+filename+self.suffix,"wb")
 		if sys.version_info[0] < 3:
