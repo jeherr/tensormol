@@ -3567,8 +3567,8 @@ def tf_angular_sym_func(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta
 	dij_dik = dist_jk_tensor[...,0] * dist_jk_tensor[...,1]
 	ij_dot_ik = tf.reduce_sum(dtxyzs[...,0,:] * dtxyzs[...,1,:], axis=-1)
 	cos_angle = ij_dot_ik / dij_dik
-	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle) - 1.e-6, cos_angle)
-	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle) + 1.e-6, cos_angle)
+	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0-1.e-9), tf.ones_like(cos_angle) - 1.e-9, cos_angle)
+	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0+1.e-9), -1.0 * tf.ones_like(cos_angle) + 1.e-9, cos_angle)
 	theta_ijk = tf.acos(cos_angle)
 	dtheta = tf.expand_dims(theta_ijk, axis=-1) - thetas
 	cos_factor = tf.cos(2 * dtheta)
@@ -3582,7 +3582,7 @@ def tf_angular_sym_func(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta
 	angular_embed *= tf.expand_dims(tf.expand_dims(cutoff, axis=-1), axis=-1)
 	return angular_embed
 
-def tf_angular_sym_func_v2(dtxyzs, triples_Zs, scatter_idx, element_codes, angular_gauss, thetas, angular_cutoff, zeta, eta, padding_mask):
+def tf_angular_sym_func_v2(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta):
 	"""
 	Tensorflow implementation of the ANI-1 angular symmetry functions. Uses trigonometric
 	identities to avoid taking the ArcCos, which has asymptotic second derivatives.
