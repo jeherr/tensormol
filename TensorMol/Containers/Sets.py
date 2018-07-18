@@ -117,6 +117,14 @@ class MSet:
 				cut_down_mols.append(mol)
 		self.mols = cut_down_mols
 
+	def keep_atomic_numbers(self, atomic_nums):
+		new_mols = []
+		atomic_nums = np.array(atomic_nums, dtype=np.uint8)
+		for mol in self.mols:
+			if np.all(np.isin(mol.atoms, atomic_nums)):
+				new_mols.append(mol)
+		self.mols = new_mols
+
 	def cut_unique_bond_hash(self):
 		cut_down_mols = []
 		known_hashes = []
