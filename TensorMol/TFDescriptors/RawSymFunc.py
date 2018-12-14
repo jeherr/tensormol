@@ -3567,8 +3567,8 @@ def tf_angular_sym_func(dtxyzs, angular_gauss, thetas, angular_cutoff, zeta, eta
 	dij_dik = dist_jk_tensor[...,0] * dist_jk_tensor[...,1]
 	ij_dot_ik = tf.reduce_sum(dtxyzs[...,0,:] * dtxyzs[...,1,:], axis=-1)
 	cos_angle = ij_dot_ik / dij_dik
-	cos_angle = tf.where(tf.greater_equal(cos_angle, 1.0), tf.ones_like(cos_angle) - 1.e-6, cos_angle)
-	cos_angle = tf.where(tf.less_equal(cos_angle, -1.0), -1.0 * tf.ones_like(cos_angle) + 1.e-6, cos_angle)
+	cos_angle = tf.where(tf.greater(cos_angle, 1.0 - 1.e-6), tf.ones_like(cos_angle) - 1.e-6, cos_angle)
+	cos_angle = tf.where(tf.less(cos_angle, -1.0 + 1.e-6), -1.0 * tf.ones_like(cos_angle) + 1.e-6, cos_angle)
 	theta_ijk = tf.acos(cos_angle)
 	dtheta = tf.expand_dims(theta_ijk, axis=-1) - thetas
 	cos_factor = tf.cos(2 * dtheta)

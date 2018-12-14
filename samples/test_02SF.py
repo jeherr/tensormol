@@ -5,7 +5,7 @@ def evaluate_set(mset):
 	Evaluate energy, force, and charge error statistics on an entire set
 	using the Symmetry Function Universal network. Prints MAE, MSE, and RMSE.
 	"""
-	network = UniversalNetwork(name="SF_Universal_master_jeherr_Thu_May_31_16.20.05_2018")
+	network = UniversalNetwork_v3(name="SF_Universal_master_jeherr3_water_Fri_Aug_17_14.47.41_2018")
 	molset = MSet(mset)
 	molset.Load()
 	energy_errors, gradient_errors = network.evaluate_set(molset)
@@ -15,14 +15,14 @@ def evaluate_set(mset):
 	mae_g = np.mean(np.abs(gradient_errors))
 	mse_g = np.mean(gradient_errors)
 	rmse_g = np.sqrt(np.mean(np.square(gradient_errors)))
-	# mae_c = np.mean(np.abs(charge_errors))
-	# mse_c = np.mean(charge_errors)
-	# rmse_c = np.sqrt(np.mean(np.square(charge_errors)))
-	print("MAE  Energy: ", mae_e, " Gradients: ", mae_g)#, " Charges: ", mae_c)
-	print("MSE  Energy: ", mse_e, " Gradients: ", mse_g)#, " Charges: ", mse_c)
-	print("RMSE  Energy: ", rmse_e, " Gradients: ", rmse_g)#, " Charges: ", rmse_c)
+	mae_c = np.mean(np.abs(charge_errors))
+	mse_c = np.mean(charge_errors)
+	rmse_c = np.sqrt(np.mean(np.square(charge_errors)))
+	print("MAE  Energy: ", mae_e, " Gradients: ", mae_g, " Charges: ", mae_c)
+	print("MSE  Energy: ", mse_e, " Gradients: ", mse_g, " Charges: ", mse_c)
+	print("RMSE  Energy: ", rmse_e, " Gradients: ", rmse_g, " Charges: ", rmse_c)
 
-# evaluate_set("kaggle_opt")
+evaluate_set("master_jeherr3_water_rand")
 
 def evaluate_mol(mol):
 	"""
@@ -85,9 +85,9 @@ def run_element_opt(mol):
 	print(atom_codes)
 
 
-a=MSet("diazepam")
-a.ReadXYZ()
-run_element_opt(a.mols[0])
+#a=MSet("diazepam")
+#a.ReadXYZ()
+#run_element_opt(a.mols[0])
 
 def alchem_chain_opt(mols):
 	network = UniversalNetwork(name="SF_Universal_master_jeherr_Thu_May_31_16.20.05_2018")

@@ -318,15 +318,15 @@ def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
 	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
+	PARAMS["HiddenLayers"] = [256, 256, 256]
 	PARAMS["learning_rate"] = 0.0001
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 32
+	PARAMS["batch_size"] = 64
 	PARAMS["Profiling"] = False
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
-	network = UniversalNetwork_v2(mset)
+	network = UniversalNetwork_v4(mset)
 	network.start_training()
 
 def eval_test_set_univ(mset):
@@ -873,7 +873,7 @@ def run_qchem_meta():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("master_jeherr2", 500000)
+# RandomSmallSet("master_jeherr3_water", 1000000)
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -885,7 +885,7 @@ def run_qchem_meta():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("master_jeherr2")
+train_energy_univ("master_jeherr2_HCNOFPSClSeBrI")
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
