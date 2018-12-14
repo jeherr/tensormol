@@ -5,7 +5,8 @@ def evaluate_set(mset):
 	Evaluate energy, force, and charge error statistics on an entire set
 	using the Symmetry Function Universal network. Prints MAE, MSE, and RMSE.
 	"""
-	network = UniversalNetwork(name="SF_Universal_master_jeherr_Thu_May_31_16.20.05_2018")
+	PARAMS["tf_prec"] = "tf.float32"
+	network = UniversalNetwork_v2(name="SF_Universal_master_jeherr2_HCNOFPSSeBrI_Fri_Aug_10_14.36.35_2018")
 	molset = MSet(mset)
 	molset.Load()
 	energy_errors, gradient_errors = network.evaluate_set(molset)
@@ -15,14 +16,14 @@ def evaluate_set(mset):
 	mae_g = np.mean(np.abs(gradient_errors))
 	mse_g = np.mean(gradient_errors)
 	rmse_g = np.sqrt(np.mean(np.square(gradient_errors)))
-	# mae_c = np.mean(np.abs(charge_errors))
-	# mse_c = np.mean(charge_errors)
-	# rmse_c = np.sqrt(np.mean(np.square(charge_errors)))
-	print("MAE  Energy: ", mae_e, " Gradients: ", mae_g)#, " Charges: ", mae_c)
-	print("MSE  Energy: ", mse_e, " Gradients: ", mse_g)#, " Charges: ", mse_c)
-	print("RMSE  Energy: ", rmse_e, " Gradients: ", rmse_g)#, " Charges: ", rmse_c)
+	mae_c = np.mean(np.abs(charge_errors))
+	mse_c = np.mean(charge_errors)
+	rmse_c = np.sqrt(np.mean(np.square(charge_errors)))
+	print("MAE  Energy: ", mae_e, " Gradients: ", mae_g, " Charges: ", mae_c)
+	print("MSE  Energy: ", mse_e, " Gradients: ", mse_g, " Charges: ", mse_c)
+	print("RMSE  Energy: ", rmse_e, " Gradients: ", rmse_g, " Charges: ", rmse_c)
 
-# evaluate_set("kaggle_opt")
+evaluate_set("master_jeherr2_cl_test")
 
 def evaluate_mol(mol):
 	"""
@@ -41,6 +42,21 @@ def evaluate_mol(mol):
 # mol=a.mols[0]
 # evaluate_mol(mol)
 
+def test_alchem(mols):
+	network = UniversalNetwork_v2(name="SF_Universal_master_jeherr2_water_Wed_Jul_11_16.18.11_2018")
+	alchem_ef = network.evaluate_alchem_mol(mols)
+	for i in range(101):
+		energy, forces = alchem_ef(mols, i/100)
+		# alchem_ef(mols, i/1000)
+		print(energy)
+
+# a=MSet("diazepam", center_=False)
+# a.ReadXYZ()
+# b=MSet("water_diazepam", center_=False)
+# b.ReadXYZ()
+# mols = [a.mols[0], b.mols[0]]
+# test_alchem(mols)
+
 def run_alchemical_trans(mols):
 	"""
 	Run an alchemical transformation using the Symmetry Function Universal network.
@@ -51,17 +67,17 @@ def run_alchemical_trans(mols):
 	PARAMS["MetaBowlK"] = 0.05
 	PARAMS["MDdt"] = 0.5
 	PARAMS["RemoveInvariant"]=True
-	PARAMS["MDMaxStep"] = 10000
-	PARAMS["MDThermostat"] = None
+	PARAMS["MDMaxStep"] = 20000
+	PARAMS["MDThermostat"] = "Andersen"
 	PARAMS["MDTemp"]= 300.0
-	network = UniversalNetwork(name="SF_Universal_master_jeherr_Thu_May_31_16.20.05_2018")
+	network = UniversalNetwork_v2(name="SF_Universal_master_jeherr2_water_Wed_Jul_11_16.18.11_2018")
 	alchem_ef = network.evaluate_alchem_mol(mols)
-	transitions = [1,1000]
+	transitions = [4000,10000]
 	alchemical_transformation(alchem_ef, mols, mols[0].coords, transitions)
 
-# a=MSet("diazepam", center_=False)
+# a=MSet("etoh_dimer", center_=False)
 # a.ReadXYZ()
-# b=MSet("water_diazepam", center_=False)
+# b=MSet("etoh_dimer_to_water", center_=False)
 # b.ReadXYZ()
 # mols = [a.mols[0], b.mols[0]]
 # run_alchemical_trans(mols)
@@ -85,9 +101,9 @@ def run_element_opt(mol):
 	print(atom_codes)
 
 
-a=MSet("diazepam")
-a.ReadXYZ()
-run_element_opt(a.mols[0])
+#a=MSet("diazepam")
+#a.ReadXYZ()
+#run_element_opt(a.mols[0])
 
 def alchem_chain_opt(mols):
 	network = UniversalNetwork(name="SF_Universal_master_jeherr_Thu_May_31_16.20.05_2018")
@@ -132,7 +148,7 @@ def TestKaggle():
 	evaluate_mol(mol)
 
 def TestOpt():
-	a=MSet("phosphoric_acid")
+	a=MSet("diazepam")
 	a.ReadXYZ()
 	m=a.mols[0]
 	# m = Mol()
@@ -211,8 +227,8 @@ def TestOpt():
 	# H         -5.71990       -2.26400       -1.94770
 	# H          8.49250       -1.93230        1.08330
 	# Mg        -1.34673        0.02041       -0.06327""")
-	net = UniversalNetwork(name="SF_Universal_master_jeherr_Thu_May_31_20.09.30_2018")
-	EF = net.GetEnergyForceRoutine(m)
+	network = UniversalNetwork_v2(name="SF_Universal_master_jeherr2_water_Wed_Jul_11_16.18.11_2018")
+	EF = network.get_energy_force_function(m)
 	Opt = GeomOptimizer(EF)
 	m1=Opt.Opt(m,"TEST",eff_max_step=5000)
 
@@ -421,3 +437,48 @@ def TestNeb():
 # 	mol.WriteXYZfile()
 # 	energy, atme, nne, ce, forces, charges = network.evaluate_mol(mol)
 # 	print(ce)
+
+def ir_freq():
+	a=MSet("diazepam_tm_eq")
+	a.ReadXYZ()
+	m=a.mols[0]
+	network = UniversalNetwork_v2(name="SF_Universal_master_jeherr2_water_Wed_Jul_11_16.18.11_2018")
+	EF = network.get_energy_force_function(m)
+	QF = network.get_charge_function(m)
+	def DF(coords):
+		charges = QF(coords)
+		dipole = np.zeros(3)
+		for i in range(charges.shape[0]):
+			dipole += charges[i]*coords[i]
+		return dipole
+	EOF = lambda x: EF(x, False)
+
+
+	# DFTForceField = lambda x: np.asarray([QchemDFT(Mol(m.atoms,x),basis_ = '6-31g',xc_='b3lyp', jobtype_='sp', threads=32)])[0]
+	# DFTDipoleField = lambda x: QchemDFT(Mol(m.atoms,x),basis_ = '6-31g',xc_='b3lyp', jobtype_='dipole', threads=32)
+	# w,v = HarmonicSpectra(DFTForceField, m.coords, m.atoms,  WriteNM_=True, Mu_ = DFTDipoleField)
+	#w,v = HarmonicSpectra(EnergyField, m.coords, m.atoms, WriteNM_=True, Mu_ = DFTDipoleField)
+	w, v, intens, thermo = HarmonicSpectra(EOF, m.coords, m.atoms, WriteNM_=True, Mu_ = DF)
+
+	# PARAMS["MDdt"] = 0.2
+	# PARAMS["RemoveInvariant"]=True
+	# PARAMS["MDMaxStep"] = 10000
+	# PARAMS["MDThermostat"] = "Nose"
+	# PARAMS["MDV0"] = None
+	# PARAMS["MDAnnealTF"] = 300.0
+	# PARAMS["MDAnnealT0"] = 0.1
+	# PARAMS["MDAnnealSteps"] = 10000
+	# anneal = Annealer(EF, None, m1, "diazepam_anneal")
+	# anneal.Prop()
+	# m1.coords = anneal.x.copy()
+	#
+	# PARAMS["MDThermostat"] = None
+	# PARAMS["MDTemp"] = 0
+	# PARAMS["MDdt"] = 0.1
+	# PARAMS["MDV0"] = None
+	# PARAMS["MDMaxStep"] = 40000
+	# md = IRTrajectory(EF, QF, m1, "diazepam_ir_0K", anneal.v)
+	# md.Prop()
+	# WriteDerDipoleCorrelationFunction(md.mu_his)
+
+# ir_freq()

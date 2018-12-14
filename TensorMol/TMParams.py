@@ -68,7 +68,8 @@ class TMParams(dict):
 		self["hidden2"] = 512
 		self["hidden3"] = 512
 		self["GradWeight"] = 0.01
-		self["TestRatio"] = 0.2
+		self["TestRatio"] = 0.1
+		self["validation_ratio"] = 0.1
 		self["Profiling"] = False
 		self["max_checkpoints"] = 1
 		self["KeepProb"] = 0.7

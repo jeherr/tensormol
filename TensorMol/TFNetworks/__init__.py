@@ -5,5 +5,6 @@ from .TFMolManage import *
 from .TFMolInstanceDirect import *
 from .TFMolInstanceEE import *
 from .TFUniversal import *
-from .CanCodedGauSH import * 
+from .CanCodedGauSH import *
 from .Autoencoders import *
+from .ElementCoder import *

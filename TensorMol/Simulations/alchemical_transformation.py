@@ -167,7 +167,7 @@ def alchemical_transformation(force_field, mols, coords, transitions, name=None,
 		Nothing.
 	"""
 	if name is None:
-		name = "alchem_traj"
+		name = "Alchem"
 	trajectory_set = MSet(name)
 	maxsteps = PARAMS["MDMaxStep"]
 	temp = PARAMS["MDTemp"]
@@ -198,7 +198,7 @@ def alchemical_transformation(force_field, mols, coords, transitions, name=None,
 		traj_time = step*dt
 		if step in range(transitions[0], transitions[0]+transitions[1]):
 			delta = np.array(float((step - transitions[0] + 1.0) / transitions[1])).reshape((1))
-		elif step > transitions[0]+transitions[1]:
+		elif step >= transitions[0]+transitions[1]:
 			delta = np.array(1.0).reshape((1))
 		else:
 			delta = np.array(0.0).reshape((1))

@@ -318,16 +318,30 @@ def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
 	PARAMS["train_charges"] = True
 	PARAMS["weight_decay"] = None
-	PARAMS["HiddenLayers"] = [1024, 1024, 1024]
+	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.0001
 	PARAMS["max_steps"] = 1000
 	PARAMS["test_freq"] = 5
-	PARAMS["batch_size"] = 32
+	PARAMS["batch_size"] = 64
 	PARAMS["Profiling"] = False
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
-	network = UniversalNetwork_v2(mset)
+	network = UniversalNetwork_v4(mset)
 	network.start_training()
+
+def train_element_coder():
+	PARAMS["weight_decay"] = None
+	PARAMS["HiddenLayers"] = [128, 128]
+	PARAMS["learning_rate"] = 0.0001
+	PARAMS["max_steps"] = 1000
+	PARAMS["test_freq"] = 5
+	PARAMS["batch_size"] = 64
+	PARAMS["NeuronType"] = "tanh"
+	PARAMS["tf_prec"] = "tf.float32"
+	network = ElementCoder(latent_size=4, batches_per_epoch=100)
+	network.train()
+
+# train_element_coder()
 
 def eval_test_set_univ(mset):
 	PARAMS["train_gradients"] = True
@@ -873,7 +887,11 @@ def run_qchem_meta():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-# RandomSmallSet("master_jeherr2", 500000)
+<<<<<<< Updated upstream
+# RandomSmallSet("master_jeherr3_water", 1000000)
+=======
+# RandomSmallSet("SmallMols", 100)
+>>>>>>> Stashed changes
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -885,7 +903,11 @@ def run_qchem_meta():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("master_jeherr2")
+<<<<<<< Updated upstream
+train_energy_univ("master_jeherr2_HCNOFPSClSeBrI")
+=======
+train_energy_univ("master_jeherr2_HCNOFS_rand")
+>>>>>>> Stashed changes
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
@@ -895,7 +917,7 @@ train_energy_univ("master_jeherr2")
 # meta_stat_plot()
 # harmonic_freq()
 # train_Poly_GauSH()
-#water_ir()
+# water_ir()
 # GetWaterNetwork()
 # water_meta_opt()
 # water_meta_react()
@@ -919,7 +941,7 @@ train_energy_univ("master_jeherr2")
 # # mt = Mol(*lat.TessNTimes(mc.atoms,mc.coords,ntess))
 # # # # mt.WriteXYZfile()
 # b=MSet()
-# for i in range(100):
+# for i in range(1):
 # 	b.mols.append(a.mols[i])
 # 	# print(b.mols[i].NAtoms())
 # maxnatoms = b.MaxNAtom()
@@ -1010,12 +1032,12 @@ train_energy_univ("master_jeherr2")
 # tlt = MolEmb.Make_TLTensor(xyzs_np, zs_np, angular_cutoff, maxnatoms, False)
 # nlt_tf = tf.constant(nlt, dtype=tf.int32)
 # tlt_tf = tf.constant(tlt, dtype=tf.int32)
-# # replace_idx = tf.constant([0, 2], dtype=tf.int32)
-# # replace_codes = tf.Variable(ELEMENTCODES[15], trainable=False, dtype=tf.float32)
+# replace_idx = tf.constant([[0, 4]], dtype=tf.int32)
+# replace_codes = tf.Variable(ELEMENTCODES[7], trainable=False, dtype=tf.float64)
 # # gather_replace_codepairs = codepair_idx_tf[15]
 # # replace_codepairs = tf.gather(element_codepairs_tf, gather_replace_codepairs)
-# tmp = tf_sym_func_element_codes(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
-# 		radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf)
+# tmp = tf_sym_func_element_codes_replace(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
+# 		radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf, replace_idx, replace_codes)
 # # tmp2 = tf_sym_func_element_codes_v3(xyzs_tf, zs_tf, nlt_tf, tlt_tf, element_codes, radial_rs_tf,
 # # 		radial_cutoff_tf, angular_rs_tf, theta_s_tf, angular_cutoff_tf, zeta_tf, eta_tf)
 #
@@ -1034,3 +1056,29 @@ train_energy_univ("master_jeherr2")
 # chrome_trace = fetched_timeline.generate_chrome_trace_format()
 # with open('timeline_step_tmp_tm_nocheck_h2o.json', 'w') as f:
 # 	f.write(chrome_trace)
+
+def get_atom_energies(mset):
+	"""
+	Evaluate energy, force, and charge error statistics on an entire set
+	using the Symmetry Function Universal network. Prints MAE, MSE, and RMSE.
+	"""
+
+	PARAMS["tf_prec"] = "tf.float32"
+	network = UniversalNetwork_v2(name="SF_Universal_master_jeherr2_HCNOFPSSeBrI_Fri_Aug_10_14.36.35_2018")
+	molset = MSet(mset)
+	molset.Load()
+	energy_errors, gradient_errors = network.evaluate_set(molset)
+	mae_e = np.mean(np.abs(energy_errors))
+	mse_e = np.mean(energy_errors)
+	rmse_e = np.sqrt(np.mean(np.square(energy_errors)))
+	mae_g = np.mean(np.abs(gradient_errors))
+	mse_g = np.mean(gradient_errors)
+	rmse_g = np.sqrt(np.mean(np.square(gradient_errors)))
+	# mae_c = np.mean(np.abs(charge_errors))
+	# mse_c = np.mean(charge_errors)
+	# rmse_c = np.sqrt(np.mean(np.square(charge_errors)))
+	print("MAE  Energy: ", mae_e, " Gradients: ", mae_g)#, " Charges: ", mae_c)
+	print("MSE  Energy: ", mse_e, " Gradients: ", mse_g)#, " Charges: ", mse_c)
+	print("RMSE  Energy: ", rmse_e, " Gradients: ", rmse_g)#, " Charges: ", rmse_c)
+
+# evaluate_set("master_jeherr2_cl_test")
