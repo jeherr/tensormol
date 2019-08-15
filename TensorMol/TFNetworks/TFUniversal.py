@@ -2231,9 +2231,6 @@ class UniversalNetwork_v3(UniversalNetwork_v2):
 			self.nn_triples_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, None, 2])
 			self.coulomb_pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, None])
 			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
-			self.energy_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size])
-			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
-			self.charges_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms])
 
 			radial_gauss = tf.Variable(self.radial_rs, trainable=False, dtype = self.tf_precision)
 			angular_gauss = tf.Variable(self.angular_rs, trainable=False, dtype = self.tf_precision)
@@ -2247,15 +2244,19 @@ class UniversalNetwork_v3(UniversalNetwork_v2):
 			num_elements = self.elements.get_shape().as_list()[0]
 			self.element_codes = tf.Variable(self.element_codes, trainable=False, dtype=self.tf_precision, name="element_codes")
 			energy_fit = tf.Variable(self.energy_fit, trainable=False, dtype=self.tf_precision)
-			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
-			energy_std = tf.Variable(self.energy_std, trainable=False, dtype = self.tf_precision)
+			energy_mean = tf.get_variable("energy_mean", shape=self.mol_set.max_atomic_num()+1, dtype=self.tf_precision,
+										  initializer=tf.zeros_initializer())
+			energy_std = tf.get_variable("energy_std", shape=self.mol_set.max_atomic_num()+1, dtype=self.tf_precision,
+										 initializer=tf.ones_initializer())
+			#energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
+			#energy_std = tf.Variable(self.energy_std, trainable=False, dtype = self.tf_precision)
 			if self.train_charges:
 				charge_mean = tf.Variable(self.charge_mean, trainable=False, dtype=self.tf_precision)
 				charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
 
 			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
 			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl,
-					self.element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
+											  self.element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
 			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
 			if self.train_charges:
 				with tf.name_scope('charge_inference'):
@@ -2263,10 +2264,11 @@ class UniversalNetwork_v3(UniversalNetwork_v2):
 					atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
 					self.atom_nn_charges = (atom_nn_charges * atom_charge_std) + atom_charge_mean
 					self.charges = tf.gather_nd(self.atom_nn_charges, padding_mask)
-					self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
 					self.atom_nn_charges = self.charge_equalization(self.atom_nn_charges, self.num_atoms_pl, self.Zs_pl)
 			with tf.name_scope('energy_inference'):
-				self.atom_nn_energy, energy_variables = self.energy_inference(embed, atom_codes, padding_mask)
+				atom_nn_energy, energy_variables = self.energy_inference(embed, atom_codes, padding_mask)
+				atom_energy_mean, atom_energy_std = tf.gather(energy_mean, self.Zs_pl), tf.gather(energy_std, self.Zs_pl)
+				self.atom_nn_energy = (atom_nn_energy * tf.square(atom_energy_std)) + atom_energy_mean
 				self.mol_nn_energy = tf.reduce_sum(self.atom_nn_energy, axis=1)
 				mol_energy_fit = tf.reduce_sum(tf.gather(energy_fit, self.Zs_pl), axis=1)
 				self.mol_nn_energy += mol_energy_fit
@@ -2278,11 +2280,79 @@ class UniversalNetwork_v3(UniversalNetwork_v2):
 			with tf.name_scope('gradients'):
 				self.xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
 				self.gradients = tf.gather_nd(self.xyz_grad, padding_mask)
-				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
+
 			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
 			self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
 		return
+
+#	def eval_prepare(self):
+#		"""
+#		Get placeholders, graph and losses in order to begin training.
+#		Also assigns the desired padding.
+#
+#		Args:
+#			continue_training: should read the graph variables from a saved checkpoint.
+#		"""
+#		with tf.Graph().as_default():
+#			self.xyzs_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
+#			self.Zs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms])
+#			self.nn_pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, None])
+#			self.nn_triples_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, None, 2])
+#			self.coulomb_pairs_pl = tf.placeholder(tf.int32, shape=[self.batch_size, self.max_num_atoms, None])
+#			self.num_atoms_pl = tf.placeholder(tf.int32, shape=[self.batch_size])
+#			self.energy_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size])
+#			self.gradients_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms, 3])
+#			self.charges_pl = tf.placeholder(self.tf_precision, shape=[self.batch_size, self.max_num_atoms])
+#
+#			radial_gauss = tf.Variable(self.radial_rs, trainable=False, dtype = self.tf_precision)
+#			angular_gauss = tf.Variable(self.angular_rs, trainable=False, dtype = self.tf_precision)
+#			thetas = tf.Variable(self.theta_s, trainable=False, dtype = self.tf_precision)
+#			radial_cutoff = tf.Variable(self.radial_cutoff, trainable=False, dtype = self.tf_precision)
+#			angular_cutoff = tf.Variable(self.angular_cutoff, trainable=False, dtype = self.tf_precision)
+#			zeta = tf.Variable(self.zeta, trainable=False, dtype = self.tf_precision)
+#			eta = tf.Variable(self.eta, trainable=False, dtype = self.tf_precision)
+#
+#			self.elements = tf.Variable(self.elements, trainable=False, dtype = tf.int32)
+#			num_elements = self.elements.get_shape().as_list()[0]
+#			self.element_codes = tf.Variable(self.element_codes, trainable=False, dtype=self.tf_precision, name="element_codes")
+#			energy_fit = tf.Variable(self.energy_fit, trainable=False, dtype=self.tf_precision)
+#			energy_mean = tf.Variable(self.energy_mean, trainable=False, dtype = self.tf_precision)
+#			energy_std = tf.Variable(self.energy_std, trainable=False, dtype = self.tf_precision)
+#			if self.train_charges:
+#				charge_mean = tf.Variable(self.charge_mean, trainable=False, dtype=self.tf_precision)
+#				charge_std = tf.Variable(self.charge_std, trainable=False, dtype=self.tf_precision)
+#
+#			padding_mask = tf.where(tf.not_equal(self.Zs_pl, 0))
+#			embed = tf_sym_func_element_codes(self.xyzs_pl, self.Zs_pl, self.nn_pairs_pl, self.nn_triples_pl,
+#					self.element_codes, radial_gauss, radial_cutoff, angular_gauss, thetas, angular_cutoff, zeta, eta)
+#			atom_codes = tf.gather(self.element_codes, tf.gather_nd(self.Zs_pl, padding_mask))
+#			if self.train_charges:
+#				with tf.name_scope('charge_inference'):
+#					atom_nn_charges, charge_variables = self.charge_inference(embed, atom_codes, padding_mask)
+#					atom_charge_mean, atom_charge_std = tf.gather(charge_mean, self.Zs_pl), tf.gather(charge_std, self.Zs_pl)
+#					self.atom_nn_charges = (atom_nn_charges * atom_charge_std) + atom_charge_mean
+#					self.charges = tf.gather_nd(self.atom_nn_charges, padding_mask)
+#					self.charge_labels = tf.gather_nd(self.charges_pl, padding_mask)
+#					self.atom_nn_charges = self.charge_equalization(self.atom_nn_charges, self.num_atoms_pl, self.Zs_pl)
+#			with tf.name_scope('energy_inference'):
+#				self.atom_nn_energy, energy_variables = self.energy_inference(embed, atom_codes, padding_mask)
+#				self.mol_nn_energy = tf.reduce_sum(self.atom_nn_energy, axis=1)
+#				mol_energy_fit = tf.reduce_sum(tf.gather(energy_fit, self.Zs_pl), axis=1)
+#				self.mol_nn_energy += mol_energy_fit
+#				self.total_energy = self.mol_nn_energy
+#			if self.train_charges:
+#				dxyzs, q1q2, scatter_coulomb = self.gather_coulomb(self.xyzs_pl, self.Zs_pl, self.atom_nn_charges, self.coulomb_pairs_pl)
+#				self.mol_coulomb_energy = self.calculate_coulomb_energy(dxyzs, q1q2, scatter_coulomb)
+#				self.total_energy += self.mol_coulomb_energy
+#			with tf.name_scope('gradients'):
+#				self.xyz_grad = tf.gradients(self.total_energy, self.xyzs_pl)[0]
+#				self.gradients = tf.gather_nd(self.xyz_grad, padding_mask)
+#				self.gradient_labels = tf.gather_nd(self.gradients_pl, padding_mask)
+#			self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+#			self.saver = tf.train.Saver(max_to_keep = self.max_checkpoints)
+#			self.saver.restore(self.sess, tf.train.latest_checkpoint(self.network_directory))
+#		return
 
 	def energy_inference(self, embed, atom_codes, indices):
 		"""
@@ -2551,7 +2621,7 @@ class UniversalNetwork_v3(UniversalNetwork_v2):
 			self.max_num_atoms = mset.MaxNAtom()
 			self.batch_size = 400
 			self.reload_set()
-			self.train_prepare(restart=True)
+			self.eval_prepare()
 		num_mols = len(mset.mols)
 		xyz_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype = np.float64)
 		Z_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.int32)
