@@ -901,7 +901,7 @@ def run_qchem_meta():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-train_energy_univ("chemspider_full")
+# train_energy_univ("chemspider_full")
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
@@ -1077,3 +1077,20 @@ def get_atom_energies(mset):
 
 # evaluate_set("master_jeherr2_cl_test")
 #get_atom_energies("master_jeherr2_cl_test")
+
+PARAMS["tf_prec"] = "tf.float32"
+network = UniversalNetwork_v3(name="SF_Universal_chemspider_full_Sat_Jul_20_13.23.30_2019")
+molset = MSet("chemspider_less_50")
+molset.Load()
+
+energy_errors, gradient_errors = network.evaluate_set(molset)
+mae_e = np.mean(np.abs(energy_errors))
+mse_e = np.mean(energy_errors)
+rmse_e = np.sqrt(np.mean(np.square(energy_errors)))
+mae_g = np.mean(np.abs(gradient_errors))
+mse_g = np.mean(gradient_errors)
+rmse_g = np.sqrt(np.mean(np.square(gradient_errors)))
+print("MAE  Energy: ", mae_e, " Gradients: ", mae_g)
+print("MSE  Energy: ", mse_e, " Gradients: ", mse_g)
+print("RMSE  Energy: ", rmse_e, " Gradients: ", rmse_g)
+
