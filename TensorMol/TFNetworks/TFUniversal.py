@@ -273,13 +273,13 @@ class UniversalNetwork(object):
 		LOGGER.debug("Number of test cases: %i", self.num_test_cases)
 		return
 
-	def get_train_batch(self, batch_size):
-		if self.train_pointer + batch_size >= self.num_train_cases:
+	def get_train_batch(self):
+		if self.train_pointer + self.batch_size >= self.num_train_cases:
 			np.random.shuffle(self.train_idxs)
 			self.train_pointer = 0
-		self.train_pointer += batch_size
-		batch_xyzs = self.xyz_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
-		batch_Zs = self.Z_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]]
+		self.train_pointer += self.batch_size
+		batch_xyzs = self.xyz_data[self.train_idxs[self.train_pointer - self.batch_size:self.train_pointer]]
+		batch_Zs = self.Z_data[self.train_idxs[self.train_pointer - self.batch_size:self.train_pointer]]
 		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
 		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
 		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 15.0, self.max_num_atoms, True, False)
@@ -289,19 +289,19 @@ class UniversalNetwork(object):
 		batch_data.append(nn_pairs)
 		batch_data.append(nn_triples)
 		batch_data.append(coulomb_pairs)
-		batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
-		batch_data.append(self.energy_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
-		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+		batch_data.append(self.num_atoms_data[self.train_idxs[self.train_pointer - self.batch_size:self.train_pointer]])
+		batch_data.append(self.energy_data[self.train_idxs[self.train_pointer - self.batch_size:self.train_pointer]])
+		batch_data.append(self.gradient_data[self.train_idxs[self.train_pointer - self.batch_size:self.train_pointer]])
 		if self.train_charges:
-			batch_data.append(self.charges_data[self.train_idxs[self.train_pointer - batch_size:self.train_pointer]])
+			batch_data.append(self.charges_data[self.train_idxs[self.train_pointer - self.batch_size:self.train_pointer]])
 		return batch_data
 
-	def get_test_batch(self, batch_size):
-		if self.test_pointer + batch_size >= self.num_test_cases:
+	def get_test_batch(self):
+		if self.test_pointer + self.batch_size >= self.num_test_cases:
 			self.test_pointer = 0
-		self.test_pointer += batch_size
-		batch_xyzs = self.xyz_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
-		batch_Zs = self.Z_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]]
+		self.test_pointer += self.batch_size
+		batch_xyzs = self.xyz_data[self.test_idxs[self.test_pointer - self.batch_size:self.test_pointer]]
+		batch_Zs = self.Z_data[self.test_idxs[self.test_pointer - self.batch_size:self.test_pointer]]
 		nn_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, self.radial_cutoff, self.max_num_atoms, True, True)
 		nn_triples = MolEmb.Make_TLTensor(batch_xyzs, batch_Zs, self.angular_cutoff, self.max_num_atoms, False)
 		coulomb_pairs = MolEmb.Make_NLTensor(batch_xyzs, batch_Zs, 15.0, self.max_num_atoms, True, False)
@@ -311,11 +311,11 @@ class UniversalNetwork(object):
 		batch_data.append(nn_pairs)
 		batch_data.append(nn_triples)
 		batch_data.append(coulomb_pairs)
-		batch_data.append(self.num_atoms_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
-		batch_data.append(self.energy_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
-		batch_data.append(self.gradient_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+		batch_data.append(self.num_atoms_data[self.test_idxs[self.test_pointer - self.batch_size:self.test_pointer]])
+		batch_data.append(self.energy_data[self.test_idxs[self.test_pointer - self.batch_size:self.test_pointer]])
+		batch_data.append(self.gradient_data[self.test_idxs[self.test_pointer - self.batch_size:self.test_pointer]])
 		if self.train_charges:
-			batch_data.append(self.charges_data[self.test_idxs[self.test_pointer - batch_size:self.test_pointer]])
+			batch_data.append(self.charges_data[self.test_idxs[self.test_pointer - self.batch_size:self.test_pointer]])
 		return batch_data
 
 	def variable_with_weight_decay(self, shape, stddev, weight_decay, name = None):
@@ -2295,43 +2295,93 @@ class UniversalNetwork_v3(UniversalNetwork_v2):
 			The BP graph output
 		"""
 		variables=[]
+		activation_list=[]
 		with tf.variable_scope("energy_network", reuse=tf.AUTO_REUSE):
-			#code_kernel1 = tf.get_variable(name="CodeKernel1", shape=(self.codes_shape, self.codes_shape), dtype=self.tf_precision)
-			#code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(self.codes_shape, self.codes_shape), dtype=self.tf_precision)
-			#variables.append(code_kernel1)
-			#variables.append(code_kernel2)
-			#coded_weights = tf.matmul(atom_codes, code_kernel1)
-			#coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
-			#coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
-			embed = tf.reshape(embed, [tf.shape(embed)[0], -1])
+			code_kernel1 = tf.get_variable(name="CodeKernel1", shape=(self.codes_shape, self.codes_shape), dtype=self.tf_precision)
+			code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(self.codes_shape, self.codes_shape), dtype=self.tf_precision)
+			variables.append(code_kernel1)
+			variables.append(code_kernel2)
+			coded_weights = tf.matmul(atom_codes, code_kernel1)
+			coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
+			coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
 			for i in range(len(self.hidden_layers)):
-				with tf.name_scope('hidden'+str(i+1)):
-					bias_init = tf.get_variable(name='bias_init'+str(i), shape=(self.codes_shape, self.hidden_layers[i]), dtype=self.tf_precision,
-						initializer=tf.zeros_initializer())
-					biases = self.activation_function(tf.matmul(atom_codes, bias_init))
-					if i == 0:
-						weights = tf.get_variable(name='weights'+str(i), shape=(self.embed_shape, self.hidden_layers[i]),
-							dtype=self.tf_precision)
-						#weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
-						#		stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
-						activations = self.activation_function(tf.matmul(embed, weights) + biases)
-					else:
-						weights = tf.get_variable(name='weights', shape=(self.hidden_layers[i-1], self.hidden_layers[i]),
-							dtype=self.tf_precision)
-						#weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
-						#		stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
+				if i == 0:
+					with tf.name_scope('hidden1'):
+						weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
+								stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
+						activations = self.activation_function(tf.matmul(coded_embed, weights) + biases)
+						activation_list.append(activations)
+						variables.append(weights)
+						variables.append(biases)
+				else:
+					with tf.name_scope('hidden'+str(i+1)):
+						weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
+								stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
+						biases = tf.Variable(tf.zeros([self.hidden_layers[i]], dtype=self.tf_precision), name='biases')
 						activations = self.activation_function(tf.matmul(activations, weights) + biases)
-					variables.append(weights)
-					variables.append(bias_init)
+						activation_list.append(activations)
+						variables.append(weights)
+						variables.append(biases)
 			with tf.name_scope('regression_linear'):
-				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 1],
-						stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
+				activations = tf.concat(activation_list, axis=-1)
+				weights = self.variable_with_weight_decay(shape=[sum(self.hidden_layers), 1],
+						stddev=math.sqrt(2.0 / float(sum(self.hidden_layers))), weight_decay=self.weight_decay, name="weights")
 				biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
 				outputs = tf.squeeze(tf.matmul(activations, weights) + biases, axis=1)
 				variables.append(weights)
 				variables.append(biases)
 				atom_nn_energy = tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
 		return atom_nn_energy, variables
+
+#	def energy_inference(self, embed, atom_codes, indices):
+#		"""
+#		Builds a Behler-Parinello graph
+#
+#		Args:
+#			inp: a list of (num_of atom type X flattened input shape) matrix of input cases.
+#			index: a list of (num_of atom type X batchsize) array which linearly combines the elements
+#		Returns:
+#			The BP graph output
+#		"""
+#		variables=[]
+#		with tf.variable_scope("energy_network", reuse=tf.AUTO_REUSE):
+#			#code_kernel1 = tf.get_variable(name="CodeKernel1", shape=(self.codes_shape, self.codes_shape), dtype=self.tf_precision)
+#			#code_kernel2 = tf.get_variable(name="CodeKernel2", shape=(self.codes_shape, self.codes_shape), dtype=self.tf_precision)
+#			#variables.append(code_kernel1)
+#			#variables.append(code_kernel2)
+#			#coded_weights = tf.matmul(atom_codes, code_kernel1)
+#			#coded_embed = tf.einsum('ijk,ij->ijk', embed, coded_weights)
+#			#coded_embed = tf.reshape(tf.einsum('ijk,jl->ilk', coded_embed, code_kernel2), [tf.shape(embed)[0], -1])
+#			embed = tf.reshape(embed, [tf.shape(embed)[0], -1])
+#			for i in range(len(self.hidden_layers)):
+#				with tf.name_scope('hidden'+str(i+1)):
+#					bias_init = tf.get_variable(name='bias_init'+str(i), shape=(self.codes_shape, self.hidden_layers[i]), dtype=self.tf_precision,
+#						initializer=tf.zeros_initializer())
+#					biases = self.activation_function(tf.matmul(atom_codes, bias_init))
+#					if i == 0:
+#						weights = tf.get_variable(name='weights'+str(i), shape=(self.embed_shape, self.hidden_layers[i]),
+#							dtype=self.tf_precision)
+#						#weights = self.variable_with_weight_decay(shape=[self.embed_shape, self.hidden_layers[i]],
+#						#		stddev=math.sqrt(2.0 / float(self.embed_shape)), weight_decay=self.weight_decay, name="weights")
+#						activations = self.activation_function(tf.matmul(embed, weights) + biases)
+#					else:
+#						weights = tf.get_variable(name='weights', shape=(self.hidden_layers[i-1], self.hidden_layers[i]),
+#							dtype=self.tf_precision)
+#						#weights = self.variable_with_weight_decay(shape=[self.hidden_layers[i-1], self.hidden_layers[i]],
+#						#		stddev=math.sqrt(2.0 / float(self.hidden_layers[i-1])), weight_decay=self.weight_decay, name="weights")
+#						activations = self.activation_function(tf.matmul(activations, weights) + biases)
+#					variables.append(weights)
+#					variables.append(bias_init)
+#			with tf.name_scope('regression_linear'):
+#				weights = self.variable_with_weight_decay(shape=[self.hidden_layers[-1], 1],
+#						stddev=math.sqrt(2.0 / float(self.hidden_layers[-1])), weight_decay=self.weight_decay, name="weights")
+#				biases = tf.Variable(tf.zeros([1], dtype=self.tf_precision), name='biases')
+#				outputs = tf.squeeze(tf.matmul(activations, weights) + biases, axis=1)
+#				variables.append(weights)
+#				variables.append(biases)
+#				atom_nn_energy = tf.scatter_nd(indices, outputs, [self.batch_size, self.max_num_atoms])
+#		return atom_nn_energy, variables
 
 	def charge_inference(self, embed, atom_codes, indices):
 		"""
@@ -2500,7 +2550,8 @@ class UniversalNetwork_v3(UniversalNetwork_v2):
 			self.assign_activation()
 			self.max_num_atoms = mset.MaxNAtom()
 			self.batch_size = 400
-			self.eval_prepare()
+			self.reload_set()
+			self.train_prepare(restart=True)
 		num_mols = len(mset.mols)
 		xyz_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype = np.float64)
 		Z_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.int32)
@@ -2555,8 +2606,8 @@ class UniversalNetwork_v3(UniversalNetwork_v2):
 		gradient_preds = np.concatenate(gradient_preds)
 		energy_errors = energy_true - energy_pred
 		gradient_errors = gradients_true - gradient_preds
-		for i, mol in enumerate(mset.mols):
-			mol.properties["energy_error"] = energy_errors[i]
+		#for i, mol in enumerate(mset.mols):
+		#	mol.properties["energy_error"] = energy_errors[i]
 		if self.train_charges:
 			charges_true = np.concatenate(charges_true)
 			charge_preds = np.concatenate(charge_preds)
@@ -2564,6 +2615,37 @@ class UniversalNetwork_v3(UniversalNetwork_v2):
 			return energy_errors, gradient_errors, charge_errors
 		else:
 			return energy_errors, gradient_errors
+
+	def get_energy_force_function(self,mol):
+		try:
+			self.sess
+		except AttributeError:
+			self.sess = None
+		if self.sess is None:
+			self.assign_activation()
+			self.max_num_atoms = mol.NAtoms()
+			self.batch_size = 1
+			self.eval_prepare()
+		num_mols = 1
+		xyz_data = np.zeros((num_mols, self.max_num_atoms, 3), dtype = np.float64)
+		Z_data = np.zeros((num_mols, self.max_num_atoms), dtype = np.int32)
+		num_atoms_data = np.zeros((num_mols), dtype = np.int32)
+		num_atoms_data[0] = mol.NAtoms()
+		Z_data[0][:mol.NAtoms()] = mol.atoms
+		def EF(xyz_, DoForce=True):
+			xyz_data[0][:mol.NAtoms()] = xyz_
+			nn_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, self.radial_cutoff, self.max_num_atoms, True, True)
+			nn_triples = MolEmb.Make_TLTensor(xyz_data, Z_data, self.angular_cutoff, self.max_num_atoms, False)
+			coulomb_pairs = MolEmb.Make_NLTensor(xyz_data, Z_data, 15.0, self.max_num_atoms, True, False)
+			feed_dict = {self.xyzs_pl:xyz_data, self.Zs_pl:Z_data, self.nn_pairs_pl:nn_pairs,
+						self.nn_triples_pl:nn_triples, self.coulomb_pairs_pl:coulomb_pairs, self.num_atoms_pl:num_atoms_data}
+			if (DoForce):
+				energy, gradients = self.sess.run([self.total_energy, self.gradients], feed_dict=feed_dict)
+				return energy[0], -JOULEPERHARTREE*gradients
+			else:
+				energy = self.sess.run(self.total_energy, feed_dict=feed_dict)
+				return energy[0]
+		return EF
 
 
 class UniversalNetwork_v4(UniversalNetwork):

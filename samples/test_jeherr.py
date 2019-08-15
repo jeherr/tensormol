@@ -316,7 +316,7 @@ def train_energy_GauSHv2(mset):
 
 def train_energy_univ(mset):
 	PARAMS["train_gradients"] = True
-	PARAMS["train_charges"] = True
+	PARAMS["train_charges"] = False
 	PARAMS["weight_decay"] = None
 	PARAMS["HiddenLayers"] = [512, 512, 512]
 	PARAMS["learning_rate"] = 0.0001
@@ -326,8 +326,10 @@ def train_energy_univ(mset):
 	PARAMS["Profiling"] = False
 	PARAMS["NeuronType"] = "shifted_softplus"
 	PARAMS["tf_prec"] = "tf.float32"
-	network = UniversalNetwork_v4(mset)
-	network.start_training()
+	#network = UniversalNetwork_v3(mset)
+	#network.start_training()
+	network = UniversalNetwork_v3(name='SF_Universal_chemspider_full_Sat_Jul_20_13.23.30_2019')
+	network.restart_training()
 
 def train_element_coder():
 	PARAMS["weight_decay"] = None
@@ -887,11 +889,7 @@ def run_qchem_meta():
 # InterpoleGeometries()
 # read_unpacked_set()
 # TrainKRR(set_="SmallMols_rand", dig_ = "GauSH", OType_="Force")
-<<<<<<< Updated upstream
 # RandomSmallSet("master_jeherr3_water", 1000000)
-=======
-# RandomSmallSet("SmallMols", 100)
->>>>>>> Stashed changes
 # TestMetadynamics()
 # test_md()
 # TestTFBond()
@@ -903,11 +901,7 @@ def run_qchem_meta():
 # train_energy_symm_func("water_wb97xd_6311gss")
 # train_energy_GauSH("water_wb97xd_6311gss")
 # train_energy_GauSHv2("chemspider12_wb97xd_6311gss_rand")
-<<<<<<< Updated upstream
-train_energy_univ("master_jeherr2_HCNOFPSClSeBrI")
-=======
-train_energy_univ("master_jeherr2_HCNOFS_rand")
->>>>>>> Stashed changes
+train_energy_univ("chemspider_full")
 # eval_test_set_univ("kaggle_opt")
 # test_h2o()
 # evaluate_BPSymFunc("nicotine_vib")
@@ -1074,11 +1068,12 @@ def get_atom_energies(mset):
 	mae_g = np.mean(np.abs(gradient_errors))
 	mse_g = np.mean(gradient_errors)
 	rmse_g = np.sqrt(np.mean(np.square(gradient_errors)))
-	# mae_c = np.mean(np.abs(charge_errors))
-	# mse_c = np.mean(charge_errors)
-	# rmse_c = np.sqrt(np.mean(np.square(charge_errors)))
-	print("MAE  Energy: ", mae_e, " Gradients: ", mae_g)#, " Charges: ", mae_c)
-	print("MSE  Energy: ", mse_e, " Gradients: ", mse_g)#, " Charges: ", mse_c)
-	print("RMSE  Energy: ", rmse_e, " Gradients: ", rmse_g)#, " Charges: ", rmse_c)
+	mae_c = np.mean(np.abs(charge_errors))
+	mse_c = np.mean(charge_errors)
+	rmse_c = np.sqrt(np.mean(np.square(charge_errors)))
+	print("MAE  Energy: ", mae_e, " Gradients: ", mae_g, " Charges: ", mae_c)
+	print("MSE  Energy: ", mse_e, " Gradients: ", mse_g, " Charges: ", mse_c)
+	print("RMSE  Energy: ", rmse_e, " Gradients: ", rmse_g, " Charges: ", rmse_c)
 
 # evaluate_set("master_jeherr2_cl_test")
+#get_atom_energies("master_jeherr2_cl_test")
