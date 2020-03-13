@@ -4,23 +4,22 @@ Routines for running external Ab-Initio packages to get shit out of mol.py
 from __future__ import absolute_import
 from __future__ import print_function
 import numpy as np
-from ..Util import *
 import random, math, subprocess
+import sys
+import os
+from TensorMol import *
 
-def PyscfDft(m_,basis_='6-31g*',xc_='b3lyp'):
-	# Global not defined in this context
-	# if (not HAS_PYSCF):
-	# 	print("Missing PYSCF")
-	# 	return 0.0
+def PyscfDft(m_,basis_ = '6-31g*',xc_='b3lyp'):
+	if (not HAS_PYSCF):
+		print("Missing PYSCF")
+		return 0.0
 	mol = gto.Mole()
-	pyscf_atomic_coords = []
-	atoms               = m_.atoms
-	atom_coords         = m_.coords
-	i = 0
-	while i < len(atoms):
-		pyscf_atomic_coords.append(["{}".format(atoms[i]), (atom_coords[i, 0], atom_coords[i, 1], atom_coords[i, 2])])
-		i = i + 1
-	mol.atom = pyscf_atomic_coords
+	pyscfatomstring=""
+	crds = m_.coords.copy()
+	crds[abs(crds)<0.0001] *=0.0
+	for j in range(len(m_.atoms)):
+		pyscfatomstring=pyscfatomstring+str(m_.atoms[j])+" "+str(crds[j,0])+" "+str(crds[j,1])+" "+str(crds[j,2])+(";" if j!= len(m_.atoms)-1 else "")
+	mol.atom = pyscfatomstring
 	mol.unit = "Angstrom"
 	mol.charge = 0
 	mol.spin = 0
@@ -32,101 +31,58 @@ def PyscfDft(m_,basis_='6-31g*',xc_='b3lyp'):
 	e = mf.kernel()
 	return e
 
-def PyscfCcsd(m_,basis_="def2-tzvp"):
-	# if (not HAS_PYSCF):
-	# 	print("Missing PYSCF")
-	# 	return 0.0
-	pyscf_atomic_coords = []
-	atoms               = m_.atoms
-	atom_coords         = m_.coords
-	i = 0
-	while i < len(atoms):
-		pyscf_atomic_coords.append(["{}".format(atoms[i]), (atom_coords[i, 0], atom_coords[i, 1], atom_coords[i, 2])])
-		i = i + 1
-
-	mol = gto.M(atom=pyscf_atomic_coords, basis=basis_, spin=0, charge=0, verbose=0)
-
-	mf  = scf.RHF(mol)
-	mf.run()
-
-	my_cc = cc.CCSD(mf)
-	my_cc.kernel()
-	energy = my_cc.e_tot
-
-	return energy
-
-def PyscfCcsdt(m_,basis_="def2-tzvp"):
-	# if (not HAS_PYSCF):
-	# 	print("Missing PYSCF")
-	# 	return 0.0
-	pyscf_atomic_coords = []
-	atoms               = m_.atoms
-	atom_coords         = m_.coords
-	i = 0
-	while i < len(atoms):
-		pyscf_atomic_coords.append(["{}".format(atoms[i]), (atom_coords[i, 0], atom_coords[i, 1], atom_coords[i, 2])])
-		i = i + 1
-
-	mol = gto.M(atom=pyscf_atomic_coords, basis=basis_, spin=0, charge=0, verbose=0)
-
-	mf  = scf.RHF(mol)
-	mf.run()
-
-	my_cc = cc.CCSD(mf)
-	my_cc.kernel()
-	ccsdt_corr_energy = ccsd_t.kernel(my_cc, my_cc.ao2mo())
-	energy = my_cc.e_tot + ccsdt_corr_energy
-
-	return energy
-
-def QchemDFT(m_,basis_ = '6-31g*',xc_='b3lyp', jobtype_='force', filename_='tmp', path_='./qchem/', threads=False):
-	istring = '$molecule\n0 1 \n'
+def QchemDFT(m_,basis_ = '6-311++G(3df,3pd)',xc_='M062X', jobtype_='force', filename_='tmp', path_='./qchem/', threads=32):
+	istring = ""
 	crds = m_.coords.copy()
 	crds[abs(crds)<0.0000] *=0.0
 	for j in range(len(m_.atoms)):
 		istring=istring+itoa[m_.atoms[j]]+' '+str(crds[j,0])+' '+str(crds[j,1])+' '+str(crds[j,2])+'\n'
-	if jobtype_ == "dipole":
-		istring =istring + '$end\n\n$rem\njobtype sp\nbasis '+basis_+'\nmethod '+xc_+'\nthresh 11\nsymmetry false\nsym_ignore true\n$end\n'
-	else:
-		istring =istring + '$end\n\n$rem\njobtype '+jobtype_+'\nbasis '+basis_+'\nmethod '+xc_+'\nthresh 11\nUNRESTRICTED   true\nsymmetry false\nsym_ignore true\n$end\n'
-	with open(path_+filename_+'.in','w') as fin:
-		fin.write(istring)
-	with open(path_+filename_+'.out','a') as fout:
-		if threads:
-			proc = subprocess.Popen(['qchem', '-nt', str(threads), path_+filename_+'.in'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=False)
-		else:
-			proc = subprocess.Popen(['qchem', path_+filename_+'.in'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=False)
-		out, err = proc.communicate()
-		fout.write(out.decode('utf-8'))
-	lines = out.decode('utf-8').split('\n')
-	if jobtype_ == 'force':
-		Forces = np.zeros((m_.atoms.shape[0],3))
-		for i, line in enumerate(lines):
-			if line.count('Convergence criterion met')>0:
-				Energy = float(line.split()[1])
-			if line.count("Gradient of SCF Energy") > 0:
-				k = 0
-				l = 0
-				for j in range(1, m_.atoms.shape[0]+1):
-					Forces[j-1,:] = float(lines[i+k+2].split()[l+1]), float(lines[i+k+3].split()[l+1]), float(lines[i+k+4].split()[l+1])
-					l += 1
-					if (j % 6) == 0:
-						k += 4
-						l = 0
-		return Energy, -Forces*JOULEPERHARTREE*BOHRPERA
-	elif jobtype_ == 'sp':
-		for line in lines:
-			if line.count('Convergence criterion met')>0:
-				Energy = float(line.split()[1])
-		return Energy
-	elif jobtype_ ==  'dipole':
-		for i, line in enumerate(lines):
-			if "Dipole Moment (Debye)" in line:
-				tmp = lines[i+1].split()
-				dipole = np.asarray([float(tmp[1]),float(tmp[3]),float(tmp[5])])
-				return dipole
-	else:
-		raise Exception("jobtype needs formatted for return variables")
+	line2='''%%nproc=%d        
+%%mem=4000MB        
+#p %s/%s Force 
+                     
+aaaaa                
+                     
+0 1
+%s
+'''%(threads,xc_,basis_,istring)
+	current_dir=os.getcwd()
+#	gjffile=current_dir+"/"+"TensorMol"+"/"+"init.gjf"
+#	logfile=current_dir+"/"+"TensorMol"+"/"+"init.log"
+	ff=open("init.gjf","w")
+	ff.write(line2)
+	ff.close()
+	os.system("/home/scc/software/G16/g16/g16 %s %s"%("init.gjf","init.log"))
+#	os.system("chmod 777 init.log")
+	
+	f=open("init.log")
+	lines=f.readlines()
+	f.close()
+#	outname=current_dir+"/"+"init.log"
+#	a=os.popen('cat %s | grep "NAtoms="'%outname).readlines()
+#	number=int(a[0].split()[1])
+#	print (a)
+	Energy=0                              
+	Forces = np.zeros((len(crds),3))
+	for i, line in enumerate(lines):
+		if line.count('SCF Done:')>0:
+			Energy = float(line.split()[4])
+		if line.count('Forces (Hartrees/Bohr)') > 0:
+			k = 0
+			for j in range(1, len(crds)+1):
+				Forces[j-1,:] = float(lines[i+k+3].split()[2])*(-1), float(lines[i+k+3].split()[3])*(-1), float(lines[i+k+3].split()[4])*(-1)
+				k += 1
+			break
+	f1=open("Energy_Force.txt","a+")
+	f1.write(str(Energy)+' ')
+	Forces_unit=-Forces*JOULEPERHARTREE*BOHRPERA# Hatree/Bohr => J/mol
+#	Forces_unit=-Forces*JOULEPERHARTREE*BOHRPERA*AVOCONST # Hatree/Bohr => J/mol
+	for F in Forces_unit:
+		f1.write(str(F)+' ')
+	f1.write('\n')
+	f1.close()
+	return Energy, -Forces*JOULEPERHARTREE*BOHRPERA# Hatree/Bohr => J/mol
+#	return Energy, -Forces*JOULEPERHARTREE*BOHRPERA*AVOCONST # Hatree, J/mol
 
 def QchemDFT_optimize(m_,basis_ = '6-31g*',xc_='b3lyp', filename_='tmp', path_='./qchem/', threads=False):
 	istring = '$molecule\n0 1 \n'
@@ -233,28 +189,28 @@ def PullFreqData():
 	np.save("morphine_nm.npy", nm)
 	f.close()
 
-def PySCFMP2Energy(m, basis_='cc-pvqz'):
-	mol = gto.Mole()
-	pyscfatomstring=""
-	for j in range(len(m.atoms)):
-		s = m.coords[j]
-		pyscfatomstring=pyscfatomstring+str(m.AtomName(j))+" "+str(s[0])+" "+str(s[1])+" "+str(s[2])+(";" if j!= len(m.atoms)-1 else "")
-	mol.atom = pyscfatomstring
-	mol.basis = basis_
-	mol.verbose = 0
-	try:
-		mol.build()
-		mf=scf.RHF(mol)
-		hf_en = mf.kernel()
-		mp2 = mp.MP2(mf)
-		mp2_en = mp2.kernel()
-		en = hf_en + mp2_en[0]
-		m.properties["energy"] = en
-		return en
-	except Exception as Ex:
-		print("PYSCF Calculation error... :",Ex)
-		print("Mol.atom:", mol.atom)
-		print("Pyscf string:", pyscfatomstring)
-		return 0.0
-		#raise Ex
-	return
+	def PySCFMP2Energy(m, basis_='cc-pvqz'):
+		mol = gto.Mole()
+		pyscfatomstring=""
+		for j in range(len(m.atoms)):
+			s = m.coords[j]
+			pyscfatomstring=pyscfatomstring+str(m.AtomName(j))+" "+str(s[0])+" "+str(s[1])+" "+str(s[2])+(";" if j!= len(m.atoms)-1 else "")
+		mol.atom = pyscfatomstring
+		mol.basis = basis_
+		mol.verbose = 0
+		try:
+			mol.build()
+			mf=scf.RHF(mol)
+			hf_en = mf.kernel()
+			mp2 = mp.MP2(mf)
+			mp2_en = mp2.kernel()
+			en = hf_en + mp2_en[0]
+			m.properties["energy"] = en
+			return en
+		except Exception as Ex:
+			print("PYSCF Calculation error... :",Ex)
+			print("Mol.atom:", mol.atom)
+			print("Pyscf string:", pyscfatomstring)
+			return 0.0
+			#raise Ex
+		return
