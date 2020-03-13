@@ -7,6 +7,9 @@ from __future__ import print_function
 from .SimpleMD import *
 from ..ForceModels import TFForces # Note this is actually the RIGHT way to do this.
 from ..Math.Statistics import *
+import sys
+import numpy as np
+from math import sqrt
 
 class MetaDynamics(VelocityVerlet):
 	def __init__(self,f_,g0_,name_="MetaMD",EandF_=None):
@@ -23,32 +26,56 @@ class MetaDynamics(VelocityVerlet):
 			PARAMS["BowlK"] : a force constant of an attractive potential.
 		"""
 		VelocityVerlet.__init__(self, f_, g0_, name_, EandF_)
+		
+		
+		def Make_NListNaive1(inputxyz):
+			tmp=np.zeros(len(inputxyz)*len(inputxyz))
+			for i in range(len(inputxyz)-1):
+				for j in range(i+1,len(inputxyz)):
+					RR=sqrt((float(inputxyz[i][0])-float(inputxyz[j][0]))**2+(float(inputxyz[i][1])-float(inputxyz[j][1]))**2+(float(inputxyz[i][2])-float(inputxyz[j][2]))**2)
+					tmp[i*len(inputxyz)+j]=RR
+					tmp[j*len(inputxyz)+i]=RR	
+			outlist=np.reshape(tmp,(len(inputxyz),len(inputxyz)))
+			
+			return outlist
+		
 		self.BumpTime = PARAMS["MetaBumpTime"]
 		self.MaxBumps = PARAMS["MetaMaxBumps"]
 		self.bump_height = PARAMS["MetaMDBumpHeight"]
 		self.bump_width = PARAMS["MetaMDBumpWidth"]
 		self.BumpCoords = np.zeros((self.MaxBumps,self.natoms,3))
 		self.NBump = 0
+#		print (self.x)
+#		print ("\n")
+#		print (MolEmb.Make_DistMat(self.x))
+#		print ("\n")
+#		print (Make_NListNaive1(self.x))
+#		sys.exit()
 		self.DStat = OnlineEstimator(MolEmb.Make_DistMat(self.x))
 		self.BowlK = PARAMS["MetaBowlK"]
 		if (self.Tstat.name != "Andersen"):
 			LOGGER.info("I really recommend you use Andersen Thermostat with Meta-Dynamics.")
-		self.Bumper = TFForces.BumpHolder(self.natoms, self.MaxBumps, self.BowlK, self.bump_height, self.bump_width,"MR")
+		self.Bumper = TFForces.BumpHolder(self.natoms, self.MaxBumps, self.BowlK, self.bump_height, self.bump_width,"LR")
 
 	def BumpForce(self,x_):
 		BE = 0.0
 		BF = np.zeros(x_.shape)
 		if (self.NBump > 0):
 			BE, BF = self.Bumper.Bump(self.BumpCoords.astype(np.float32), x_.astype(np.float32), self.NBump%self.MaxBumps)
+#			print (BE)
+#			print (BF)
+#			sys.exit()
 		if (self.EnergyAndForce != None):
-			self.RealPot, PF = self.EnergyAndForce(x_)
+			self.RealPot, PF = self.EnergyAndForce(x_) # Hatree, J/mol
 		else:
 			PF = self.ForceFunction(x_)
 		if self.NBump > 0:
 			BF[0] *= self.m[:,None]
-		PF += JOULEPERHARTREE*BF[0]
+#		PF += JOULEPERHARTREE*BF[0]
+#		PF += BF[0]*JOULEPERHARTREE*BOHRPERA*AVOCONST # Hatree/Bohr => J/mol
+		PF += BF[0]*JOULEPERHARTREE*BOHRPERA    
 		PF = RemoveInvariantForce(x_,PF,self.m)
-		return BE+self.RealPot, PF
+		return BE+self.RealPot, PF # Hatree, J/mol
 
 	def Bump(self):
 		self.BumpCoords[self.NBump%self.MaxBumps] = self.x
@@ -67,7 +94,7 @@ class MetaDynamics(VelocityVerlet):
 			t = time.time()
 			self.t = step*self.dt
 			bumptimer -= self.dt
-			self.KE = KineticEnergy(self.v,self.m)
+			self.KE = KineticEnergy(self.v,self.m) # J/mol
 			Teff = (2./3.)*self.KE/IDEALGASR
 			if (PARAMS["MDThermostat"]==None):
 				self.x , self.v, self.a, self.EPot = VelocityVerletStep(self.BumpForce, self.a, self.x, self.v, self.m, self.dt, self.BumpForce)
@@ -75,9 +102,10 @@ class MetaDynamics(VelocityVerlet):
 				self.x , self.v, self.a, self.EPot, self.force = self.Tstat.step(self.BumpForce, self.a, self.x, self.v, self.m, self.dt, self.BumpForce)
 
 			self.md_log[step,0] = self.t
-			self.md_log[step,4] = self.KE
-			self.md_log[step,5] = self.EPot
-			self.md_log[step,6] = self.KE+(self.EPot-self.EPot0)*JOULEPERHARTREE
+			self.md_log[step,4] = self.KE # J/mol
+			self.md_log[step,5] = self.EPot # Hatree
+			self.md_log[step,6] = self.KE+(self.EPot-self.EPot0)*JOULEPERHARTREE# J/mol
+#			self.md_log[step,6] = self.KE+(self.EPot-self.EPot0)*JOULEPERHARTREE*AVOCONST# J/mol
 			self.md_log[step,7] = self.RealPot
 
 			# Add an averager which accumulates RMS distance. Also, wow the width is small.
